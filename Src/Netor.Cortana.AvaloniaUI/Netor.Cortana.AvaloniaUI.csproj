@@ -1,0 +1,134 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Cortana</AssemblyName>
+    <AssemblyTitle>Cortana AvaloniaUI</AssemblyTitle>
+    <Version>1.1.0</Version>
+    <ApplicationIcon>..\Netor.Cortana\logo.200.ico</ApplicationIcon>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <!-- 图片资源 -->
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\*.png" />
+  </ItemGroup>
+
+  <!-- 发布配置：Native AOT -->
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+    <PublishAot>true</PublishAot>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <IlcOptimizationPreference>Speed</IlcOptimizationPreference>
+    <IlcGenerateStackTraceData>false</IlcGenerateStackTraceData>
+    <!-- 不生成 PDB / XML -->
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- 阻止将符号文件复制到发布目录 -->
+    <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
+  </PropertyGroup>
+
+  <!-- AOT trimming：保留 NAudio 回调委托和 SherpaOnnx P/Invoke 类型 -->
+  <ItemGroup Condition=" '$(Configuration)' == 'Release' ">
+    <TrimmerRootAssembly Include="NAudio.WinMM" />
+    <TrimmerRootAssembly Include="NAudio.Core" />
+    <TrimmerRootAssembly Include="sherpa-onnx" />
+  </ItemGroup>
+
+  <!-- 发布后清理：删除 NuGet 原生包附带的 PDB / XML 文件 -->
+  <Target Name="CleanPublishOutput" AfterTargets="Publish" Condition=" '$(Configuration)' == 'Release' ">
+    <ItemGroup>
+      <_FilesToDelete Include="$(PublishDir)**\*.pdb" />
+      <_FilesToDelete Include="$(PublishDir)**\*.xml" />
+    </ItemGroup>
+    <Delete Files="@(_FilesToDelete)" />
+    <Message Importance="high" Text="已清理发布目录中的 PDB/XML 文件：@(_FilesToDelete-&gt;Count()) 个" />
+  </Target>
+
+  <!-- Avalonia -->
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.0.0" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.0.0" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.0" />
+    <PackageReference Include="FluentAvaloniaUI" Version="2.5.1" />
+    <!-- Avalonia 12 诊断功能已内置，无需独立包 -->
+  </ItemGroup>
+
+  <!-- Markdown 解析 -->
+  <ItemGroup>
+    <PackageReference Include="Markdig" Version="1.1.2" />
+  </ItemGroup>
+
+  <!-- 基础设施 -->
+  <ItemGroup>
+    <PackageReference Include="Netor.EventHub" Version="1.2.5" />
+    <PackageReference Include="Netor.EventHub.SourceGenerator" Version="1.1.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.5" />
+    <PackageReference Include="Serilog" Version="4.3.1" />
+    <PackageReference Include="Serilog.Extensions.Logging" Version="10.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+    <PackageReference Include="Tmds.DBus.Protocol" Version="0.92.0" />
+  </ItemGroup>
+
+  <!-- 业务模块引用 -->
+  <ItemGroup>
+    <ProjectReference Include="..\Netor.Cortana.Entitys\Netor.Cortana.Entitys.csproj" />
+    <ProjectReference Include="..\Netor.Cortana.AI\Netor.Cortana.AI.csproj" />
+    <ProjectReference Include="..\Netor.Cortana.Voice\Netor.Cortana.Voice.csproj" />
+    <ProjectReference Include="..\Netor.Cortana.Plugin\Netor.Cortana.Plugin.csproj" />
+    <ProjectReference Include="..\Netor.Cortana.Networks\Netor.Cortana.Networks.csproj" />
+  </ItemGroup>
+
+  <!-- 嵌入 appsettings.json -->
+  <ItemGroup>
+    <None Remove="appsettings.json" />
+    <EmbeddedResource Include="appsettings.json" />
+  </ItemGroup>
+
+  <!-- ================================================================
+       AI 模型文件：从原 Netor.Cortana 项目目录引用，按原目录结构复制到输出目录。
+       Voice 模块在运行时通过 IAppPaths.UserDataDirectory/sherpa_models/{KWS,STT,TTS}/ 定位。
+       ExcludeFromSingleFile 确保单文件发布时模型文件保留在 exe 旁边而非打包进 exe。
+       ================================================================ -->
+
+  <!-- TTS 模型：MeloTTS zh_en INT8 中英双语 TTS（VITS 架构）-->
+  <ItemGroup>
+    <Content Include="..\Netor.Cortana\Models\vits-melo-tts-zh_en\**\*">
+      <Link>sherpa_models\TTS\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
+  </ItemGroup>
+
+  <!-- KWS 唤醒词/关键字模型 -->
+  <ItemGroup>
+    <Content Include="..\Netor.Cortana\Models\KWS\**\*">
+      <Link>sherpa_models\KWS\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
+  </ItemGroup>
+
+  <!-- STT 模型：Paraformer Streaming 双语 INT8（阿里达摩院非自回归架构）-->
+  <ItemGroup>
+    <Content Include="..\Netor.Cortana\Models\STT\**\*">
+      <Link>sherpa_models\STT\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
+  </ItemGroup>
+
+</Project>

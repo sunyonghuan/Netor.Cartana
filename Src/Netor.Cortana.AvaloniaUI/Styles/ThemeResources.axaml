@@ -1,0 +1,27 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+	<!-- ══════ 全局深色主题配色 ══════ -->
+
+	<!-- 背景层 -->
+	<SolidColorBrush x:Key="BaseBrush"    Color="#1e1e1e" />
+	<SolidColorBrush x:Key="MantleBrush"  Color="#181818" />
+	<SolidColorBrush x:Key="CrustBrush"   Color="#111111" />
+
+	<!-- 表面层 -->
+	<SolidColorBrush x:Key="Surface0Brush" Color="#252526" />
+	<SolidColorBrush x:Key="Surface1Brush" Color="#3c3c3c" />
+	<SolidColorBrush x:Key="Surface2Brush" Color="#4a4a4a" />
+
+	<!-- 文字 -->
+	<SolidColorBrush x:Key="TextBrush"     Color="#cccccc" />
+	<SolidColorBrush x:Key="SubtextBrush"  Color="#858585" />
+	<SolidColorBrush x:Key="Overlay0Brush" Color="#6a6a6a" />
+
+	<!-- 强调色 -->
+	<SolidColorBrush x:Key="BlueBrush"     Color="#007acc" />
+	<SolidColorBrush x:Key="TealBrush"     Color="#3794ff" />
+	<SolidColorBrush x:Key="GreenBrush"    Color="#4ec9b0" />
+	<SolidColorBrush x:Key="RedBrush"      Color="#f14c4c" />
+
+</ResourceDictionary>

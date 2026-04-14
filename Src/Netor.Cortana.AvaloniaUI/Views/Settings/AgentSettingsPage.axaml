@@ -1,0 +1,133 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Netor.Cortana.AvaloniaUI.Views.Settings.AgentSettingsPage"
+             x:CompileBindings="True">
+
+    <DockPanel>
+        <!-- 顶部标题栏 -->
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="16,12,16,8">
+            <TextBlock Text="智能体管理" FontSize="18" FontWeight="SemiBold"
+                       Foreground="{StaticResource TextBrush}" VerticalAlignment="Center" />
+            <Button Grid.Column="1" Classes="btn-primary" Content="+ 添加智能体" Click="OnAddClick" />
+        </Grid>
+
+        <!-- 列表/表单切换区 -->
+        <Panel>
+            <ScrollViewer x:Name="ListView" VerticalScrollBarVisibility="Auto"
+                         HorizontalScrollBarVisibility="Disabled">
+                <StackPanel x:Name="AgentListPanel" Spacing="1" Margin="8,0" />
+            </ScrollViewer>
+
+            <!-- 编辑表单 (默认隐藏) -->
+            <ScrollViewer x:Name="FormView" IsVisible="False" VerticalScrollBarVisibility="Auto">
+                <StackPanel Spacing="12" MaxWidth="560" Margin="16,0">
+                <TextBlock x:Name="FormTitle" Text="添加智能体" FontSize="16" FontWeight="SemiBold"
+                           Foreground="{StaticResource TextBrush}" />
+
+                <!-- 名称 -->
+                <StackPanel Spacing="4">
+                    <TextBlock Text="名称 *" Foreground="{StaticResource SubtextBrush}" FontSize="12" />
+                    <TextBox x:Name="TxtName" Classes="form-input" PlaceholderText="如：代码助手、翻译专家" MaxLength="64" />
+                </StackPanel>
+
+                <!-- 描述 -->
+                <StackPanel Spacing="4">
+                    <TextBlock Text="描述" Foreground="{StaticResource SubtextBrush}" FontSize="12" />
+                    <TextBox x:Name="TxtDesc" Classes="form-input" PlaceholderText="智能体用途描述"
+                             AcceptsReturn="True" TextWrapping="Wrap" Height="50" MaxLength="1024" />
+                </StackPanel>
+
+                <!-- 系统指令 -->
+                <StackPanel Spacing="4">
+                    <TextBlock Text="系统指令 (System Prompt)" Foreground="{StaticResource SubtextBrush}" FontSize="12" />
+                    <TextBox x:Name="TxtInstructions" Classes="form-input"
+                             PlaceholderText="定义智能体的角色、行为规范和输出格式…"
+                             AcceptsReturn="True" TextWrapping="Wrap" Height="120" />
+                </StackPanel>
+
+                <!-- ── 参数微调区 ── -->
+                <TextBlock Text="参数微调" FontSize="14" FontWeight="SemiBold"
+                           Foreground="{StaticResource TextBrush}" Margin="0,8,0,0" />
+
+                <!-- Temperature -->
+                <StackPanel Spacing="2">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Text="Temperature（随机性）" Foreground="{StaticResource SubtextBrush}" FontSize="12" />
+                        <TextBlock x:Name="LblTemperature" Grid.Column="1" Text="0.70"
+                                   Foreground="{StaticResource TextBrush}" FontSize="12" />
+                    </Grid>
+                    <Slider x:Name="SldTemperature" Minimum="0" Maximum="2" Value="0.7"
+                            TickFrequency="0.05" IsSnapToTickEnabled="True"
+                            ValueChanged="OnTemperatureChanged" />
+                </StackPanel>
+
+                <!-- Top-P -->
+                <StackPanel Spacing="2">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Text="Top-P（核采样）" Foreground="{StaticResource SubtextBrush}" FontSize="12" />
+                        <TextBlock x:Name="LblTopP" Grid.Column="1" Text="1.00"
+                                   Foreground="{StaticResource TextBrush}" FontSize="12" />
+                    </Grid>
+                    <Slider x:Name="SldTopP" Minimum="0" Maximum="1" Value="1"
+                            TickFrequency="0.05" IsSnapToTickEnabled="True"
+                            ValueChanged="OnTopPChanged" />
+                </StackPanel>
+
+                <!-- Frequency Penalty -->
+                <StackPanel Spacing="2">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Text="Frequency Penalty（频率惩罚）" Foreground="{StaticResource SubtextBrush}" FontSize="12" />
+                        <TextBlock x:Name="LblFreqPenalty" Grid.Column="1" Text="0.00"
+                                   Foreground="{StaticResource TextBrush}" FontSize="12" />
+                    </Grid>
+                    <Slider x:Name="SldFreqPenalty" Minimum="-2" Maximum="2" Value="0"
+                            TickFrequency="0.1" IsSnapToTickEnabled="True"
+                            ValueChanged="OnFreqPenaltyChanged" />
+                </StackPanel>
+
+                <!-- Presence Penalty -->
+                <StackPanel Spacing="2">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Text="Presence Penalty（存在惩罚）" Foreground="{StaticResource SubtextBrush}" FontSize="12" />
+                        <TextBlock x:Name="LblPresPenalty" Grid.Column="1" Text="0.00"
+                                   Foreground="{StaticResource TextBrush}" FontSize="12" />
+                    </Grid>
+                    <Slider x:Name="SldPresPenalty" Minimum="-2" Maximum="2" Value="0"
+                            TickFrequency="0.1" IsSnapToTickEnabled="True"
+                            ValueChanged="OnPresPenaltyChanged" />
+                </StackPanel>
+
+                <!-- Max Tokens -->
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Max Tokens（最大生成令牌数，0=默认）" Foreground="{StaticResource SubtextBrush}" FontSize="12" />
+                    <NumericUpDown x:Name="NudMaxTokens" Minimum="0" Value="0" FormatString="0"
+                                   Width="150" HorizontalAlignment="Left" />
+                </StackPanel>
+
+                <!-- Max History Messages -->
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Max History Messages（最大历史消息条数，0=不限）" Foreground="{StaticResource SubtextBrush}" FontSize="12" />
+                    <NumericUpDown x:Name="NudMaxHistory" Minimum="0" Value="0" FormatString="0"
+                                   Width="150" HorizontalAlignment="Left" />
+                </StackPanel>
+
+                <!-- 开关选项 -->
+                <StackPanel Orientation="Horizontal" Spacing="24">
+                    <CheckBox x:Name="ChkEnabled" Content="启用" IsChecked="True"
+                              Foreground="{StaticResource TextBrush}" />
+                    <CheckBox x:Name="ChkDefault" Content="设为默认"
+                              Foreground="{StaticResource TextBrush}" />
+                </StackPanel>
+
+                <!-- 操作按钮 -->
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
+                    <Button Classes="btn-secondary" Content="取消" Click="OnCancelClick" />
+                    <Button Classes="btn-primary" Content="保存" Click="OnSaveClick" />
+                    <Button x:Name="BtnDelete" Classes="btn-danger" Content="删除" Click="OnDeleteClick" IsVisible="False" />
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+        </Panel>
+    </DockPanel>
+
+</UserControl>

@@ -1,0 +1,36 @@
+{
+  "clientMessages": [
+    {
+      "type": "send",
+      "data": "帮我总结今天的待办"
+    },
+    {
+      "type": "send",
+      "data": "描述这张图片",
+      "attachments": [
+        {
+          "path": "C:\\Photos\\img.jpg",
+          "name": "img.jpg",
+          "type": "image/jpeg"
+        }
+      ]
+    },
+    {
+      "type": "stop"
+    }
+  ],
+  "serverMessages": [
+    {
+      "type": "connected",
+      "clientId": "client-001"
+    },
+    {
+      "type": "token",
+      "data": "这是流式回复片段"
+    },
+    {
+      "type": "done",
+      "sessionId": "session-001"
+    }
+  ]
+}

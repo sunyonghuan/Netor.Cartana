@@ -1,0 +1,1 @@
+见上级共享资源：../../../resources/report-template.md

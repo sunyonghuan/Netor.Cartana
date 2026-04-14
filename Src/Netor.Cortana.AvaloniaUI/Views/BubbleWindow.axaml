@@ -1,0 +1,46 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Netor.Cortana.AvaloniaUI.Views.BubbleWindow"
+        x:CompileBindings="True"
+        Width="360" Height="99"
+        CanResize="False"
+        ShowInTaskbar="False"
+        Topmost="True"
+        SystemDecorations="None"
+        Background="Transparent"
+        TransparencyLevelHint="Transparent"
+        WindowStartupLocation="Manual">
+
+    <!-- 气泡容器 -->
+    <Border x:Name="BubbleContainer"
+            CornerRadius="16"
+            Padding="16,12"
+            Margin="8">
+        <Border.Background>
+            <SolidColorBrush Color="#1a1a2e" Opacity="0.92" />
+        </Border.Background>
+        <Border.BorderBrush>
+            <SolidColorBrush Color="#569CDE" Opacity="0.3" />
+        </Border.BorderBrush>
+        <Border.BorderThickness>1</Border.BorderThickness>
+
+        <DockPanel>
+            <!-- 状态指示 -->
+            <Ellipse x:Name="StatusDot"
+                     DockPanel.Dock="Left"
+                     Width="8" Height="8"
+                     Fill="#569CDE"
+                     Margin="0,4,10,0"
+                     VerticalAlignment="Top" />
+
+            <!-- 文字内容 -->
+            <TextBlock x:Name="SubtitleText"
+                       Text="正在聆听..."
+                       TextWrapping="Wrap"
+                       Foreground="#DDFFFFFF"
+                       FontSize="14"
+                       VerticalAlignment="Center" />
+        </DockPanel>
+    </Border>
+
+</Window>

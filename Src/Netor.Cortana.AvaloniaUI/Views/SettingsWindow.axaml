@@ -1,0 +1,200 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Netor.Cortana.AvaloniaUI.Views.SettingsWindow"
+        x:CompileBindings="True"
+        Title="设置"
+        Width="820" Height="620"
+        MinWidth="680" MinHeight="600"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource BaseBrush}"
+        CanResize="True"
+        ExtendClientAreaToDecorationsHint="True">
+
+    <Window.Styles>
+        <!-- ── 导航按钮 ── -->
+        <Style Selector="ListBoxItem.nav-item">
+            <Setter Property="Padding" Value="16,10" />
+            <Setter Property="Foreground" Value="{StaticResource SubtextBrush}" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="CornerRadius" Value="0" />
+        </Style>
+        <Style Selector="ListBoxItem.nav-item:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource Surface0Brush}" />
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        </Style>
+        <Style Selector="ListBoxItem.nav-item:selected /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource Surface0Brush}" />
+            <Setter Property="Foreground" Value="{StaticResource BlueBrush}" />
+        </Style>
+
+        <!-- ── 导航列表容器 ── -->
+        <Style Selector="ListBox.nav-list">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+        </Style>
+
+        <!-- ── 表单输入框 ── -->
+        <Style Selector="TextBox.form-input">
+            <Setter Property="Background" Value="{StaticResource Surface0Brush}" />
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Surface1Brush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Padding" Value="8,6" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="CaretBrush" Value="{StaticResource BlueBrush}" />
+        </Style>
+        <Style Selector="TextBox.form-input:focus /template/ Border">
+            <Setter Property="BorderBrush" Value="{StaticResource BlueBrush}" />
+        </Style>
+
+        <!-- ── 主按钮 ── -->
+        <Style Selector="Button.btn-primary">
+            <Setter Property="Background" Value="{StaticResource BlueBrush}" />
+            <Setter Property="Foreground" Value="#ffffff" />
+            <Setter Property="Padding" Value="14,6" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+        <Style Selector="Button.btn-primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource TealBrush}" />
+        </Style>
+
+        <!-- ── 次要按钮 ── -->
+        <Style Selector="Button.btn-secondary">
+            <Setter Property="Background" Value="{StaticResource Surface1Brush}" />
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="Padding" Value="14,6" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+        <Style Selector="Button.btn-secondary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource Surface2Brush}" />
+        </Style>
+
+        <!-- ── 危险按钮 ── -->
+        <Style Selector="Button.btn-danger">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{StaticResource RedBrush}" />
+            <Setter Property="Padding" Value="14,6" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{StaticResource RedBrush}" />
+        </Style>
+        <Style Selector="Button.btn-danger:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource RedBrush}" />
+            <Setter Property="Foreground" Value="#ffffff" />
+        </Style>
+
+        <!-- ── 列表项 ── -->
+        <Style Selector="ListBoxItem.data-item">
+            <Setter Property="Padding" Value="12,8" />
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="CornerRadius" Value="3" />
+            <Setter Property="Margin" Value="0,1" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="ListBoxItem.data-item:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#2a2d2e" />
+        </Style>
+        <Style Selector="ListBoxItem.data-item:selected /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#2a2d2e" />
+        </Style>
+
+        <!-- ── 标题栏按钮 ── -->
+        <Style Selector="Button.titlebar-btn">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{StaticResource SubtextBrush}" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="MinWidth" Value="26" />
+            <Setter Property="MinHeight" Value="24" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+        <Style Selector="Button.titlebar-btn:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource Surface0Brush}" />
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        </Style>
+
+        <!-- ── ComboBox 表单样式 ── -->
+        <Style Selector="ComboBox.form-combo">
+            <Setter Property="Background" Value="{StaticResource Surface0Brush}" />
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Surface1Brush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Padding" Value="8,6" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="MinHeight" Value="32" />
+        </Style>
+    </Window.Styles>
+
+    <!-- ══════ 主布局: 左导航 + 右内容 ══════ -->
+    <Panel Background="{StaticResource BaseBrush}">
+        <Grid ColumnDefinitions="180,*" Margin="0,36,0,0">
+
+            <!-- 左侧导航栏（负边距齐平标题栏） -->
+            <Border Grid.Column="0" Margin="0,-36,0,0"
+                    Background="{StaticResource MantleBrush}"
+                    BorderBrush="{StaticResource Surface1Brush}" BorderThickness="0,0,1,0">
+                <DockPanel>
+                    <!-- 标题（留出 36px 标题栏空间） -->
+                    <TextBlock DockPanel.Dock="Top" Text="设置"
+                               Foreground="{StaticResource TextBrush}"
+                               FontSize="16" FontWeight="SemiBold"
+                               Margin="16,46,16,12" />
+
+                    <!-- 导航列表 -->
+                    <ListBox x:Name="NavList" Classes="nav-list"
+                             SelectionChanged="OnNavSelectionChanged"
+                             SelectedIndex="0">
+                        <ListBoxItem Classes="nav-item" Tag="system">⚙  系统设置</ListBoxItem>
+                        <ListBoxItem Classes="nav-item" Tag="providers">🏢  AI 厂商</ListBoxItem>
+                        <ListBoxItem Classes="nav-item" Tag="models">🔮  模型管理</ListBoxItem>
+                        <ListBoxItem Classes="nav-item" Tag="agents">🧠  智能体</ListBoxItem>
+                        <ListBoxItem Classes="nav-item" Tag="mcp">🌐  MCP 服务</ListBoxItem>
+                        <ListBoxItem Classes="nav-item" Tag="tools">🔧  工具管理</ListBoxItem>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+
+            <!-- 右侧：标题栏 + 内容区 -->
+            <DockPanel Grid.Column="1">
+                <!-- 顶部标题栏 (36px) -->
+                <Border DockPanel.Dock="Top" Height="36" Background="{StaticResource BaseBrush}">
+                    <Grid ColumnDefinitions="*,Auto" Margin="12,0">
+                        <!-- 左：页面标题 -->
+                        <TextBlock x:Name="PageTitle" Grid.Column="0"
+                                   Text="系统设置" Foreground="{StaticResource SubtextBrush}"
+                                   FontSize="12" VerticalAlignment="Center" />
+                        <!-- 右：关闭按钮 -->
+                        <Button Grid.Column="1" Classes="titlebar-btn"
+                                ToolTip.Tip="关闭" Click="OnCloseClick">
+                            <TextBlock Text="✕" FontSize="13"
+                                       Foreground="{StaticResource SubtextBrush}" />
+                        </Button>
+                    </Grid>
+                </Border>
+
+                <!-- 内容区 -->
+                <ContentControl x:Name="PageHost"
+                                HorizontalContentAlignment="Stretch"
+                                VerticalContentAlignment="Stretch" />
+            </DockPanel>
+
+        </Grid>
+    </Panel>
+
+</Window>

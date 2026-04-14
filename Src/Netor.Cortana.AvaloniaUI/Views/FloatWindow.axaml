@@ -1,0 +1,104 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Netor.Cortana.AvaloniaUI.Views.FloatWindow"
+        x:CompileBindings="True"
+        Title="小娜宝贝"
+        Width="80" Height="80"
+        CanResize="False"
+        ShowInTaskbar="False"
+        Topmost="True"
+        SystemDecorations="None"
+        Background="Transparent"
+        TransparencyLevelHint="Transparent"
+        WindowStartupLocation="Manual">
+
+    <Window.Styles>
+        <!-- ===== 发光层：红色呼吸动画（默认） ===== -->
+        <Style Selector="Ellipse.glow">
+            <Style.Animations>
+                <Animation Duration="0:0:2"
+                           IterationCount="INFINITE"
+                           PlaybackDirection="Alternate"
+                           Easing="CubicEaseInOut">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="Opacity" Value="0.4" />
+                        <Setter Property="Width" Value="62" />
+                        <Setter Property="Height" Value="62" />
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="Opacity" Value="0.75" />
+                        <Setter Property="Width" Value="70" />
+                        <Setter Property="Height" Value="70" />
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+
+        <!-- ===== 鼠标悬停：发光增强 ===== -->
+        <Style Selector="Panel.float-root:pointerover Ellipse.glow">
+            <Style.Animations>
+                <Animation Duration="0:0:1.5"
+                           IterationCount="INFINITE"
+                           PlaybackDirection="Alternate"
+                           Easing="CubicEaseInOut">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="Opacity" Value="0.6" />
+                        <Setter Property="Width" Value="66" />
+                        <Setter Property="Height" Value="66" />
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="Opacity" Value="1.0" />
+                        <Setter Property="Width" Value="78" />
+                        <Setter Property="Height" Value="78" />
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+
+        <!-- ===== 鼠标悬停：主体边框高亮 ===== -->
+        <Style Selector="Panel.float-root:pointerover Ellipse.body">
+            <Setter Property="Stroke" Value="#CCFF3232" />
+            <Setter Property="StrokeThickness" Value="1.5" />
+        </Style>
+    </Window.Styles>
+
+    <!-- 悬浮球：80x80 窗口 → 居中 58px 容器 -->
+    <Panel Classes="float-root" Width="80" Height="80">
+
+        <!-- 外层红色发光（模拟 box-shadow 呼吸） -->
+        <Ellipse Classes="glow"
+                 Width="62" Height="62"
+                 HorizontalAlignment="Center"
+                 VerticalAlignment="Center"
+                 IsHitTestVisible="False">
+            <Ellipse.Fill>
+                <RadialGradientBrush>
+                    <GradientStop Color="#CCFF0000" Offset="0.5" />
+                    <GradientStop Color="#66FF3232" Offset="0.75" />
+                    <GradientStop Color="#00FF0000" Offset="1.0" />
+                </RadialGradientBrush>
+            </Ellipse.Fill>
+        </Ellipse>
+
+        <!-- 主体白色圆（58px，1px 白色边框） -->
+        <Ellipse Classes="body"
+                 Width="58" Height="58"
+                 Fill="White"
+                 Stroke="#FFFFFF"
+                 StrokeThickness="1"
+                 HorizontalAlignment="Center"
+                 VerticalAlignment="Center" />
+
+        <!-- 头像（56px，圆形裁剪） -->
+        <Border Width="56" Height="56"
+                CornerRadius="28"
+                ClipToBounds="True"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                IsHitTestVisible="False">
+            <Image Source="avares://Cortana/Assets/logo.200.png"
+                   Stretch="UniformToFill" />
+        </Border>
+    </Panel>
+
+</Window>
