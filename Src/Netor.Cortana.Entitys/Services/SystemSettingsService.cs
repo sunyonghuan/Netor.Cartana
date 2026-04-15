@@ -274,7 +274,7 @@ namespace Netor.Cortana.Entitys.Services
 
                 Seed("Tts.WelcomeGreeting",
                     group: "语音合成", displayName: "唤醒欢迎语",
-                    description: "AI 被唤醒时播放的欢迎语，支持实时调整无需重启。",
+                    description: "AI 被唤醒时播放的欢迎语，修改后需要重启应用才能生效。",
                     value: "主人，我在!", valueType: "string", sortOrder: 1),
 
                 // ── 对话历史 ──────────────────────────
