@@ -250,6 +250,11 @@ public partial class App : Application
             description: "WebSocket 服务监听端口，修改后立即生效，建议重启软件以确保插件正常工作。",
             defaultValue: "52841", valueType: "int", sortOrder: 0);
 
+        sysSettings.EnsureSetting("Tts.WelcomeGreeting",
+            group: "语音合成", displayName: "唤醒欢迎语",
+            description: "AI 被唤醒时播放的欢迎语，支持实时调整无需重启。",
+            defaultValue: "主人，我在!", valueType: "string", sortOrder: 1);
+
         var savedWorkspace = sysSettings.GetValue("System.WorkspaceDirectory");
         var workspacePath = (!string.IsNullOrWhiteSpace(savedWorkspace) && Directory.Exists(savedWorkspace))
             ? savedWorkspace
