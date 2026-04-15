@@ -272,6 +272,11 @@ namespace Netor.Cortana.Entitys.Services
                     value: ttsSpeed.ToString(CultureInfo.InvariantCulture),
                     valueType: "float", sortOrder: 0),
 
+                Seed("Tts.WelcomeGreeting",
+                    group: "语音合成", displayName: "唤醒欢迎语",
+                    description: "AI 被唤醒时播放的欢迎语，支持实时调整无需重启。",
+                    value: "主人，我在!", valueType: "string", sortOrder: 1),
+
                 // ── 对话历史 ──────────────────────────
                 Seed("ChatHistory.MaxContentLength",
                     group: "对话历史", displayName: "最大上下文字符数",
