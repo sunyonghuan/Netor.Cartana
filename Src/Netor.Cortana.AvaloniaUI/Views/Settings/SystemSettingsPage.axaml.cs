@@ -6,7 +6,10 @@ using Avalonia.Media;
 
 using FluentAvalonia.UI.Controls;
 
+using Microsoft.Extensions.Logging;
+
 using Netor.Cortana.Networks;
+using Netor.Cortana.Voice;
 
 using System.Net;
 using System.Net.Sockets;
@@ -175,6 +178,22 @@ public partial class SystemSettingsPage : UserControl
 
         SettingsService.SaveBatch(updates);
 
+        // 如果修改了欢迎语，立刻重新生成语音缓存
+        var greetingEntry = updates.FirstOrDefault(u => u.Key == "Tts.WelcomeGreeting");
+        if (greetingEntry != default)
+        {
+            try
+            {
+                var ttsService = App.Services.GetRequiredService<TextToSpeechService>();
+                await ttsService.RegenerateGreetingAudioAsync(CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                var logger = App.Services.GetRequiredService<ILogger<SystemSettingsPage>>();
+                logger.LogWarning(ex, "重新生成欢迎语音频失败");
+            }
+        }
+
         // 如果端口发生了变化，重启 WebSocket 服务
         if (portEntry != default)
         {
@@ -214,17 +233,27 @@ public partial class SystemSettingsPage : UserControl
     /// </summary>
     private async Task ShowDialogAsync(string title, string message)
     {
-        var td = new FATaskDialog
+        try
         {
-            Title = title,
-            Content = message,
-            Buttons = { FATaskDialogButton.OKButton },
-        };
+            var td = new FATaskDialog
+            {
+                Title = title,
+                Content = message,
+                Buttons = { FATaskDialogButton.OKButton },
+            };
 
-        if (TopLevel.GetTopLevel(this) is Avalonia.Visual root)
-            td.XamlRoot = root;
+            // 尝试设置 XamlRoot，但如果失败则直接显示
+            var root = TopLevel.GetTopLevel(this);
+            if (root is not null)
+                td.XamlRoot = root;
 
-        await td.ShowAsync();
+            await td.ShowAsync();
+        }
+        catch
+        {
+            // FATaskDialog 失败时回退到简单提示
+            System.Diagnostics.Debug.WriteLine($"{title}: {message}");
+        }
     }
 
     private void OnResetClick(object? sender, RoutedEventArgs e)
