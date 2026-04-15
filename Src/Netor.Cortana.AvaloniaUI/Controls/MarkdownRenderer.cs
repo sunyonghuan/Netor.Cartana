@@ -1,4 +1,5 @@
 using Avalonia.Controls.Documents;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Media;
@@ -95,50 +96,176 @@ public sealed class MarkdownRenderer : UserControl
 
     // ───── 块级渲染 ─────
 
+    /// <summary>
+    /// 渲染块级元素，合并相邻的文本块（段落和标题）支持跨行选择。
+    /// </summary>
     private void RenderBlocks(ContainerBlock container, Panel target)
     {
+        var textBlockQueue = new List<Block>();  // 待合并的文本块
+
         foreach (var block in container)
         {
             switch (block)
             {
                 case ParagraphBlock paragraph:
+                    // 检查是否为独立图片
                     var imgBlock = TryCreateImageBlock(paragraph);
-                    target.Children.Add(imgBlock ?? CreateParagraph(paragraph));
+                    if (imgBlock is not null)
+                    {
+                        // 是图片块，先刷新待合并的文本块，再添加图片
+                        if (textBlockQueue.Count > 0)
+                        {
+                            target.Children.Add(MergeTextBlocks(textBlockQueue));
+                            textBlockQueue.Clear();
+                        }
+                        target.Children.Add(imgBlock);
+                    }
+                    else
+                    {
+                        // 是普通文本段落，加入待合并队列
+                        textBlockQueue.Add(paragraph);
+                    }
                     break;
 
                 case HeadingBlock heading:
-                    target.Children.Add(CreateHeading(heading));
+                    // 标题加入待合并队列
+                    textBlockQueue.Add(heading);
                     break;
 
                 case FencedCodeBlock fencedCode:
+                    // 代码块遇到，先刷新待合并的文本块
+                    if (textBlockQueue.Count > 0)
+                    {
+                        target.Children.Add(MergeTextBlocks(textBlockQueue));
+                        textBlockQueue.Clear();
+                    }
                     target.Children.Add(CreateCodeBlock(fencedCode));
                     break;
 
                 case CodeBlock code:
+                    if (textBlockQueue.Count > 0)
+                    {
+                        target.Children.Add(MergeTextBlocks(textBlockQueue));
+                        textBlockQueue.Clear();
+                    }
                     target.Children.Add(CreateCodeBlock(code));
                     break;
 
                 case ListBlock list:
+                    if (textBlockQueue.Count > 0)
+                    {
+                        target.Children.Add(MergeTextBlocks(textBlockQueue));
+                        textBlockQueue.Clear();
+                    }
                     target.Children.Add(CreateList(list, indent: 0));
                     break;
 
                 case ThematicBreakBlock:
+                    if (textBlockQueue.Count > 0)
+                    {
+                        target.Children.Add(MergeTextBlocks(textBlockQueue));
+                        textBlockQueue.Clear();
+                    }
                     target.Children.Add(CreateThematicBreak());
                     break;
 
                 case QuoteBlock quote:
+                    if (textBlockQueue.Count > 0)
+                    {
+                        target.Children.Add(MergeTextBlocks(textBlockQueue));
+                        textBlockQueue.Clear();
+                    }
                     target.Children.Add(CreateQuote(quote));
                     break;
 
                 case Table table:
+                    if (textBlockQueue.Count > 0)
+                    {
+                        target.Children.Add(MergeTextBlocks(textBlockQueue));
+                        textBlockQueue.Clear();
+                    }
                     target.Children.Add(CreateTable(table));
                     break;
 
                 case ContainerBlock nested:
+                    if (textBlockQueue.Count > 0)
+                    {
+                        target.Children.Add(MergeTextBlocks(textBlockQueue));
+                        textBlockQueue.Clear();
+                    }
                     RenderBlocks(nested, target);
                     break;
             }
         }
+
+        // 最后刷新剩余的待合并文本块
+        if (textBlockQueue.Count > 0)
+        {
+            target.Children.Add(MergeTextBlocks(textBlockQueue));
+        }
+    }
+
+    /// <summary>
+    /// 合并多个相邻的文本块（段落和标题）到单个 SelectableTextBlock 中，
+    /// 支持跨行选择并保留所有格式（加粗、斜体、着色等）。
+    /// </summary>
+    private SelectableTextBlock MergeTextBlocks(List<Block> textBlocks)
+    {
+        var tb = new SelectableTextBlock
+        {
+            TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+            Foreground = new SolidColorBrush(Color.Parse("#ffffff")),
+            FontSize = 13,
+            LineHeight = 20.8,
+        };
+
+        bool first = true;
+        foreach (var block in textBlocks)
+        {
+            // 在块之间插入段落分隔（两个 LineBreak）
+            if (!first)
+            {
+                tb.Inlines!.Add(new LineBreak());
+                tb.Inlines!.Add(new LineBreak());
+            }
+
+            if (block is ParagraphBlock paragraph && paragraph.Inline is not null)
+            {
+                BuildInlines(paragraph.Inline, tb.Inlines!);
+            }
+            else if (block is HeadingBlock heading)
+            {
+                double fontSize = heading.Level switch
+                {
+                    1 => 18,
+                    2 => 16,
+                    3 => 15,
+                    4 => 14,
+                    5 => 13,
+                    _ => 12,
+                };
+
+                // 记录当前的 Inlines 数量
+                var startIdx = tb.Inlines!.Count;
+
+                if (heading.Inline is not null)
+                    BuildInlines(heading.Inline, tb.Inlines!);
+
+                // 为新增的 Inlines 应用标题样式（加粗、字号）
+                for (int i = startIdx; i < tb.Inlines!.Count; i++)
+                {
+                    if (tb.Inlines![i] is AvaloniaRun run)
+                    {
+                        run.FontWeight = FontWeight.Bold;
+                        run.FontSize = fontSize;
+                    }
+                }
+            }
+
+            first = false;
+        }
+
+        return tb;
     }
 
     private SelectableTextBlock CreateParagraph(ParagraphBlock paragraph)
@@ -210,7 +337,15 @@ public sealed class MarkdownRenderer : UserControl
         };
         SimpleCodeHighlighter.Highlight(code, lang, codeTb.Inlines!);
 
-        inner.Children.Add(codeTb);
+        // 将代码正文放在 ScrollViewer 中，实现水平滚动
+        var scrollViewer = new ScrollViewer
+        {
+            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+            Content = codeTb,
+        };
+
+        inner.Children.Add(scrollViewer);
 
         return new Border
         {
