@@ -232,6 +232,8 @@ public partial class MainWindow : Window
                 HistoryLabel.Text = "新对话";
                 ShowWelcome();
                 LoadSessions();
+                // 关键：切换到新创建的会话，而不是继续在旧会话上
+                SwitchToSession(args.SessionId, "新对话");
             });
             return Task.FromResult(false);
         });
