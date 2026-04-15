@@ -77,7 +77,7 @@ public sealed class TextToSpeechService(
         {
             try
             {
-                var audio = await SynthesizeAsync("主人，我在!", _serviceCts.Token);
+                var audio = await SynthesizeAsync(WelcomeGreeting, _serviceCts.Token);
                 if (audio.Samples.Length > 0)
                 {
                     _greetingAudioCache = audio;
@@ -122,7 +122,7 @@ public sealed class TextToSpeechService(
             else
             {
                 logger.LogDebug("问候语缓存未就绪，使用实时合成");
-                await SpeakAsync("主人，我在!", cancellationToken);
+                await SpeakAsync(WelcomeGreeting, cancellationToken);
             }
         }
         catch (OperationCanceledException) { }
@@ -161,6 +161,11 @@ public sealed class TextToSpeechService(
     /// 当前语速倍率，每次合成时从数据库实时读取，支持无重启调整。
     /// </summary>
     private float CurrentSpeed => systemSettings.GetValue("Tts.Speed", 1.0f);
+
+    /// <summary>
+    /// 当前欢迎语，每次唤醒时从数据库实时读取，支持无重启调整。
+    /// </summary>
+    private string WelcomeGreeting => systemSettings.GetValue("Tts.WelcomeGreeting", "主人，我在!");
 
     // ──────────────────── 流水线生命周期 ────────────────────
 
