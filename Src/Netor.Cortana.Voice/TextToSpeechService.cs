@@ -132,6 +132,29 @@ public sealed class TextToSpeechService(
         }
     }
 
+    /// <summary>
+    /// 重新生成欢迎语音频缓存。当用户修改欢迎语设置时调用，以立刻更新缓存。
+    /// </summary>
+    public async Task RegenerateGreetingAudioAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await EnsureModelReadyAsync(cancellationToken);
+            var audio = await SynthesizeAsync(WelcomeGreeting, cancellationToken);
+            if (audio.Samples.Length > 0)
+            {
+                _greetingAudioCache = audio;
+                logger.LogInformation("唤醒问候语音频已重新生成并更新缓存（{SampleCount} 采样点，文本：{Greeting}）", 
+                    audio.Samples.Length, WelcomeGreeting);
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "重新生成唤醒问候语失败");
+        }
+    }
+
     // ──────── 双 Channel 流水线字段 ────────
 
     /// <summary>文本队列：调用方 → 合成线程。</summary>
