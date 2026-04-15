@@ -365,45 +365,78 @@ public sealed class MarkdownRenderer : UserControl
         {
             if (item is not ListItemBlock listItem) continue;
 
-            var prefix = list.IsOrdered ? $"{index++}. " : "• ";
+            // 检查是否为任务列表项（通过 Data 属性）
+            object? checkboxState = listItem.GetData("task-list-item");
+            bool isTaskItem = checkboxState != null;
 
-            // 列表项内容容器：设置宽度为可用宽度，启用自动换行
-            var contentPanel = new StackPanel 
-            { 
-                Spacing = 2,
-            };
-            foreach (var subBlock in listItem)
+            if (isTaskItem)
             {
-                if (subBlock is ParagraphBlock paragraph)
+                // 任务列表项：使用勾选框 + 内容
+                var itemPanel = new DockPanel { Margin = new Thickness(0, 2, 0, 2) };
+
+                // 勾选框
+                bool isChecked = checkboxState is string state && state == "x";
+                var checkbox = new CheckBox
                 {
-                    // 段落已经有 TextWrapping.Wrap，会自动换行
-                    contentPanel.Children.Add(CreateParagraph(paragraph));
-                }
-                else if (subBlock is ListBlock nestedList)
-                    contentPanel.Children.Add(CreateList(nestedList, indent + 1));
-                else if (subBlock is ContainerBlock nested)
-                    RenderBlocks(nested, contentPanel);
-            }
+                    IsChecked = isChecked,
+                    IsEnabled = false,  // 只读
+                    Margin = new Thickness(0, 0, 8, 0),
+                    VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top,
+                };
+                itemPanel.Children.Add(checkbox);
+                DockPanel.SetDock(checkbox, Avalonia.Controls.Dock.Left);
 
-            // 使用 DockPanel 让 contentPanel 占用剩余空间
-            var itemRow = new DockPanel
+                // 内容容器（占用剩余空间）
+                var contentPanel = new StackPanel { Spacing = 2 };
+                foreach (var subBlock in listItem)
+                {
+                    if (subBlock is ParagraphBlock paragraph)
+                        contentPanel.Children.Add(CreateParagraph(paragraph));
+                    else if (subBlock is ListBlock nestedList)
+                        contentPanel.Children.Add(CreateList(nestedList, indent + 1));
+                    else if (subBlock is ContainerBlock nested)
+                        RenderBlocks(nested, contentPanel);
+                }
+                itemPanel.Children.Add(contentPanel);
+                stack.Children.Add(itemPanel);
+            }
+            else
             {
-                LastChildFill = true,  // contentPanel 占用剩余宽度
-            };
-            
-            var prefixBlock = new TextBlock
-            {
-                Text = prefix,
-                Foreground = new SolidColorBrush(Color.Parse("#007acc")),
-                FontSize = 13,
-                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top,
-                Margin = new Thickness(0, 0, 4, 0),  // 右边距 4px
-            };
-            itemRow.Children.Add(prefixBlock);
-            DockPanel.SetDock(prefixBlock, Avalonia.Controls.Dock.Left);
-            
-            itemRow.Children.Add(contentPanel);
-            stack.Children.Add(itemRow);
+                // 普通列表项：使用项目符号
+                var prefix = list.IsOrdered ? $"{index++}. " : "• ";
+
+                var contentPanel = new StackPanel { Spacing = 2 };
+                foreach (var subBlock in listItem)
+                {
+                    if (subBlock is ParagraphBlock paragraph)
+                    {
+                        contentPanel.Children.Add(CreateParagraph(paragraph));
+                    }
+                    else if (subBlock is ListBlock nestedList)
+                        contentPanel.Children.Add(CreateList(nestedList, indent + 1));
+                    else if (subBlock is ContainerBlock nested)
+                        RenderBlocks(nested, contentPanel);
+                }
+
+                var itemRow = new DockPanel
+                {
+                    LastChildFill = true,
+                };
+
+                var prefixBlock = new TextBlock
+                {
+                    Text = prefix,
+                    Foreground = new SolidColorBrush(Color.Parse("#007acc")),
+                    FontSize = 13,
+                    VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top,
+                    Margin = new Thickness(0, 0, 4, 0),
+                };
+                itemRow.Children.Add(prefixBlock);
+                DockPanel.SetDock(prefixBlock, Avalonia.Controls.Dock.Left);
+
+                itemRow.Children.Add(contentPanel);
+                stack.Children.Add(itemRow);
+            }
         }
 
         return stack;
