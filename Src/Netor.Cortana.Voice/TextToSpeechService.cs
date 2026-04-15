@@ -134,11 +134,19 @@ public sealed class TextToSpeechService(
 
     /// <summary>
     /// 重新生成欢迎语音频缓存。当用户修改欢迎语设置时调用，以立刻更新缓存。
+    /// 如果服务还未初始化则安全跳过，不会抛出异常。
     /// </summary>
     public async Task RegenerateGreetingAudioAsync(CancellationToken cancellationToken)
     {
         try
         {
+            // 如果 TTS 还未初始化，则跳过（避免多线程冲突和空值异常）
+            if (_tts is null)
+            {
+                logger.LogDebug("TTS 服务尚未初始化，跳过欢迎语缓存更新");
+                return;
+            }
+
             await EnsureModelReadyAsync(cancellationToken);
             var audio = await SynthesizeAsync(WelcomeGreeting, cancellationToken);
             if (audio.Samples.Length > 0)

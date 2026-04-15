@@ -178,20 +178,24 @@ public partial class SystemSettingsPage : UserControl
 
         SettingsService.SaveBatch(updates);
 
-        // 如果修改了欢迎语，立刻重新生成语音缓存
+        // 如果修改了欢迎语，后台异步重新生成语音缓存（不阻塞 UI）
         var greetingEntry = updates.FirstOrDefault(u => u.Key == "Tts.WelcomeGreeting");
         if (greetingEntry != default)
         {
-            try
+            // 后台异步执行，不等待结果
+            _ = Task.Run(async () =>
             {
-                var ttsService = App.Services.GetRequiredService<TextToSpeechService>();
-                await ttsService.RegenerateGreetingAudioAsync(CancellationToken.None);
-            }
-            catch (Exception ex)
-            {
-                var logger = App.Services.GetRequiredService<ILogger<SystemSettingsPage>>();
-                logger.LogWarning(ex, "重新生成欢迎语音频失败");
-            }
+                try
+                {
+                    var ttsService = App.Services.GetRequiredService<TextToSpeechService>();
+                    await ttsService.RegenerateGreetingAudioAsync(CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    var logger = App.Services.GetRequiredService<ILogger<SystemSettingsPage>>();
+                    logger.LogWarning(ex, "后台重新生成欢迎语音频失败");
+                }
+            });
         }
 
         // 如果端口发生了变化，重启 WebSocket 服务
