@@ -1,58 +1,125 @@
 # Netor.Cortana
 
-> 基于 .NET 10 的 Windows 桌面 AI 助手，当前主界面为 AvaloniaUI，集成 LLM、语音、插件系统、MCP 和 WebSocket 接入能力。
+<div align="center">
 
-## 项目现状
+<img src="Res/images/044417fdc1cb787fed6996ea10ab0082.png" width="380" />
 
-Netor.Cortana 当前已经不是单体桌面程序，而是一个围绕 AI 助手场景拆分出的模块化解决方案。仓库内同时包含：
+**一个真正能帮你干活的 AI 助手。**
 
-- 当前主桌面程序 Netor.Cortana.AvaloniaUI
-- 遗留桌面程序 Netor.Cortana
-- AI、语音、网络、插件等独立业务模块
-- Native 插件宿主、插件抽象层和 Native 插件开发包
-- 示例插件、发布脚本和项目文档
+快速高效 · 简单轻便 · 隐私至上 · 完全离线 · 免费开源
 
-当前能力覆盖：
+[![.NET 10](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet)](#)
+[![Avalonia 12](https://img.shields.io/badge/Avalonia-12-8B44AC)](#)
+[![Native AOT](https://img.shields.io/badge/Native-AOT-00C853)](#)
+[![License](https://img.shields.io/badge/License-MIT-blue)](#许可证)
 
-- 多模型对话与 Agent 工具调用
-- 语音唤醒、语音识别、语音合成
-- WebSocket 对外接入
-- Native、MCP 为主的扩展通道，Dotnet 仅保留兼容能力
-- 桌面控制、文件操作、PowerShell 集成
-- SQLite 持久化和 Serilog 日志
+</div>
 
-## 核心说明
+---
 
-### UI 形态
+## 🦞 不只是聊天，是真正的生产力
 
-- Netor.Cortana.AvaloniaUI：当前主项目，已经承接新的桌面界面和后续功能迭代，Release 配置使用 Native AOT 发布
-- Netor.Cortana：旧 WinForms 宿主，保留在仓库中用于历史兼容和参考，不再作为推荐运行入口
+> 市面上的 AI 助手千篇一律——套壳网页、花哨界面、月月订阅。
+> Cortana 不一样。它是一只**完全手搓的免费开源大龙虾**，功能比那些收费的还强。
 
-README 以当前仓库整体为准，但默认入口、运行说明和发布说明均以 AvaloniaUI 为主。
+<div align="center">
+<img src="Res/images/c4f4009cfe80af874c2de8f5bfa592be.png" width="720" />
+<br/>
+<sub>↑ 真实场景：AI 自主连接 8 台 Linux 服务器完成巡检，生成报告，发现安全风险并给出处置建议</sub>
+</div>
+
+<br/>
+
+**它不是玩具，是真正帮你干活的工具：**
+
+| 🎯 | 说到做到 |
+|:--:|:--|
+| 🔒 | **隐私至上** — 数据全部本地存储，不联网、不上传、不追踪，连自动更新都没有 |
+| ⚡ | **快速高效** — Native AOT 编译，启动即用，没有运行时加载的等待 |
+| 🪶 | **简单轻便** — 单文件部署，无需安装，拷贝即跑 |
+| 🧠 | **自我进化** — 支持自我更新、自我学习，甚至自己给自己开发插件 |
+| 🔌 | **无限扩展** — Native 插件 + MCP 协议，想接什么就接什么 |
+| 🎤 | **语音交互** — 唤醒词激活、语音识别、语音合成，全链路离线可用 |
+| 🆓 | **完全免费** — 没有订阅、没有增值、没有套路，源码全部公开 |
+
+---
+
+## ✨ 功能一览
+
+### 💬 智能对话
+
+多模型接入、流式输出、Markdown 富文本渲染、上下文记忆、Agent 工具调用。不只是问答——它能理解你的意图，调用工具，完成真正的任务。
+
+<div align="center">
+<img src="Res/images/14ea84ef4c89fd22722ba7b274622e9b.png" width="720" />
+<br/>
+<sub>↑ 多会话管理：每个对话独立存储，随时切换和回溯</sub>
+</div>
+
+### 🎤 语音能力
+
+<div align="center">
+<img src="Res/images/82d2712a2d836a76c7898ea1c9a66c03.png" width="360" />
+<br/>
+<sub>↑ 语音唤醒后的聆听状态，支持自定义唤醒欢迎语</sub>
+</div>
+
+- **关键词唤醒** — 一句"Hey Cortana"即可激活
+- **语音识别 (STT)** — Sherpa-ONNX 驱动，完全离线
+- **语音合成 (TTS)** — 自然流畅的中英文语音输出
+- 全链路本地运行，不经过任何云端服务
+
+### 🗂️ 工作台
+
+<div align="center">
+<img src="Res/images/060c8df8f4b3fb155baf836e70131080.png" width="720" />
+<br/>
+<sub>↑ 内置工作台：文件管理、技能脚本、服务器运维一站式操作</sub>
+</div>
+
+### 🔌 插件与工具
+
+<div align="center">
+<img src="Res/images/0e50b997cd45ee53987b042ad63c3005.png" width="720" />
+<br/>
+<sub>↑ 工具管理：为智能体启用/禁用插件工具和 MCP 服务器工具</sub>
+</div>
+
+### ⚙️ 灵活配置
+
+<div align="center">
+<table>
+<tr>
+<td><img src="Res/images/48c809b1e63e61b9c9b4a76768054609.png" width="520" /><br/><sub>模型管理：接入多家 AI 厂商，一键刷新远程模型</sub></td>
+</tr>
+<tr>
+<td><img src="Res/images/75613f63a864162212f9e1ed6b3bb343.png" width="520" /><br/><sub>系统设置：对话历史、网络端口、语音合成等全面可调</sub></td>
+</tr>
+</table>
+</div>
+
+---
+
+## 🏗️ 技术架构
+
+| 组件 | 技术 |
+|:-----|:-----|
+| 运行时 | .NET 10 + Native AOT |
+| 主 UI | Avalonia 12 |
+| AI 编排 | Microsoft.Extensions.AI · Microsoft.Agents |
+| MCP | ModelContextProtocol 1.2.0 |
+| 语音 | Sherpa-ONNX（全链路离线） |
+| 数据存储 | SQLite（纯 ADO.NET，AOT 安全） |
+| 日志 | Serilog |
+| 插件体系 | Native AOT 插件 + MCP 协议 |
 
 ### 扩展通道
 
-| 通道 | 当前状态 | 说明 |
-|------|----------|------|
-| Native | 推荐 | 独立 NativeHost 子进程承载，适合 AOT、高隔离和高性能场景 |
-| MCP | 推荐 | 通过 stdio、sse、streamable-http 连接外部工具服务 |
-| Dotnet | 遗留兼容 | 旧托管插件体系，仅用于历史插件兼容和迁移，不建议新开发继续使用 |
-
-### 技术栈
-
-| 组件 | 技术 |
-|------|------|
-| 运行时 | .NET 10 |
-| 主 UI | Avalonia 12 |
-| 遗留 UI | WinForms + WinFormedge |
-| AI 编排 | Microsoft.Extensions.AI、Microsoft.Agents |
-| MCP | ModelContextProtocol 1.2.0 |
-| 语音 | Sherpa-ONNX |
-| 数据存储 | SQLite |
-| 日志 | Serilog |
-| 插件主路线 | Native 模式 + MCP 模式 |
-
-## AI 与语音模型说明
+| 通道 | 状态 | 说明 |
+|:-----|:----:|:-----|
+| **Native** | ✅ 推荐 | NativeHost 子进程承载，进程级隔离，支持 C/C++/Rust/C# AOT |
+| **MCP** | ✅ 推荐 | stdio / SSE / streamable-http 连接外部工具服务 |
+| Dotnet | 🔄 兼容 | 旧托管插件体系，仅用于历史兼容，不建议新开发使用 |
 
 本项目集成了多种 AI 和语音模型，用于实现智能对话、语音唤醒、语音识别和语音合成等功能。由于模型文件体积较大（通常超过 100MB），**这些模型文件未上传到 GitHub 仓库**，需要在首次运行前手动下载并放置到指定目录。
 
@@ -200,12 +267,12 @@ Netor.Cortana/                          # Git 仓库根目录
     └── .github/                        # GitHub/CI 配置
 ```
 
-## 项目定位
+## 📍 项目定位
 
-- Netor.Cortana.AvaloniaUI 是当前默认开发、调试、发布和验收入口。
-- Netor.Cortana 保留在仓库中，但界面、性能和功能已经落后，不再作为主产品线维护。
-- 插件体系当前以 Native 和 MCP 为主；Dotnet 插件契约属于历史方案，不再作为默认扩展模式。
-- 如果文档、脚本或说明与两套 UI 的事实不一致，以 AvaloniaUI 为准，并优先修正文档。
+- **Netor.Cortana.AvaloniaUI** — 当前主项目，默认的开发、调试、发布和验收入口
+- **Netor.Cortana** — 旧 WinForms 宿主，保留在仓库中用于历史参考，不再维护
+- 插件体系以 **Native + MCP** 为主；Dotnet 插件属于历史方案，不再推荐
+- 如果文档与实际不一致，以 AvaloniaUI 为准
 
 ## 插件系统
 
@@ -261,8 +328,16 @@ Cortana 当前推荐两条主扩展路线：Native 和 MCP。Dotnet 通道仍存
 | [Docs/websocket-api.md](Docs/websocket-api.md) | WebSocket 接入协议与消息格式 |
 | [Docs/class-reference.md](Docs/class-reference.md) | 核心类文件说明 |
 
-## 许可证
+## 📄 许可证
 
-本项目为内部项目，未经授权不得分发。
+本项目采用 MIT 许可证开源，可自由使用、修改和分发。
 
+---
 
+<div align="center">
+
+**Netor.Cortana** — 你的私人 AI 助手，不联网、不收费、不套路。
+
+用它干活，靠谱。🦞
+
+</div>
