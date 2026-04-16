@@ -4,7 +4,7 @@
         x:Class="Netor.Cortana.AvaloniaUI.Views.MainWindow"
         x:CompileBindings="True"
         Title="小娜宝贝"
-        Width="820" Height="1080"
+        Width="560" Height="980"
         MinWidth="400" MinHeight="600"
         WindowStartupLocation="CenterScreen"
         Background="#1e1e1e"
