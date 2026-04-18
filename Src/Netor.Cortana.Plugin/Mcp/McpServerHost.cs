@@ -56,36 +56,77 @@ public sealed class McpServerHost : IAsyncDisposable
         _logger = loggerFactory.CreateLogger<McpServerHost>();
     }
 
+    private const int ConnectTimeoutMs = 15_000;
+
     /// <summary>
     /// 根据配置创建传输层并连接到 MCP Server，获取工具列表。
+    /// 包含 15 秒连接超时，防止目标不可达时无限等待或内部重连刷日志。
     /// </summary>
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
+        IClientTransport? transport = null;
         try
         {
-            IClientTransport transport = _config.TransportType.ToLowerInvariant() switch
+            transport = _config.TransportType.ToLowerInvariant() switch
             {
                 "stdio" => CreateStdioTransport(),
                 "sse" or "streamable-http" => CreateHttpTransport(),
                 _ => throw new InvalidOperationException($"不支持的传输类型：{_config.TransportType}")
             };
 
+            // 限制连接超时，防止目标不可达时 SSE/HTTP 传输层无限重连
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(ConnectTimeoutMs);
+
             _client = await McpClient.CreateAsync(
                 transport,
                 new McpClientOptions { ClientInfo = new() { Name = "Netor.Cortana", Version = "1.0.0", Title = "Netor.Cortana" } },
                 _loggerFactory,
-                cancellationToken);
+                timeoutCts.Token);
 
-            _tools = await _client.ListToolsAsync(cancellationToken: cancellationToken);
+            transport = null; // McpClient 已接管 transport 生命周期
+
+            _tools = await _client.ListToolsAsync(cancellationToken: timeoutCts.Token);
 
             _logger.LogInformation(
                 "MCP Server [{Name}] 连接成功，获取到 {Count} 个工具",
                 _config.Name, _tools.Count);
         }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning("MCP Server [{Name}] 连接超时（{TimeoutMs}ms）", _config.Name, ConnectTimeoutMs);
+            await CleanupConnectionAsync(transport);
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "MCP Server [{Name}] 连接失败", _config.Name);
+            await CleanupConnectionAsync(transport);
             throw;
+        }
+    }
+
+    /// <summary>
+    /// 清理连接资源：先释放 McpClient（它会释放已接管的 transport），再释放未被接管的 transport。
+    /// </summary>
+    private async Task CleanupConnectionAsync(IClientTransport? orphanedTransport)
+    {
+        if (_client is not null)
+        {
+            try { await _client.DisposeAsync(); } catch { }
+            _client = null;
+            _tools = null;
+        }
+
+        // 释放未被 McpClient 接管的 transport（CreateAsync 失败时）
+        switch (orphanedTransport)
+        {
+            case IAsyncDisposable ad:
+                try { await ad.DisposeAsync(); } catch { }
+                break;
+            case IDisposable d:
+                try { d.Dispose(); } catch { }
+                break;
         }
     }
 
@@ -157,7 +198,7 @@ public sealed class McpServerHost : IAsyncDisposable
         {
             _logger.LogInformation("正在断开 MCP Server [{Name}]", _config.Name);
 
-            await _client.DisposeAsync();
+            try { await _client.DisposeAsync(); } catch { }
             _client = null;
             _tools = null;
         }

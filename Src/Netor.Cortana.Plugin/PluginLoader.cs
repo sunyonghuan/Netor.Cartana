@@ -374,9 +374,9 @@ public sealed class PluginLoader : IDisposable
     /// </summary>
     private async Task TryConnectMcpServerAsync(McpServerEntity config, CancellationToken cancellationToken)
     {
+        var host = new McpServerHost(config, _loggerFactory);
         try
         {
-            var host = new McpServerHost(config, _loggerFactory);
             await host.ConnectAsync(cancellationToken);
             _mcpHosts[config.Id] = host;
             NotifyPluginsChanged();
@@ -384,6 +384,7 @@ public sealed class PluginLoader : IDisposable
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "MCP Server [{Name}] 连接失败，跳过", config.Name);
+            await host.DisposeAsync();
         }
     }
 
