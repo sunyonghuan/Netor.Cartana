@@ -117,24 +117,27 @@ internal sealed class UiChatOutputChannel(
         var messageList = mainWindow.FindControl<ItemsControl>("MessageList");
         if (messageList is null) return;
 
-        // ── AI 头像 (32px 圆形渐变) ──
+        var aiBubbleBrush = (IBrush)mainWindow.FindResource("AiBubbleBrush")!;
+        var aiBubbleBorderBrush = (IBrush)mainWindow.FindResource("AiBubbleBorderBrush")!;
+
+        // ── AI 头像 ──
         var avatar = new Border
         {
-            Width = 32,
-            Height = 32,
-            CornerRadius = new CornerRadius(16),
+            Width = 40,
+            Height = 40,
+            CornerRadius = new CornerRadius(20),
             ClipToBounds = true,
             VerticalAlignment = VerticalAlignment.Top,
             Margin = new Thickness(0, 0, 10, 0),
             Padding = new Thickness(1),
             Background = Brushes.Transparent,
-            BorderBrush = Brushes.White,
+            BorderBrush = aiBubbleBorderBrush,
             BorderThickness = new Thickness(1),
             Child = new Image
             {
                 Source = AiAvatarBitmap,
-                Width = 30,
-                Height = 30,
+                Width = 40,
+                Height = 40,
                 Stretch = Stretch.UniformToFill,
             }
         };
@@ -147,11 +150,13 @@ internal sealed class UiChatOutputChannel(
         // ── 气泡容器 ──
         var bubble = new Border
         {
-            Background = new SolidColorBrush(Color.Parse("#252526")),
+            Background = aiBubbleBrush,
+            BorderBrush = aiBubbleBorderBrush,
+            BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(4, 3, 3, 3),
             Padding = new Thickness(14, 10),
             MinWidth = 120,
-            Margin = new Thickness(0, 0, 42, 0),
+            Margin = new Thickness(0, 0, 50, 0),
             Child = _currentPresenter,
         };
 

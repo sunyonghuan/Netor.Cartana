@@ -1021,6 +1021,10 @@ public partial class MainWindow : Window
     /// </summary>
     private void CancelSending()
     {
+        // 用户点 Stop：同步取消所有正在进行的语音/AI/TTS 任务，避免残留。
+        try { App.Services.GetRequiredService<IVoiceCoordinator>().CancelEverything(); }
+        catch { /* 启动极早期可能未注册，忽略 */ }
+
         _sendCts?.Cancel();
         var chatService = App.Services.GetRequiredService<AiChatHostedService>();
         chatService.CancelCurrentTask();
@@ -1069,6 +1073,12 @@ public partial class MainWindow : Window
     {
         var text = InputBox.Text?.Trim();
         if (string.IsNullOrEmpty(text) && _attachments.Count == 0) return;
+
+        // 用户做出"发送"决策：收尾所有进行中的语音/AI/TTS 任务。
+        // 这样避免：主窗体下同时存在一条未完成的 STT 轮次 → 在发送后突然 publish OnSttFinal
+        // 又打出一条用户气泡、并触发多路 AI 调用。
+        try { App.Services.GetRequiredService<IVoiceCoordinator>().CancelEverything(); }
+        catch { /* 启动极早期可能未注册，忽略 */ }
 
         // 隐藏欢迎面板
         HideWelcome();

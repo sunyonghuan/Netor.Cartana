@@ -1,5 +1,9 @@
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Threading;
+
+using Netor.Cortana.Entitys;
+using Netor.EventHub;
 
 namespace Netor.Cortana.AvaloniaUI.Views;
 
@@ -9,7 +13,12 @@ namespace Netor.Cortana.AvaloniaUI.Views;
 /// </summary>
 public partial class FloatWindow : Window
 {
-    private const int FloatSize = 80;
+    private const int FloatSize = 140;
+
+    /// <summary>语音互动结束后保留 active 状态多久（避免事件间隙闪烁）。</summary>
+    private static readonly TimeSpan DeactivateDelay = TimeSpan.FromMilliseconds(900);
+
+    private DispatcherTimer? _deactivateTimer;
 
     /// <summary>
     /// 窗口位置发生变化时触发，供气泡窗口跟随移动。
@@ -36,6 +45,8 @@ public partial class FloatWindow : Window
 
         // 监听 Window 基类的 PositionChanged 事件
         base.PositionChanged += (_, _) => FloatPositionChanged?.Invoke();
+
+        SubscribeVoiceEvents();
     }
 
     // ──────── 拖拽移动（使用操作系统原生拖拽） ────────
@@ -62,5 +73,96 @@ public partial class FloatWindow : Window
     {
         var controller = App.Services.GetRequiredService<IWindowController>();
         controller.ShowMainWindow();
+    }
+
+    // ──────── 语音状态驱动光晕 ────────
+
+    /// <summary>
+    /// 订阅语音流程事件，驱动悬浮球进入/退出 Active 高频脉冲状态。
+    /// </summary>
+    private void SubscribeVoiceEvents()
+    {
+        var subscriber = App.Services.GetRequiredService<ISubscriber>();
+
+        // 进入 Active：唤醒、STT 有结果、TTS 播报中
+        subscriber.On(Events.OnWakeWordDetected, (_, _) =>
+        {
+            SetActive(true);
+            return Task.FromResult(false);
+        });
+        subscriber.Subscribe<VoiceTextArgs>(Events.OnSttPartial, (_, _) =>
+        {
+            SetActive(true);
+            return Task.FromResult(false);
+        });
+        subscriber.Subscribe<VoiceTextArgs>(Events.OnSttFinal, (_, _) =>
+        {
+            SetActive(true);
+            return Task.FromResult(false);
+        });
+        subscriber.Subscribe<VoiceSignalArgs>(Events.OnTtsStarted, (_, _) =>
+        {
+            SetActive(true);
+            return Task.FromResult(false);
+        });
+        subscriber.Subscribe<VoiceTextArgs>(Events.OnTtsSubtitle, (_, _) =>
+        {
+            SetActive(true);
+            return Task.FromResult(false);
+        });
+
+        // 退出 Active（延迟 ~1s 防抖，避免 STT 结束→TTS 开始之间的瞬间断档）
+        subscriber.Subscribe<VoiceSignalArgs>(Events.OnSttStopped, (_, _) =>
+        {
+            ScheduleDeactivate();
+            return Task.FromResult(false);
+        });
+        subscriber.Subscribe<VoiceSignalArgs>(Events.OnTtsCompleted, (_, _) =>
+        {
+            ScheduleDeactivate();
+            return Task.FromResult(false);
+        });
+        subscriber.Subscribe<VoiceSignalArgs>(Events.OnChatCompleted, (_, _) =>
+        {
+            ScheduleDeactivate();
+            return Task.FromResult(false);
+        });
+    }
+
+    private void SetActive(bool on)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            try
+            {
+                _deactivateTimer?.Stop();
+                bool already = FloatRoot.Classes.Contains("active");
+                if (on && !already) FloatRoot.Classes.Add("active");
+                else if (!on && already) FloatRoot.Classes.Remove("active");
+            }
+            catch (ObjectDisposedException) { }
+        });
+    }
+
+    private void ScheduleDeactivate()
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            try
+            {
+                _deactivateTimer ??= new DispatcherTimer { Interval = DeactivateDelay };
+                _deactivateTimer.Stop();
+                _deactivateTimer.Tick -= OnDeactivateTick;
+                _deactivateTimer.Tick += OnDeactivateTick;
+                _deactivateTimer.Start();
+            }
+            catch (ObjectDisposedException) { }
+        });
+    }
+
+    private void OnDeactivateTick(object? sender, System.EventArgs e)
+    {
+        _deactivateTimer?.Stop();
+        FloatRoot.Classes.Remove("active");
     }
 }

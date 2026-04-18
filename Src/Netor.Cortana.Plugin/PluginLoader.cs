@@ -371,10 +371,12 @@ public sealed class PluginLoader : IDisposable
 
     /// <summary>
     /// 尝试连接单个 MCP 服务器，失败不抛出异常。
+    /// 订阅 ConnectionStateChanged 事件，断线/重连时自动刷新工具列表。
     /// </summary>
     private async Task TryConnectMcpServerAsync(McpServerEntity config, CancellationToken cancellationToken)
     {
         var host = new McpServerHost(config, _loggerFactory);
+        host.ConnectionStateChanged += OnMcpConnectionStateChanged;
         try
         {
             await host.ConnectAsync(cancellationToken);
@@ -384,8 +386,21 @@ public sealed class PluginLoader : IDisposable
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "MCP Server [{Name}] 连接失败，跳过", config.Name);
+            host.ConnectionStateChanged -= OnMcpConnectionStateChanged;
             await host.DisposeAsync();
         }
+    }
+
+    /// <summary>
+    /// MCP 服务器连接状态变化回调：通知 UI 刷新工具列表。
+    /// </summary>
+    private void OnMcpConnectionStateChanged(McpServerHost host)
+    {
+        _logger.LogInformation(
+            "MCP Server [{Name}] 连接状态变化：{State}",
+            host.Name,
+            host.IsConnected ? "已连接" : host.IsReconnecting ? "重连中" : "已断开");
+        NotifyPluginsChanged();
     }
 
     /// <summary>
@@ -408,6 +423,7 @@ public sealed class PluginLoader : IDisposable
         if (_mcpHosts.TryRemove(serverId, out var host))
         {
             _logger.LogInformation("正在断开 MCP Server [{Name}]", host.Name);
+            host.ConnectionStateChanged -= OnMcpConnectionStateChanged;
             await host.DisposeAsync();
             NotifyPluginsChanged();
         }
@@ -500,6 +516,7 @@ public sealed class PluginLoader : IDisposable
         // MCP hosts 需要异步释放，在同步 Dispose 中尽力清理
         foreach (var mcpHost in _mcpHosts.Values)
         {
+            mcpHost.ConnectionStateChanged -= OnMcpConnectionStateChanged;
             mcpHost.DisposeAsync().AsTask().GetAwaiter().GetResult();
         }
 
