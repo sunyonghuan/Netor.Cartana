@@ -182,7 +182,8 @@ public sealed class ExecutionSession : IAsyncDisposable
 
         LastActivityAt = DateTime.Now;
 
-        await _writeLock.WaitAsync(ct);
+        // 不使用外部 ct 获取锁 —— 锁获取不应因 AI 框架取消而失败
+        await _writeLock.WaitAsync(CancellationToken.None);
         var commandTimedOut = false;
         try
         {
@@ -198,7 +199,9 @@ public sealed class ExecutionSession : IAsyncDisposable
             await _process!.StandardInput.WriteLineAsync($"{command}; echo '___COMMAND_END___'");
             await _process.StandardInput.FlushAsync();
 
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            // 仅使用 timeoutMs 控制命令执行时间，不链接外部 CancellationToken
+            // 外部 token 来自 AI 框架，可能因非预期原因被取消
+            using var cts = new CancellationTokenSource();
             cts.CancelAfter(timeoutMs);
 
             // 读取输出直到命令标记
@@ -325,7 +328,7 @@ public sealed class ExecutionSession : IAsyncDisposable
                 return;
 
             const int intervalMs = 100;
-            await Task.Delay(intervalMs, ct);
+            await Task.Delay(intervalMs);
             remaining -= intervalMs;
         }
 

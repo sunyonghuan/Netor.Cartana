@@ -48,7 +48,8 @@ public sealed class PowerShellExecutor : IAsyncDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(script);
 
         // 确保只有一个 PowerShell 进程在执行
-        await _executionLock.WaitAsync(ct);
+        // 不使用外部 ct 获取锁 —— 锁获取不应因 AI 框架取消而失败
+        await _executionLock.WaitAsync(CancellationToken.None);
         try
         {
             // 清理上一个进程
@@ -56,7 +57,7 @@ public sealed class PowerShellExecutor : IAsyncDisposable
             {
                 _logger.LogWarning("前一个 PowerShell 进程仍在运行，正在终止...");
                 _process.Kill(entireProcessTree: true);
-                await Task.Delay(500, ct); // 等待进程终止
+                await Task.Delay(500); // 等待进程终止
             }
 
             _process?.Dispose();
@@ -106,8 +107,9 @@ public sealed class PowerShellExecutor : IAsyncDisposable
 
             _process.Start();
 
-            // 设置退出超时
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            // 仅使用 timeout 控制进程生命周期，不链接外部 CancellationToken
+            // 外部 token 来自 AI 框架，可能因流式输出结束等非预期原因被取消
+            using var cts = new CancellationTokenSource();
             if (timeout > 0)
             {
                 cts.CancelAfter(timeout);
@@ -143,9 +145,22 @@ public sealed class PowerShellExecutor : IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
-            _logger.LogWarning("PowerShell 执行被取消");
-            _process?.Kill(entireProcessTree: true);
-            throw;
+            _logger.LogWarning("PowerShell 执行超时 ({Timeout}ms)", timeout);
+
+            // 超时：终止进程并尝试收集已有输出
+            if (_process is { HasExited: false })
+            {
+                try { _process.Kill(entireProcessTree: true); } catch { }
+            }
+
+            return new PowerShellExecutionResult
+            {
+                Success = false,
+                Output = outputBuilder.ToString(),
+                Error = $"执行超时（{timeout}ms）\n{errorBuilder}",
+                ExitCode = -1,
+                ExecutedAt = DateTime.UtcNow
+            };
         }
         catch (Exception ex)
         {

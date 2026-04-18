@@ -1193,9 +1193,9 @@ public partial class MainWindow : Window
 
             var avatar = new Border
             {
-                Width = 32,
-                Height = 32,
-                CornerRadius = new CornerRadius(16),
+                Width = 40,
+                Height = 40,
+                CornerRadius = new CornerRadius(20),
                 ClipToBounds = true,
                 VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top,
                 Margin = isUser ? new Thickness(10, 0, 0, 0) : new Thickness(0, 0, 10, 0),
@@ -1208,8 +1208,8 @@ public partial class MainWindow : Window
                     : new Image
                     {
                         Source = AiAvatarBitmap,
-                        Width = 30,
-                        Height = 30,
+                        Width = 40,
+                        Height = 40,
                         Stretch = Stretch.UniformToFill,
                     }
             };
@@ -1221,12 +1221,12 @@ public partial class MainWindow : Window
                 BorderBrush = isUser ? userBubbleBorderBrush : aiBubbleBorderBrush,
                 BorderThickness = new Thickness(1),
                 CornerRadius = isUser
-                    ? new CornerRadius(3, 4, 3, 3)
-                    : new CornerRadius(4, 3, 3, 3),
+                    ? new CornerRadius(4, 5, 4, 4)
+                    : new CornerRadius(5, 4, 4, 4),
                 Padding = new Thickness(14, 10),
                 MinWidth = 120,
-                // 对面留出头像等宽空白(32+10=42)，确保气泡不会顶到边缘
-                Margin = isUser ? new Thickness(42, 0, 0, 0) : new Thickness(0, 0, 42, 0),
+                // 对面留出头像等宽空白(40+10=50)，确保气泡不会顶到边缘
+                Margin = isUser ? new Thickness(50, 0, 0, 0) : new Thickness(0, 0, 50, 0),
                 Child = new MarkdownRenderer
                 {
                     Markdown = content,

@@ -287,10 +287,9 @@ public class SettingsBridgeHostObject
         try
         {
             var loggerFactory = App.Services.GetRequiredService<ILoggerFactory>();
-            var host = new McpServerHost(entity, loggerFactory);
-            host.ConnectAsync(CancellationToken.None).GetAwaiter().GetResult();
+            await using var host = new McpServerHost(entity, loggerFactory);
+            await host.ConnectAsync(CancellationToken.None);
             var toolCount = host.Tools.Count;
-            host.DisposeAsync().AsTask().GetAwaiter().GetResult();
 
             return JsonSerializer.Serialize(new { success = true, toolCount });
         }

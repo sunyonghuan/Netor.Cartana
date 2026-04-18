@@ -311,10 +311,9 @@ public partial class McpServerSettingsPage : UserControl
             try
             {
                 var loggerFactory = App.Services.GetRequiredService<ILoggerFactory>();
-                var host = new McpServerHost(entity, loggerFactory);
+                await using var host = new McpServerHost(entity, loggerFactory);
                 await host.ConnectAsync(CancellationToken.None);
                 var toolCount = host.Tools.Count;
-                await host.DisposeAsync();
 
                 Dispatcher.UIThread.Post(() =>
                 {
