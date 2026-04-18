@@ -24,6 +24,7 @@ global using Netor.Cortana.AI;
 global using Netor.Cortana.AI.Providers;
 global using Netor.Cortana.Entitys;
 global using Netor.Cortana.Entitys.Services;
+global using Netor.Cortana.Voice;
 #endregion
 
 #region EventHub

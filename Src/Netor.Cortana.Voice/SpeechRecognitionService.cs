@@ -24,7 +24,8 @@ public sealed class SpeechRecognitionService(
     IPublisher publisher,
     ISubscriber subscriber,
     TextToSpeechService ttsService,
-    IAiChatEngine chatEngine) : IHostedService, IDisposable
+    IAiChatEngine chatEngine,
+    IWindowController windowController) : IHostedService, IDisposable
 {
     private const int SampleRate = 16000;
     private OnlineRecognizer? _recognizer;
@@ -33,6 +34,12 @@ public sealed class SpeechRecognitionService(
 
     /// <summary>轮次级取消令牌，每次唤醒时重建，用于取消上一轮 STT/AI/TTS。</summary>
     private CancellationTokenSource? _roundCts;
+
+    /// <summary>当前正在运行的识别线程，CancelCurrentRound 时需 Join 等待退出。</summary>
+    private Thread? _currentThread;
+
+    /// <summary>同步锁，保护 _currentThread / _roundCts 的并发访问。</summary>
+    private readonly Lock _roundLock = new();
 
     // ──────────────────── IHostedService ────────────────────
 
@@ -50,8 +57,12 @@ public sealed class SpeechRecognitionService(
             CancelCurrentRound();
 
             // 创建新轮次令牌，链接服务生命周期
-            _roundCts = CancellationTokenSource.CreateLinkedTokenSource(_serviceCts!.Token);
-            var roundToken = _roundCts.Token;
+            CancellationToken roundToken;
+            lock (_roundLock)
+            {
+                _roundCts = CancellationTokenSource.CreateLinkedTokenSource(_serviceCts!.Token);
+                roundToken = _roundCts.Token;
+            }
 
             try
             {
@@ -71,11 +82,20 @@ public sealed class SpeechRecognitionService(
         subscriber.Subscribe<VoiceSignalArgs>(Events.OnChatCompleted, (_, _) =>
         {
             // 仅在当前轮次未被取消时继续监听
-            if (_roundCts is null || _roundCts.IsCancellationRequested) return Task.FromResult(false);
+            CancellationToken? token;
+            lock (_roundLock)
+            {
+                token = _roundCts is null || _roundCts.IsCancellationRequested ? null : _roundCts.Token;
+            }
+            if (token is null) return Task.FromResult(false);
+
+            // 主窗体可见时不再自动续杯：用户在主窗体下需要再说就重新喊唤醒词，
+            // 避免 "AI 答完 → 自动监听 → 又一条 → 又触发 AI" 的循环。
+            if (windowController.IsMainWindowVisible()) return Task.FromResult(false);
 
             logger.LogInformation("AI 回复播放完成，继续监听用户语音...");
             publisher.Emit(Events.OnSttPartial, new VoiceTextArgs("主人, 我在听..."));
-            StartRecognition(_roundCts.Token);
+            StartRecognition(token.Value);
             return Task.FromResult(false);
         });
 
@@ -145,6 +165,10 @@ public sealed class SpeechRecognitionService(
             IsBackground = true,
             Name = "SpeechRecognition"
         };
+        lock (_roundLock)
+        {
+            _currentThread = thread;
+        }
         thread.Start();
     }
 
@@ -190,6 +214,9 @@ public sealed class SpeechRecognitionService(
 
             recorder.StartRecording();
             logger.LogInformation("语音识别已开始，等待用户说话...");
+
+            // 用 WaitHandle 替代 Thread.Sleep，使取消令牌能瞬时打断循环。
+            var cancelHandle = cancellationToken.WaitHandle;
 
             while (!cancellationToken.IsCancellationRequested)
             {
@@ -251,13 +278,16 @@ public sealed class SpeechRecognitionService(
                     }
                 }
 
-                Thread.Sleep(100);
+                // 等待 100ms 或被取消唤醒，取消能瞬时退出循环
+                cancelHandle.WaitOne(100);
             }
 
-            recorder.StopRecording();
+            try { recorder.StopRecording(); } catch { /* 释放即可，吞掉退出期异常 */ }
 
-            // 会话结束，提交所有已识别内容作为最终结果
-            if (!string.IsNullOrWhiteSpace(lastText))
+            // 会话自然结束（超时），提交所有已识别内容作为最终结果。
+            // 注意：被外部主动取消时，cancellationToken.IsCancellationRequested == true，
+            // 这种情况下不应当再发出 final，避免取消瞬间在 UI 上多冒一条用户消息。
+            if (!cancellationToken.IsCancellationRequested && !string.IsNullOrWhiteSpace(lastText))
             {
                 logger.LogInformation("语音识别最终结果：{Text}", lastText);
                 publisher.Publish(Events.OnSttFinal, new VoiceTextArgs(lastText));
@@ -267,14 +297,7 @@ public sealed class SpeechRecognitionService(
         catch (OperationCanceledException)
         {
             logger.LogInformation("语音识别被外部取消");
-
-            // 即使被取消，也尝试保留已识别的内容
-            if (!hasFinalResult && !string.IsNullOrWhiteSpace(lastText))
-            {
-                logger.LogInformation("取消前已识别内容：{Text}", lastText);
-                publisher.Publish(Events.OnSttFinal, new VoiceTextArgs(lastText));
-                hasFinalResult = true;
-            }
+            // 取消路径不再补发 final，避免出现意外的用户消息
         }
         catch (Exception ex)
         {
@@ -282,37 +305,54 @@ public sealed class SpeechRecognitionService(
         }
         finally
         {
-            // 只有完全没有识别到内容时，才触发 RecognitionStopped（显示"没有听到内容"）
-            if (!hasFinalResult)
-            {
-                publisher.Publish(Events.OnSttStopped, new VoiceSignalArgs());
-            }
+            // 始终发出 Stopped 信号，让 UI 端（气泡/指示器）能收尾。
+            // 上游订阅者根据是否已收到 final 自行决定显示文案。
+            publisher.Publish(Events.OnSttStopped, new VoiceSignalArgs());
+            _ = hasFinalResult; // 保留变量以便日后扩展（避免编译警告）
         }
     }
 
     /// <summary>
     /// 取消当前轮次的所有进行中任务：STT 识别、AI 推理、TTS 播放。
+    /// 该方法是同步阻塞的，会等待识别线程退出后才返回，确保旧线程不会再发任何事件。
     /// </summary>
-    private void CancelCurrentRound()
+    public void CancelCurrentRound()
     {
-        // 1. 取消轮次令牌 → 停止正在运行的 STT RecognitionLoop
-        _roundCts?.Cancel();
-        _roundCts?.Dispose();
-        _roundCts = null;
+        Thread? thread;
+        CancellationTokenSource? cts;
 
-        // 2. 取消 AI 推理 + 通知输出通道清理
-        chatEngine.CancelCurrentTask();
+        lock (_roundLock)
+        {
+            cts = _roundCts;
+            thread = _currentThread;
+            _roundCts = null;
+            _currentThread = null;
+        }
 
-        // 3. 停止 TTS 播放流水线
-        ttsService.Stop();
+        // 1. 取消轮次令牌 → 通知 STT RecognitionLoop 退出
+        cts?.Cancel();
+
+        // 2. 等待识别线程真正退出（最多 2 秒），避免旧线程继续 publish 事件
+        if (thread is not null && thread.IsAlive && thread != Thread.CurrentThread)
+        {
+            try { thread.Join(TimeSpan.FromSeconds(2)); }
+            catch { /* Join 失败不阻断后续清理 */ }
+        }
+
+        cts?.Dispose();
+
+        // 3. 取消 AI 推理 + 通知输出通道清理
+        try { chatEngine.CancelCurrentTask(); } catch (Exception ex) { logger.LogDebug(ex, "取消 AI 推理时异常"); }
+
+        // 4. 停止 TTS 播放流水线
+        try { ttsService.Stop(); } catch (Exception ex) { logger.LogDebug(ex, "停止 TTS 时异常"); }
 
         logger.LogInformation("已取消上一轮语音交互任务");
     }
 
     public void Dispose()
     {
-        _roundCts?.Cancel();
-        _roundCts?.Dispose();
+        CancelCurrentRound();
         _serviceCts?.Cancel();
         _serviceCts?.Dispose();
         _recognizer?.Dispose();

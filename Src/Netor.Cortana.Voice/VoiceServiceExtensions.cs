@@ -31,6 +31,8 @@ public static class VoiceServiceExtensions
         services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<VoiceInputChannel>());
         services.AddSingleton<IAiInputChannel>(sp => sp.GetRequiredService<VoiceInputChannel>());
 
+        services.AddSingleton<IVoiceCoordinator, VoiceCoordinator>();
+
         return services;
     }
 }
