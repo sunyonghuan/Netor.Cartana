@@ -103,14 +103,15 @@
   </ItemGroup>
 
   <!-- ================================================================
-       AI 模型文件：从原 Netor.Cortana 项目目录引用，按原目录结构复制到输出目录。
+       AI 模型文件：从 Src\sherpa_models 引用，按目录结构复制到输出目录。
        Voice 模块在运行时通过 IAppPaths.UserDataDirectory/sherpa_models/{KWS,STT,TTS}/ 定位。
        ExcludeFromSingleFile 确保单文件发布时模型文件保留在 exe 旁边而非打包进 exe。
+       注意：Src\sherpa_models 已在 .gitignore 中排除，不会提交到 Git。
        ================================================================ -->
 
   <!-- TTS 模型：MeloTTS zh_en INT8 中英双语 TTS（VITS 架构）-->
   <ItemGroup>
-    <Content Include="..\Netor.Cortana\Models\vits-melo-tts-zh_en\**\*">
+    <Content Include="..\sherpa_models\TTS\**\*">
       <Link>sherpa_models\TTS\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
@@ -119,7 +120,7 @@
 
   <!-- KWS 唤醒词/关键字模型 -->
   <ItemGroup>
-    <Content Include="..\Netor.Cortana\Models\KWS\**\*">
+    <Content Include="..\sherpa_models\KWS\**\*">
       <Link>sherpa_models\KWS\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
@@ -128,7 +129,7 @@
 
   <!-- STT 模型：Paraformer Streaming 双语 INT8（阿里达摩院非自回归架构）-->
   <ItemGroup>
-    <Content Include="..\Netor.Cortana\Models\STT\**\*">
+    <Content Include="..\sherpa_models\STT\**\*">
       <Link>sherpa_models\STT\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
