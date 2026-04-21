@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
+using ProcessDiag = System.Diagnostics.Process;
 
 namespace Netor.Cortana.Plugin.BuiltIn.ApplicationLauncher;
 
@@ -123,7 +124,7 @@ public class ApplicationLauncher
                 processInfo.WorkingDirectory = workingDirectory;
             }
 
-            var process = Process.Start(processInfo);
+            var process = ProcessDiag.Start(processInfo);
             if (process == null)
             {
                 result.Success = false;
@@ -201,7 +202,7 @@ public class ApplicationLauncher
                 CreateNoWindow = false
             };
 
-            var process = Process.Start(processInfo);
+            var process = ProcessDiag.Start(processInfo);
             if (process == null)
             {
                 result.Success = false;

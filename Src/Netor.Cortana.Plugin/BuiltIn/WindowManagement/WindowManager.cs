@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using ProcessDiag = System.Diagnostics.Process;
 
 namespace Netor.Cortana.Plugin.BuiltIn.WindowManagement;
 
@@ -236,7 +237,7 @@ public sealed class WindowManager
 
             // 获取进程信息
             GetWindowThreadProcessId(hWnd, out var processId);
-            var process = Process.GetProcessById((int)processId);
+            var process = ProcessDiag.GetProcessById((int)processId);
 
             // 获取状态
             var isVisible = IsWindowVisible(hWnd);

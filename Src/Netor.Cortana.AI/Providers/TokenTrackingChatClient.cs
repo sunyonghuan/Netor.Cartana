@@ -22,10 +22,20 @@ public class TokenTrackingChatClient : DelegatingChatClient
     private long _lastInputTokens;
     private long _totalOutputTokens;
 
-    internal TokenTrackingChatClient(IChatClient innerClient, long maxContextTokens)
+    /// <summary>
+    /// 用量观察者：每当本 Client 收到 <see cref="UsageDetails"/> 时会被回调。
+    /// 用于把 token 状态上报到工厂/外层持久容器，使 UI 显示不随 ChatClient 重建而丢失。
+    /// </summary>
+    private readonly Action<UsageDetails>? _usageObserver;
+
+    internal TokenTrackingChatClient(
+        IChatClient innerClient,
+        long maxContextTokens,
+        Action<UsageDetails>? usageObserver = null)
         : base(innerClient)
     {
         MaxContextTokens = maxContextTokens <= 0 ? 128000 : maxContextTokens;
+        _usageObserver = usageObserver;
     }
 
     public void Reset()
@@ -67,5 +77,9 @@ public class TokenTrackingChatClient : DelegatingChatClient
         Interlocked.Exchange(ref _lastInputTokens, usage.InputTokenCount ?? 0);
         // 输出 token：累加（用于成本）
         Interlocked.Add(ref _totalOutputTokens, usage.OutputTokenCount ?? 0);
+
+        // 上报到外部观察者（若有）
+        try { _usageObserver?.Invoke(usage); }
+        catch { /* 观察者异常不影响主流程 */ }
     }
 }

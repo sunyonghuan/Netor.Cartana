@@ -1,18 +1,23 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-	<TargetFramework>netstandard2.0</TargetFramework>
-	<LangVersion>latest</LangVersion>
+	<TargetFramework>net10.0</TargetFramework>
+	<ImplicitUsings>enable</ImplicitUsings>
+	<IsAotCompatible>true</IsAotCompatible>
 
 	<!-- NuGet 打包（公共配置见 Directory.Build.props） -->
-	<Description>Cortana 插件系统的抽象接口库，定义 IPlugin 和 IPluginContext 核心契约。所有插件（托管插件和原生插件）都基于此库进行交互。</Description>
-	<PackageTags>cortana;plugin;abstractions;ai;tools</PackageTags>
+	<Description>Cortana 插件开发共享基础库。提供 IPlugin/IPluginContext 契约接口、[Plugin]、[Tool]、[Parameter] Attribute 和 PluginSettings 类型。</Description>
+	<PackageTags>cortana;plugin;abstractions;ai;tools;aot</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
-	<PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="10.4.1" />
+	<PackageReference Include="Microsoft.Extensions.AI" Version="10.0.5" />
 	<PackageReference Include="Microsoft.Extensions.Http" Version="10.0.5" />
 	<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+	<ProjectReference Include="..\..\Netor.Cortana.Entitys\Netor.Cortana.Entitys.csproj" />
   </ItemGroup>
 
 </Project>

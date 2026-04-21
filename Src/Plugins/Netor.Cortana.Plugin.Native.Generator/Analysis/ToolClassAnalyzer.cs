@@ -14,8 +14,8 @@ namespace Netor.Cortana.Plugin.Native.Generator.Analysis;
 /// </summary>
 internal static class ToolClassAnalyzer
 {
-    private const string ToolAttributeName = "Netor.Cortana.Plugin.Native.ToolAttribute";
-    private const string ParameterAttributeName = "Netor.Cortana.Plugin.Native.ParameterAttribute";
+    private const string ToolAttributeName = "Netor.Cortana.Plugin.ToolAttribute";
+    private const string ParameterAttributeName = "Netor.Cortana.Plugin.ParameterAttribute";
 
     /// <summary>
     /// 扫描编译上下文中所有标记了 [Tool] 的类，提取工具类和工具方法信息。

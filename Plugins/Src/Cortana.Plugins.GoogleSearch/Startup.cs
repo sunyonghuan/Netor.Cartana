@@ -1,7 +1,7 @@
-﻿using Cortana.Plugins.GoogleSearch.Services;
+using Cortana.Plugins.GoogleSearch.Services;
 using Cortana.Plugins.GoogleSearch.Tools;
 using Microsoft.Extensions.DependencyInjection;
-using Netor.Cortana.Plugin.Native;
+using Netor.Cortana.Plugin;
 
 namespace Cortana.Plugins.GoogleSearch;
 

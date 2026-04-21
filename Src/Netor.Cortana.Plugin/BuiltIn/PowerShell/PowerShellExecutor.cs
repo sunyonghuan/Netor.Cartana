@@ -2,17 +2,18 @@ using System.Diagnostics;
 using System.Text;
 
 using Microsoft.Extensions.Logging;
+using ProcessDiag = System.Diagnostics.Process;
 
 namespace Netor.Cortana.Plugin.BuiltIn.PowerShell;
 
 /// <summary>
-/// PowerShell 执行引擎：负责创建可见的 PowerShell 进程、捕获输出、并将结果返回给 AI。
-/// 特点：用户可以看到 PowerShell 窗口，AI 也能获取执行结果。
+/// PowerShell 执行引擎：负责创建 PowerShell 进程、捕获输出、并将结果返回给 AI。
+/// 默认后台执行（无窗口），可选前台执行（用户可见窗口）。
 /// </summary>
 public sealed class PowerShellExecutor : IAsyncDisposable
 {
     private readonly ILogger<PowerShellExecutor> _logger;
-    private Process? _process;
+    private ProcessDiag? _process;
     private readonly SemaphoreSlim _executionLock = new(1, 1);
     private readonly string _psPath;
 
@@ -34,15 +35,16 @@ public sealed class PowerShellExecutor : IAsyncDisposable
 
     /// <summary>
     /// 执行 PowerShell 脚本或命令，返回完整输出。
-    /// 进程窗口对用户可见，输出通过事件实时推送。
     /// </summary>
     /// <param name="script">PowerShell 脚本代码</param>
-    /// <param name="timeout">执行超时时间（毫秒），0 表示无限制</param>
+    /// <param name="timeout">执行超时时间（毫秒），0 表示使用默认 60 秒保护超时</param>
+    /// <param name="background">true=后台执行（无窗口，默认）；false=前台执行（用户可见窗口）</param>
     /// <param name="ct">取消令牌</param>
     /// <returns>完整的输出结果（包括错误流）</returns>
     public async Task<PowerShellExecutionResult> ExecuteAsync(
         string script,
         int timeout = 0,
+        bool background = true,
         CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(script);
@@ -62,7 +64,9 @@ public sealed class PowerShellExecutor : IAsyncDisposable
 
             _process?.Dispose();
 
-            var result = await RunPowerShellProcessAsync(script, timeout, ct);
+            // 强制保护：如果 timeout <= 0，使用默认 60 秒防止进程永久挂起
+            var effectiveTimeout = timeout > 0 ? timeout : 60_000;
+            var result = await RunPowerShellProcessAsync(script, effectiveTimeout, background, ct);
             return result;
         }
         finally
@@ -77,6 +81,7 @@ public sealed class PowerShellExecutor : IAsyncDisposable
     private async Task<PowerShellExecutionResult> RunPowerShellProcessAsync(
         string script,
         int timeout,
+        bool background,
         CancellationToken ct)
     {
         var outputBuilder = new StringBuilder();
@@ -84,20 +89,17 @@ public sealed class PowerShellExecutor : IAsyncDisposable
 
         try
         {
-            _process = new Process
+            _process = new ProcessDiag
             {
                 StartInfo = new ProcessStartInfo
                 {
                     FileName = _psPath,
-                    // 重要：不使用 shell 执行，这样我们能捕获输出
                     UseShellExecute = false,
-                    // 重要：捕获标准输出和错误输出
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     RedirectStandardInput = true,
-                    // 不隐藏窗口，用户可以看到 PowerShell 窗口
-                    CreateNoWindow = false,
-                    // 使用 UTF-8 编码
+                    // background=true 时无窗口后台执行，false 时用户可见
+                    CreateNoWindow = background,
                     StandardOutputEncoding = Encoding.UTF8,
                     StandardErrorEncoding = Encoding.UTF8,
                 }
@@ -110,10 +112,7 @@ public sealed class PowerShellExecutor : IAsyncDisposable
             // 仅使用 timeout 控制进程生命周期，不链接外部 CancellationToken
             // 外部 token 来自 AI 框架，可能因流式输出结束等非预期原因被取消
             using var cts = new CancellationTokenSource();
-            if (timeout > 0)
-            {
-                cts.CancelAfter(timeout);
-            }
+            cts.CancelAfter(timeout);
 
             var exitTask = _process.WaitForExitAsync(cts.Token);
 

@@ -43,82 +43,102 @@ public sealed class PowerShellProvider : AIContextProvider
         CancellationToken cancellationToken = default)
     {
         return new ValueTask<AIContext>(new AIContext { Tools = _lazyTools.Value, Instructions = """
-    ### PowerShell 执行工具使用规范
+    ### PowerShell Execution Tools — Usage Guidelines
 
-    #### 快速执行（sys_execute_powershell）
-    - 执行单条命令或脚本代码
-    - 适合快速查询、数据采集
+    #### Execution Mode Selection
+    - **Background by default**: All scripts and sessions run in background (background=true), invisible to user, no window popup.
+    - **Foreground only when**: SSH password auth (user must type password in window), user explicitly asks to see the window, or script requires interactive input.
+    - In all other cases, you **MUST** use background execution.
 
-    #### 会话模式
-    - sys_start_local_session 启动本地会话
-    - sys_start_remote_session 启动远程会话（支持密钥或密码认证）
-    - sys_get_session_status 查询单个会话当前状态
-    - sys_send_command 发送命令
-    - sys_close_session 关闭会话
+    #### ⚠️ Timeout & Process Cleanup (CRITICAL)
+    - You **MUST** set a reasonable timeout. NEVER use timeout=0.
+    - Quick commands (query info, list files): timeout=15000 (15s)
+    - Normal commands (install, build): timeout=60000 (60s)
+    - Long-running commands (large file ops, downloads): timeout=120000~300000
+    - When uncertain, **set longer rather than shorter**, but **NEVER omit it**.
+    - Background processes that hang are invisible to user — timeout is the ONLY safeguard.
+    - **MUST close sessions after task completion** by calling sys_close_session immediately.
+    - **Do NOT leave sessions idle** — close when not needed; create new ones later.
 
-    #### 长时间等待/慢命令处理
-    - SSH 建连、认证、网络波动、远程脚本执行都可能需要等待
-    - sys_send_command 默认超时为 30000ms，长命令必须显式增大 timeoutMs
-    - 如果启动远程会话后返回“等待用户输入”或“尚未完成认证”，不要立即继续发命令
-    - 这时应先等待用户完成一次输入，再调用 sys_get_session_status 或 sys_list_sessions 查询状态
-    - 只有状态变为 Ready/已就绪后，才继续发送下一条命令
-    - 如果状态为 Busy/输出流被占用，说明上一条命令还没真正结束，不要继续发下一条命令
+    #### Quick Execution (sys_execute_powershell)
+    - Runs a single script/command, process auto-terminates after completion.
+    - Best for quick queries, data collection, one-off commands.
+    - Background by default, 30s default timeout.
 
-    #### 严格限制
-    - 不要在 sys_start_local_session 创建的本地持久会话里再执行 ssh/ssh.exe 进入交互式远程 shell
-    - 这种嵌套交互会占住本地会话输出流，导致后续 sessionId 复用失败
-    - 远程登录必须使用 sys_start_remote_session，而不是本地会话 + ssh
+    #### Session Mode
+    - sys_start_local_session — Start local session (background by default).
+    - sys_start_remote_session — Start remote SSH session (password auth = foreground, key auth = background).
+    - sys_get_session_status — Query a session's current state.
+    - sys_send_command — Send command to session (30s default timeout).
+    - sys_close_session — Close session (**MUST call after task completion**).
 
-    #### 远程 SSH 认证方式
-    - **密钥认证（推荐）**：提供 privateKeyPath 参数，如 `~/.ssh/id_rsa` 或 `C:\Users\xxx\.ssh\id_rsa`
-    - **密码认证**：仅在不提供 privateKeyPath 时使用 password 参数
-    - 两者必须提供其一
+    #### Session Lifecycle Management
+    - Every session MUST follow a clear "create → use → close" lifecycle.
+    - Close immediately after sending all commands. Do NOT wait.
+    - If a command times out or errors, still close the session to release resources.
+    - Sessions idle for over 3 minutes are auto-cleaned, but do NOT rely on this.
 
-    #### ⚠️ Windows PowerShell 执行策略处理（关键）
+    #### Slow Commands / Long Waits
+    - SSH connection, authentication, network latency, remote execution may require waiting.
+    - sys_send_command defaults to 30000ms; explicitly increase timeoutMs for long commands.
+    - If remote session returns "awaiting user input" or "auth not complete", do NOT send commands yet.
+    - Wait for user to complete input, then call sys_get_session_status to confirm readiness.
+    - Only proceed when state is Ready. If Busy, previous command is still running — do NOT send another.
 
-    **问题**：Windows 默认禁止运行未签名脚本（ExecutionPolicy = Restricted）
+    #### Strict Restrictions
+    - NEVER run ssh/ssh.exe inside a local session from sys_start_local_session.
+    - Nested interactive SSH blocks the output stream and breaks sessionId reuse.
+    - For remote login, ALWAYS use sys_start_remote_session, NOT local session + ssh.
 
-    **执行脚本代码**：
-    - 自动添加 `-ExecutionPolicy Bypass` 参数
-    - 格式：`powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "代码"`
+    #### Remote SSH Authentication
+    - **Key-based (recommended)**: Provide privateKeyPath (e.g. `~/.ssh/id_rsa` or `C:\Users\xxx\.ssh\id_rsa`).
+    - **Password-based**: Use password only when privateKeyPath is not provided.
+    - One of the two MUST be provided.
 
-    **执行脚本文件** ⭐：
-    - 如果要运行 .ps1 文件，必须在脚本开头或发送命令时添加：
+    #### ⚠️ Windows PowerShell Execution Policy (CRITICAL)
+
+    **Problem**: Windows blocks unsigned scripts by default (ExecutionPolicy = Restricted).
+
+    **Running script code**: Automatically uses `-ExecutionPolicy Bypass`.
+
+    **Running .ps1 script files** ⭐:
+    - Prepend in script or command:
       ```powershell
       Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
       & "C:\path\to\script.ps1"
       ```
-    - 或者直接用：`powershell.exe -ExecutionPolicy Bypass -File "C:\path\to\script.ps1"`
+    - Or use: `powershell.exe -ExecutionPolicy Bypass -File "C:\path\to\script.ps1"`
 
-    **两种执行文件方式**：
+    **Recommended patterns**:
     
-    方案A（推荐）- 会话模式：
+    Option A (recommended) — Session mode:
     ```
-    1. sys_start_local_session 启动会话（获得sessionId）
+    1. sys_start_local_session (get sessionId)
     2. sys_send_command sessionId "Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force"
     3. sys_send_command sessionId "& 'C:\path\to\script.ps1'"
+    4. sys_close_session sessionId  ← MUST close!
     ```
 
-    方案B - 快速模式：
+    Option B — Quick mode:
     ```
-    sys_execute_powershell 的脚本内容改为：
+    sys_execute_powershell with script:
     Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
     & "C:\path\to\script.ps1"
     ```
 
-    方案C - 绝对路径（最安全）：
+    Option C — Absolute path (safest):
     ```powershell
     powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\path\to\script.ps1"
     ```
 
-    #### 工具列表
-    1. sys_execute_powershell - 快速执行脚本
-    2. sys_start_local_session - 启动本地会话
-    3. sys_start_remote_session - 启动远程会话（支持密钥/密码认证）
-    4. sys_get_session_status - 查询单个会话状态
-    5. sys_send_command - 发送命令
-    6. sys_close_session - 关闭会话
-    7. sys_list_sessions - 列出活跃会话
+    #### Tool List
+    1. sys_execute_powershell — Quick script execution (background by default, auto timeout)
+    2. sys_start_local_session — Start local session (background by default)
+    3. sys_start_remote_session — Start remote SSH session (key/password auth)
+    4. sys_get_session_status — Query session state
+    5. sys_send_command — Send command (MUST set reasonable timeout)
+    6. sys_close_session — Close session (**MUST call when task is done**)
+    7. sys_list_sessions — List active sessions
     """ });
     }
 
@@ -129,79 +149,94 @@ public sealed class PowerShellProvider : AIContextProvider
     {
         var tools = new List<AITool>();
 
-        // 工具1：快速本地脚本执行
+        // Tool 1: Quick local script execution
         tools.Add(AIFunctionFactory.Create(
             name: "sys_execute_powershell",
             description: """
-执行本地 PowerShell 脚本。脚本执行完成后自动关闭窗口。
-用户可以看到 PowerShell 窗口运行过程，AI 获取完整的执行结果。
-适合快速查询和一次性命令。
+Execute a local PowerShell script. Process auto-terminates after completion.
+Runs in background by default (no window popup). Returns full execution output.
+Best for quick queries and one-off commands.
+
+Parameters:
+- script: PowerShell script code to execute
+- timeout: Timeout in milliseconds. MUST set a reasonable value, default 30s. NEVER set to 0
+- background: Run in background (default true). Set false ONLY when user interaction is needed
 """,
             method: ExecutePowerShellAsync));
 
-        // 工具2：启动本地交互式会话
+        // Tool 2: Start local interactive session
         tools.Add(AIFunctionFactory.Create(
             name: "sys_start_local_session",
             description: """
-启动本地 PowerShell 交互式会话。会话保持活跃，支持后续多条命令执行。
-适合复杂的多步骤操作或需要依赖前一个命令结果的场景。
+Start a local PowerShell interactive session. Session stays alive for multiple commands.
+Runs in background by default (no window popup). Suitable for complex multi-step operations.
 
-返回：会话ID，用于后续 sys_send_command 和 sys_close_session 调用。
+⚠️ You MUST call sys_close_session after completing your task. Do NOT leave sessions idle!
+
+Parameters:
+- background: Run in background (default true). Set false ONLY when user interaction is needed
+
+Returns: Session ID for subsequent sys_send_command and sys_close_session calls.
 """,
             method: StartLocalSessionAsync));
 
-        // 工具3：启动远程 SSH 交互式会话
+        // Tool 3: Start remote SSH interactive session
         tools.Add(AIFunctionFactory.Create(
             name: "sys_start_remote_session",
             description: """
-启动远程 SSH 交互式会话（支持 Windows/Linux）。会话保持活跃，支持后续多条命令执行。
-适合远程部署、代码拉取、数据库操作等耗时场景。
+Start a remote SSH interactive session (Windows/Linux). Session stays alive for multiple commands.
+Suitable for remote deployment, code pulls, database operations, etc.
 
-认证方式（优先级）：
-1. 密钥认证：提供 privateKeyPath 参数（推荐，更安全）
-2. 密码认证：仅在不提供 privateKeyPath 时使用 password 参数
+Authentication (priority order):
+1. Key-based (recommended): Provide privateKeyPath parameter
+2. Password-based: Use password only when privateKeyPath is not provided
 
-参数：
-- host: 远程服务器地址
-- username: 用户名
-- password: 密码（可选，无密钥时使用）
-- privateKeyPath: SSH 私钥文件路径（可选，如 ~/.ssh/id_rsa）
+Parameters:
+- host: Remote server address
+- username: Username
+- password: Password (optional, used when no key provided)
+- privateKeyPath: SSH private key file path (optional, e.g. ~/.ssh/id_rsa)
 
-返回：会话ID，用于后续 sys_send_command 和 sys_close_session 调用。
+Returns: Session ID for subsequent sys_send_command and sys_close_session calls.
 """,
             method: StartRemoteSessionAsync));
 
-        // 工具4：向会话发送命令
+        // Tool 4: Get session status
         tools.Add(AIFunctionFactory.Create(
             name: "sys_get_session_status",
-            description: "查询单个会话当前状态。适用于 SSH 认证等待、网络慢、用户已输入密码后确认是否已就绪。参数：sessionId",
+            description: "Query a single session's current state. Use after SSH auth wait, slow network, or to confirm readiness after user input. Parameter: sessionId",
             method: GetSessionStatusAsync));
 
-        // 工具5：向会话发送命令
+        // Tool 5: Send command to session
         tools.Add(AIFunctionFactory.Create(
             name: "sys_send_command",
             description: """
-向已启动的会话发送命令，实时返回输出。
-支持依赖前一命令结果的多步骤操作。
-长时间命令请显式增大 timeoutMs。
+Send a command to an active session and return output in real-time.
+Supports multi-step operations that depend on previous command results.
 
-参数：
-- sessionId: 会话ID
-- command: 要执行的命令
-- timeoutMs: 超时时间（毫秒）
+⚠️ Timeout guidelines:
+- Quick commands: 15000ms
+- Normal commands: 30000ms (default)
+- Long-running commands: 60000~300000ms
+- When uncertain, set longer. NEVER omit timeout.
+
+Parameters:
+- sessionId: Session ID
+- command: Command to execute
+- timeoutMs: Timeout in milliseconds, default 30000
 """,
             method: SendCommandAsync));
 
-        // 工具6：关闭会话
+        // Tool 6: Close session
         tools.Add(AIFunctionFactory.Create(
             name: "sys_close_session",
-            description: "关闭已启动的会话，释放资源。参数：sessionId",
+            description: "Close an active session and release resources. ⚠️ You MUST call this after task completion! Do NOT leave sessions idle. Parameter: sessionId",
             method: CloseSessionAsync));
 
-        // 工具7：列出所有活跃会话
+        // Tool 7: List all active sessions
         tools.Add(AIFunctionFactory.Create(
             name: "sys_list_sessions",
-            description: "列出所有活跃的执行会话",
+            description: "List all active execution sessions.",
             method: ListSessionsAsync));
 
         return tools;
@@ -218,6 +253,7 @@ public sealed class PowerShellProvider : AIContextProvider
     private async Task<string> ExecutePowerShellAsync(
         string script,
         int timeout = 30000,
+        bool background = true,
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(script))
@@ -225,9 +261,9 @@ public sealed class PowerShellProvider : AIContextProvider
 
         try
         {
-            _logger.LogInformation("AI 正在执行 PowerShell 脚本，长度: {ScriptLength} 字符", script.Length);
+            _logger.LogInformation("AI 正在执行 PowerShell 脚本，长度: {ScriptLength} 字符, 后台: {Background}", script.Length, background);
 
-            var result = await _executor.ExecuteAsync(script, timeout, ct);
+            var result = await _executor.ExecuteAsync(script, timeout, background, ct);
 
             _logger.LogInformation(
                 "PowerShell 执行完成，成功: {Success}, 退出代码: {ExitCode}",
@@ -259,11 +295,11 @@ public sealed class PowerShellProvider : AIContextProvider
     /// <summary>
     /// 启动本地交互式 PowerShell 会话
     /// </summary>
-    private Task<string> StartLocalSessionAsync(CancellationToken ct = default)
+    private Task<string> StartLocalSessionAsync(bool background = true, CancellationToken ct = default)
     {
         try
         {
-            var session = _sessionRegistry.CreateSession("local");
+            var session = _sessionRegistry.CreateSession("local", background: background);
 
             if (!session.IsActive)
                 return Task.FromResult("✗ 启动失败：PowerShell 进程启动后立即退出");
@@ -273,11 +309,11 @@ public sealed class PowerShellProvider : AIContextProvider
             return Task.FromResult($@"✓ 本地 PowerShell 会话已启动
 会话ID: {session.Id}
 类型: 本地交互式
+执行模式: {(background ? "后台" : "前台")}
 
 使用说明：
 1. 调用 send_command 发送命令并获取输出
-2. 任务完成后调用 close_session 关闭会话
-3. 用户可以在窗口中看到所有命令执行过程");
+2. 任务完成后必须调用 close_session 关闭会话");
         }
         catch (Exception ex)
         {
@@ -304,7 +340,9 @@ public sealed class PowerShellProvider : AIContextProvider
 
         try
         {
-            var session = _sessionRegistry.CreateSession("remote", host, username, password, privateKeyPath);
+            // 密钥认证默认后台，密码认证默认前台（需要用户输入密码）
+            var effectiveBackground = !string.IsNullOrWhiteSpace(privateKeyPath);
+            var session = _sessionRegistry.CreateSession("remote", host, username, password, privateKeyPath, background: effectiveBackground);
             await session.WaitForStartupAsync(1500, ct);
 
             if (!session.IsActive || session.State == ExecutionSessionState.Failed)

@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>script-runner</AssemblyName>
+    <RootNamespace>Cortana.Plugins.ScriptRunner</RootNamespace>
+    <Version>1.0.0</Version>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- 上游 dotnet-script 2.0.0 依赖的 NuGet.Packaging/NuGet.Protocol 6.14.0 带有低危漏洞公告；
+         本进程仅在脱机还原时调用，已评估可接受，抑制 NU1901。 -->
+    <NoWarn>$(NoWarn);NU1901</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 与 dotnet-script 2.0.0 传递的 Roslyn Scripting 版本对齐，避免 NU1605 降级错误。 -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="5.0.0-2.final" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5" />
+    <PackageReference Include="Dotnet.Script.DependencyModel" Version="2.0.0" />
+    <PackageReference Include="Dotnet.Script.DependencyModel.NuGet" Version="2.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="plugin.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

@@ -16,7 +16,7 @@ namespace Netor.Cortana.Plugin.Native.Generator.Analysis;
 /// </summary>
 internal static class PluginClassAnalyzer
 {
-    private const string PluginAttributeName = "Netor.Cortana.Plugin.Native.PluginAttribute";
+    private const string PluginAttributeName = "Netor.Cortana.Plugin.PluginAttribute";
     private const string ServiceCollectionInterfaceName = "Microsoft.Extensions.DependencyInjection.IServiceCollection";
 
     /// <summary>

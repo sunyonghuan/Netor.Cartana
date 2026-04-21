@@ -2,7 +2,6 @@
   <Folder Name="/Samples/">
     <Project Path="Samples/NativeTestPlugin/NativeTestPlugin.csproj" />
     <Project Path="Samples/ReminderPlugin/ReminderPlugin.csproj" />
-    <Project Path="Samples/SamplePlugins/SamplePlugins.csproj" />
     <Project Path="Src/KokoroAudition/KokoroAudition.csproj" />
   </Folder>
   <Folder Name="/Src/">
@@ -19,5 +18,7 @@
     <Project Path="Src/Plugins/Netor.Cortana.Plugin.Native.Debuger/Netor.Cortana.Plugin.Native.Debugger.csproj" Id="1e96f5d4-ee35-4370-9a3b-9a59ede7bad3" />
     <Project Path="Src/Plugins/Netor.Cortana.Plugin.Native.Generator/Netor.Cortana.Plugin.Native.Generator.csproj" />
     <Project Path="Src/Plugins/Netor.Cortana.Plugin.Native/Netor.Cortana.Plugin.Native.csproj" />
+    <Project Path="Src/Plugins/Netor.Cortana.Plugin.Process/Netor.Cortana.Plugin.Process.csproj" />
+    <Project Path="Src/Plugins/Netor.Cortana.Plugin.Process.Generator/Netor.Cortana.Plugin.Process.Generator.csproj" />
   </Folder>
 </Solution>

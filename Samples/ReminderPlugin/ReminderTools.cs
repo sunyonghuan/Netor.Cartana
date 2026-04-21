@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Netor.Cortana.Plugin.Native;
+using Netor.Cortana.Plugin;
 
 namespace ReminderPlugin;
 

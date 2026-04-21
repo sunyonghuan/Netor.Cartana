@@ -22,7 +22,8 @@ if ($Id -notmatch '^[a-z][a-z0-9_]*$') {
     exit 1
 }
 
-$SolutionDir = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+# $PSScriptRoot = <repo>\.github\skills\plugin-development\scripts；向上 4 级 = 仓库根
+$SolutionDir = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
 $ProjectDir = Join-Path $SolutionDir "Samples\$Name"
 
 if (Test-Path $ProjectDir) {
@@ -50,8 +51,8 @@ $csproj = @"
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Netor.Cortana.Plugin.Native" Version="1.0.3" />
-    <PackageReference Include="Netor.Cortana.Plugin.Native.Generator" Version="1.0.3"
+    <PackageReference Include="Netor.Cortana.Plugin.Native" Version="1.0.11" />
+    <PackageReference Include="Netor.Cortana.Plugin.Native.Generator" Version="1.0.11"
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false" />
   </ItemGroup>

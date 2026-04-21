@@ -2,10 +2,11 @@ using Microsoft.Extensions.Logging;
 
 using Netor.Cortana.Entitys;
 using Netor.Cortana.Entitys.Services;
-using Netor.Cortana.Plugin.Abstractions;
+using Netor.Cortana.Plugin;
 using Netor.Cortana.Plugin.Dotnet;
 using Netor.Cortana.Plugin.Mcp;
 using Netor.Cortana.Plugin.Native;
+using Netor.Cortana.Plugin.Process;
 using Netor.EventHub;
 using Netor.EventHub.Interfances;
 
@@ -30,6 +31,7 @@ public sealed class PluginLoader : IDisposable
 
     private readonly ConcurrentDictionary<string, DotNetPluginHost> _dotnetHosts = new();
     private readonly ConcurrentDictionary<string, NativePluginHost> _nativeHosts = new();
+    private readonly ConcurrentDictionary<string, ProcessPluginHost> _processHosts = new();
     private readonly ConcurrentDictionary<string, McpServerHost> _mcpHosts = new();
     private readonly List<FileSystemWatcher> _watchers = [];
     private bool _disposed;
@@ -81,6 +83,9 @@ public sealed class PluginLoader : IDisposable
             .Concat(_nativeHosts.Values
                 .Where(h => h.IsProcessAlive)
                 .SelectMany(h => h.Plugins))
+            .Concat(_processHosts.Values
+                .Where(h => h.IsProcessAlive)
+                .SelectMany(h => h.Plugins))
             .ToList();
     }
 
@@ -100,9 +105,11 @@ public sealed class PluginLoader : IDisposable
     public IReadOnlyList<string> GetLoadedPluginDirNames()
     {
         return _nativeHosts.Keys
+            .Concat(_processHosts.Keys)
             .Select(Path.GetFileName)
             .Where(n => !string.IsNullOrEmpty(n))
             .Cast<string>()
+            .Distinct()
             .ToList();
     }
 
@@ -135,10 +142,11 @@ public sealed class PluginLoader : IDisposable
         }
 
         _logger.LogInformation(
-            "插件扫描完成，共扫描 {DirectoryCount} 个插件根目录，加载 {DotnetCount} 个 .NET 插件目录，{NativeCount} 个原生插件目录，{PluginCount} 个插件实例",
+            "插件扫描完成，共扫描 {DirectoryCount} 个插件根目录，加载 {DotnetCount} 个 .NET 插件目录，{NativeCount} 个原生插件目录，{ProcessCount} 个进程插件目录，{PluginCount} 个插件实例",
             pluginDirectories.Count,
             _dotnetHosts.Count,
             _nativeHosts.Count,
+            _processHosts.Count,
             GetActivePlugins().Count);
     }
 
@@ -185,6 +193,10 @@ public sealed class PluginLoader : IDisposable
         foreach (var host in _nativeHosts.Values)
             host.Dispose();
         _nativeHosts.Clear();
+
+        foreach (var host in _processHosts.Values)
+            host.Dispose();
+        _processHosts.Clear();
 
         NotifyPluginsChanged();
     }
@@ -283,7 +295,7 @@ public sealed class PluginLoader : IDisposable
                 break;
 
             case PluginRuntime.Process:
-                _logger.LogInformation("process 通道尚未实现，跳过：{Id}", manifest.Id);
+                await LoadProcessPluginAsync(pluginDir, manifest, cancellationToken);
                 break;
 
             default:
@@ -312,6 +324,33 @@ public sealed class PluginLoader : IDisposable
         if (host.Plugins.Count > 0)
         {
             _dotnetHosts[pluginDir] = host;
+            NotifyPluginsChanged();
+        }
+        else
+        {
+            host.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 加载 process 通道的插件（直接启动 exe，进程隔离）。
+    /// </summary>
+    private async Task LoadProcessPluginAsync(
+        string pluginDir,
+        PluginManifest manifest,
+        CancellationToken cancellationToken)
+    {
+        var hostLogger = _loggerFactory.CreateLogger<ProcessPluginHost>();
+        var host = new ProcessPluginHost(pluginDir, manifest, hostLogger);
+
+        var dataDir = Path.Combine(pluginDir, "data");
+        var context = new PluginContext(dataDir, _loggerFactory, _httpClientFactory, _appPaths, WsPort);
+
+        await host.LoadAsync(context, cancellationToken);
+
+        if (host.Plugins.Count > 0)
+        {
+            _processHosts[pluginDir] = host;
             NotifyPluginsChanged();
         }
         else
@@ -547,6 +586,13 @@ public sealed class PluginLoader : IDisposable
 
         _nativeHosts.Clear();
 
+        foreach (var processHost in _processHosts.Values)
+        {
+            processHost.Dispose();
+        }
+
+        _processHosts.Clear();
+
         // MCP hosts 需要异步释放，在同步 Dispose 中尽力清理
         foreach (var mcpHost in _mcpHosts.Values)
         {
@@ -604,6 +650,13 @@ public sealed class PluginLoader : IDisposable
         {
             _logger.LogInformation("正在卸载原生插件目录：{Dir}", pluginPath);
             nativeHost.Dispose();
+            changed = true;
+        }
+
+        if (_processHosts.TryRemove(pluginPath, out var processHost))
+        {
+            _logger.LogInformation("正在卸载进程插件目录：{Dir}", pluginPath);
+            processHost.Dispose();
             changed = true;
         }
 

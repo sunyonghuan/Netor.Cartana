@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text;
+using ProcessDiag = System.Diagnostics.Process;
 
 namespace Netor.Cortana.Plugin.BuiltIn.PowerShell;
 
@@ -12,9 +13,10 @@ namespace Netor.Cortana.Plugin.BuiltIn.PowerShell;
 public sealed class ExecutionSession : IAsyncDisposable
 {
     private readonly ILogger<SessionRegistry> _logger;
-    private readonly Process? _process;
+    private readonly ProcessDiag? _process;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly string _authenticationMode;
+    private readonly bool _background;
     private bool _disposed;
     private volatile ExecutionSessionState _state;
     private string _statusMessage = string.Empty;
@@ -36,7 +38,7 @@ public sealed class ExecutionSession : IAsyncDisposable
     public string? LastError => _lastError;
     public string? CurrentCommand => _currentCommand;
 
-    public ExecutionSession(string type, string? host, string? username, string? password, string? privateKeyPath, ILogger<SessionRegistry> logger)
+    public ExecutionSession(string type, string? host, string? username, string? password, string? privateKeyPath, ILogger<SessionRegistry> logger, bool background = true)
     {
         Id = Guid.NewGuid().ToString("N");
         Type = type;
@@ -45,6 +47,7 @@ public sealed class ExecutionSession : IAsyncDisposable
         CreatedAt = DateTime.Now;
         LastActivityAt = DateTime.Now;
         _logger = logger;
+        _background = background;
         _authenticationMode = string.IsNullOrWhiteSpace(privateKeyPath) ? "password" : "key";
         SetState(type == "local" ? ExecutionSessionState.Ready : ExecutionSessionState.Starting,
             type == "local"
@@ -85,7 +88,7 @@ public sealed class ExecutionSession : IAsyncDisposable
     /// <summary>
     /// 创建本地 PowerShell 会话
     /// </summary>
-    private Process CreateLocalSession()
+    private ProcessDiag CreateLocalSession()
     {
         var psi = new ProcessStartInfo
         {
@@ -94,21 +97,21 @@ public sealed class ExecutionSession : IAsyncDisposable
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            CreateNoWindow = false,  // 用户可见
+            CreateNoWindow = _background,
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8,
         };
 
-        var process = new Process { StartInfo = psi };
+        var process = new ProcessDiag { StartInfo = psi };
         process.Start();
-        _logger.LogInformation("本地 PowerShell 会话已启动: {SessionId}", Id);
+        _logger.LogInformation("本地 PowerShell 会话已启动: {SessionId} (background={Background})", Id, _background);
         return process;
     }
 
     /// <summary>
     /// 创建远程 SSH 会话，优先使用密钥认证，无密钥时弹出窗口由用户输入密码
     /// </summary>
-    private Process CreateRemoteSession(string host, string username, string? password, string? privateKeyPath)
+    private ProcessDiag CreateRemoteSession(string host, string username, string? password, string? privateKeyPath)
     {
         var args = "-o StrictHostKeyChecking=no";
 
@@ -134,12 +137,12 @@ public sealed class ExecutionSession : IAsyncDisposable
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            CreateNoWindow = false,
+            CreateNoWindow = _background,
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8,
         };
 
-        var process = new Process { StartInfo = psi };
+        var process = new ProcessDiag { StartInfo = psi };
         process.Start();
 
         _logger.LogInformation("远程 SSH 会话已启动: {SessionId} - {Host} (认证方式: {AuthType})",
@@ -150,7 +153,7 @@ public sealed class ExecutionSession : IAsyncDisposable
     /// <summary>
     /// 后台排空 stderr，防止缓冲区满导致进程死锁
     /// </summary>
-    private async Task DrainStderrAsync(Process process)
+    private async Task DrainStderrAsync(ProcessDiag process)
     {
         try
         {
@@ -271,11 +274,17 @@ public sealed class ExecutionSession : IAsyncDisposable
             {
                 if (!_process.HasExited)
                 {
-                    await _process.StandardInput.WriteLineAsync("exit");
-                    await _process.StandardInput.FlushAsync();
-
-                    if (!_process.WaitForExit(5000))
+                    // 尝试优雅退出
+                    try
                     {
+                        await _process.StandardInput.WriteLineAsync("exit");
+                        await _process.StandardInput.FlushAsync();
+                    }
+                    catch { /* stdin 可能已关闭 */ }
+
+                    if (!_process.WaitForExit(3000))
+                    {
+                        _logger.LogWarning("会话 {SessionId} 优雅退出超时，强制终止进程树", Id);
                         _process.Kill(entireProcessTree: true);
                     }
                 }

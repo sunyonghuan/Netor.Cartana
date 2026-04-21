@@ -1,7 +1,7 @@
-﻿using Cortana.Plugins.Office.Security;
+using Cortana.Plugins.Office.Security;
 using Cortana.Plugins.Office.Services;
 using Microsoft.Extensions.DependencyInjection;
-using Netor.Cortana.Plugin.Native;
+using Netor.Cortana.Plugin;
 
 namespace Cortana.Plugins.Office;
 

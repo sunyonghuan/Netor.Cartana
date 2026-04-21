@@ -18,4 +18,8 @@
                       ReferenceOutputAssembly="false" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\Src\Plugins\Netor.Cortana.Plugin.Abstractions\Netor.Cortana.Plugin.Abstractions.csproj" />
+  </ItemGroup>
+
 </Project>

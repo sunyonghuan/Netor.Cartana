@@ -1,9 +1,9 @@
-﻿using Cortana.Plugins.WsBridge.Core;
+using Cortana.Plugins.WsBridge.Core;
 using Cortana.Plugins.WsBridge.Services;
 
 using Microsoft.Extensions.DependencyInjection;
 
-using Netor.Cortana.Plugin.Native;
+using Netor.Cortana.Plugin;
 
 namespace Cortana.Plugins.WsBridge;
 

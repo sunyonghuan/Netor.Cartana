@@ -4,7 +4,6 @@ using Avalonia.Layout;
 using Avalonia.Media;
 
 using Netor.Cortana.Plugin;
-using Netor.Cortana.Plugin.Abstractions;
 
 namespace Netor.Cortana.AvaloniaUI.Views.Settings;
 

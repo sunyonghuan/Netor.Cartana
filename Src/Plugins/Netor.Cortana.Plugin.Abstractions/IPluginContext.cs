@@ -1,35 +1,26 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Http;
+using Microsoft.Extensions.Logging;
 
-using System.Net.Http;
-
-namespace Netor.Cortana.Plugin.Abstractions;
+namespace Netor.Cortana.Plugin;
 
 /// <summary>
-/// 宿主向插件暴露的有限上下文，避免插件直接访问宿主内部。
+/// 插件运行时上下文，宿主为每个插件实例提供的环境访问接口。
+/// 插件通过此接口访问日志、HTTP 客户端、数据目录等宿主服务。
 /// </summary>
 public interface IPluginContext
 {
-    /// <summary>
-    /// 插件专属的数据存储目录。
-    /// </summary>
+    /// <summary>插件的专用数据目录（宿主保证已创建）。</summary>
     string DataDirectory { get; }
 
-    /// <summary>
-    /// 当前工作区目录。
-    /// </summary>
+    /// <summary>工作空间目录（通常是 Cortana 的配置/缓存目录）。</summary>
     string WorkspaceDirectory { get; }
 
-    /// <summary>
-    /// 获取宿主提供的日志工厂。
-    /// </summary>
+    /// <summary>日志工厂（用于插件内部的日志记录）。</summary>
     ILoggerFactory LoggerFactory { get; }
 
-    /// <summary>
-    /// 获取宿主提供的 HttpClientFactory。
-    /// </summary>
+    /// <summary>HTTP 客户端工厂（用于插件发起 HTTP 请求）。</summary>
     IHttpClientFactory HttpClientFactory { get; }
-    /// <summary>
-    /// 获取 WebSocket 服务器端口，供插件建立 WS 连接。
-    /// </summary>
+
+    /// <summary>WebSocket 服务端口号（如果宿主启用 WebSocket 服务）。</summary>
     int WsPort { get; }
 }

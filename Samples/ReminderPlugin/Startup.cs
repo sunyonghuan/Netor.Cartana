@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Netor.Cortana.Plugin.Native;
+using Netor.Cortana.Plugin;
 
 namespace ReminderPlugin;
 
