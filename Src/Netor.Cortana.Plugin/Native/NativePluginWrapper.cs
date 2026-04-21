@@ -2,7 +2,7 @@ using System.Text;
 
 using Microsoft.Extensions.AI;
 
-using Netor.Cortana.Plugin.Abstractions;
+using Netor.Cortana.Plugin;
 
 namespace Netor.Cortana.Plugin.Native;
 
@@ -12,7 +12,7 @@ namespace Netor.Cortana.Plugin.Native;
 /// </summary>
 public sealed class NativePluginWrapper : IPlugin
 {
-    private readonly NativePluginHost _host;
+    private readonly ExternalProcessPluginHostBase _host;
 
     /// <inheritdoc />
     public string Id { get; }
@@ -35,7 +35,7 @@ public sealed class NativePluginWrapper : IPlugin
     /// <inheritdoc />
     public IReadOnlyList<AITool> Tools { get; }
 
-    public NativePluginWrapper(NativePluginHost host, NativePluginInfo info)
+    public NativePluginWrapper(ExternalProcessPluginHostBase host, NativePluginInfo info)
     {
         ArgumentNullException.ThrowIfNull(host);
         ArgumentNullException.ThrowIfNull(info);
@@ -129,7 +129,7 @@ public sealed class NativePluginWrapper : IPlugin
 
         if (!response.Success)
         {
-            return $"[错误] 原生工具 {toolName} 执行失败：{response.Error}";
+            return $"[错误] 工具 {toolName} 执行失败：{response.Error}";
         }
 
         return response.Data ?? string.Empty;

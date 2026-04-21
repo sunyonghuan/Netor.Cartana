@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-using Netor.Cortana.Plugin.Abstractions;
+using Netor.Cortana.Plugin;
 
 using System.Net.Http;
 

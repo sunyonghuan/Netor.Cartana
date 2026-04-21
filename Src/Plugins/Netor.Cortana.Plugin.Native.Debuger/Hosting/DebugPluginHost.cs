@@ -2,7 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-using Netor.Cortana.Plugin.Abstractions;
+using Netor.Cortana.Plugin;
 using Netor.Cortana.Plugin.Native;
 using Netor.Cortana.Plugin.Native.Debugger.Discovery;
 using Netor.Cortana.Plugin.Native.Debugger.Invocation;

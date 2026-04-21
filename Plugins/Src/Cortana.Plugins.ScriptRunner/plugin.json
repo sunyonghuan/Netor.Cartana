@@ -1,0 +1,8 @@
+{
+  "id": "sys_csx_script",
+  "name": "C# Script Runner",
+  "version": "1.0.0",
+  "description": "在 .NET Runtime 上执行 C# 脚本（CSX）。支持执行源码字符串、脚本文件，基于 Roslyn Scripting。",
+  "runtime": "process",
+  "command": "script-runner.exe"
+}

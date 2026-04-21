@@ -1,6 +1,6 @@
 using Cortana.Plugins.GoogleSearch.Models;
 using Cortana.Plugins.GoogleSearch.Services;
-using Netor.Cortana.Plugin.Native;
+using Netor.Cortana.Plugin;
 
 namespace Cortana.Plugins.GoogleSearch.Tools;
 

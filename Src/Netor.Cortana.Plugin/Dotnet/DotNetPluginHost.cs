@@ -2,7 +2,7 @@ using System.Reflection;
 
 using Microsoft.Extensions.Logging;
 
-using Netor.Cortana.Plugin.Abstractions;
+using Netor.Cortana.Plugin;
 
 namespace Netor.Cortana.Plugin.Dotnet;
 

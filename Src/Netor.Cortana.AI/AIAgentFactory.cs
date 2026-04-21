@@ -25,6 +25,66 @@ public sealed class AIAgentFactory(
 {
     public TokenTrackingChatClient? ChatClient { get; private set; }
 
+    // ──────── Token 使用量跨 ChatClient 持久化 ────────
+    // ChatClient 会因切换模型/厂商/智能体或 @提及子智能体而重建；
+    // 为了让 UI 进度条稳定显示"最近一次真实用量"，把状态提升到工厂层。
+
+    private long _lastInputTokens;
+    private long _maxContextTokens = 128_000;
+
+    /// <summary>最近一次模型调用实际使用的输入 token（= 当前上下文占用）。跨 ChatClient 重建保留。</summary>
+    public long LastInputTokens => Volatile.Read(ref _lastInputTokens);
+
+    /// <summary>当前模型的上下文窗口上限。跟随模型切换更新。</summary>
+    public long MaxContextTokens => Volatile.Read(ref _maxContextTokens);
+
+    /// <summary>上下文使用比例 0.0 ~ 1.0（可能 &gt; 1 表示超出）。</summary>
+    public double ContextUsageRatio
+    {
+        get
+        {
+            var max = MaxContextTokens;
+            return max > 0 ? (double)LastInputTokens / max : 0;
+        }
+    }
+
+    /// <summary>当 token 使用量更新时触发（UI 可订阅此事件实时刷新进度条）。</summary>
+    public event Action? TokenUsageChanged;
+
+    /// <summary>
+    /// 创建 <see cref="TokenTrackingChatClient"/> 包装器：
+    /// <list type="bullet">
+    /// <item>更新 <see cref="MaxContextTokens"/> 为当前模型上限；</item>
+    /// <item>注入 usage 观察者，每次真实用量上报时同步 <see cref="LastInputTokens"/>；</item>
+    /// <item>不清零旧值 —— 在新用量到达之前保留上一次显示，避免进度条闪烁归零。</item>
+    /// </list>
+    /// </summary>
+    private TokenTrackingChatClient CreateTrackingClient(IChatClient inner, long maxContextTokens)
+    {
+        var normalizedMax = maxContextTokens <= 0 ? 128_000 : maxContextTokens;
+        Interlocked.Exchange(ref _maxContextTokens, normalizedMax);
+
+        return new TokenTrackingChatClient(inner, normalizedMax, usage =>
+        {
+            var inputTokens = usage.InputTokenCount ?? 0;
+            if (inputTokens <= 0) return;
+            Interlocked.Exchange(ref _lastInputTokens, inputTokens);
+            try { TokenUsageChanged?.Invoke(); }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "TokenUsageChanged 事件订阅者抛出异常");
+            }
+        });
+    }
+
+    /// <summary>重置 token 统计（新建会话或切换工作区时调用）。</summary>
+    public void ResetTokenStats()
+    {
+        Interlocked.Exchange(ref _lastInputTokens, 0);
+        try { TokenUsageChanged?.Invoke(); }
+        catch { /* ignore */ }
+    }
+
     /// <summary>
     /// 获取所有可用厂商驱动定义，供 UI 构建无关化选择器。
     /// </summary>
@@ -73,7 +133,7 @@ public sealed class AIAgentFactory(
         var registeredTools = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         AssembleToolProviders(agent, providers, registeredTools);
 
-        ChatClient = new TokenTrackingChatClient(
+        ChatClient = CreateTrackingClient(
             driver.CreateChatClient(provider, model),
             model.ContextLength);
 
@@ -172,7 +232,7 @@ public sealed class AIAgentFactory(
 #pragma warning restore MAAI001
         }
 
-        ChatClient = new TokenTrackingChatClient(
+        ChatClient = CreateTrackingClient(
             driver.CreateChatClient(mainProvider, mainModel),
             mainModel.ContextLength);
 

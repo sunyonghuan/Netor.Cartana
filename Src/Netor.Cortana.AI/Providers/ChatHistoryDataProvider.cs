@@ -361,7 +361,7 @@ public sealed class ChatHistoryDataProvider(
 
             sessionEntity.UpdatedTimestamp = DateTimeOffset.Now.ToUnixTimeMilliseconds();
             sessionEntity.LastActiveTimestamp = DateTimeOffset.Now.ToUnixTimeMilliseconds();
-            sessionEntity.TotalTokenCount += services.GetRequiredService<AIAgentFactory>().ChatClient?.LastInputTokens ?? 0;
+            sessionEntity.TotalTokenCount += services.GetRequiredService<AIAgentFactory>().LastInputTokens;
 
             dbContext.Execute(
                 """

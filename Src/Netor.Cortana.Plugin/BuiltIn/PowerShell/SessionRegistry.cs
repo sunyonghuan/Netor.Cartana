@@ -22,9 +22,9 @@ public sealed class SessionRegistry : IAsyncDisposable
     /// <summary>
     /// 创建并注册一个新会话
     /// </summary>
-    public ExecutionSession CreateSession(string sessionType, string? host = null, string? username = null, string? password = null, string? privateKeyPath = null)
+    public ExecutionSession CreateSession(string sessionType, string? host = null, string? username = null, string? password = null, string? privateKeyPath = null, bool background = true)
     {
-        var session = new ExecutionSession(sessionType, host, username, password, privateKeyPath, _logger);
+        var session = new ExecutionSession(sessionType, host, username, password, privateKeyPath, _logger, background);
 
         lock (_lock)
         {
@@ -80,7 +80,7 @@ public sealed class SessionRegistry : IAsyncDisposable
     }
 
     /// <summary>
-    /// 清理空闲超时的会话
+    /// 清理空闲超时的会话（含已退出进程的僵尸会话）
     /// </summary>
     private void CleanupIdleSessions(object? state)
     {
@@ -88,7 +88,7 @@ public sealed class SessionRegistry : IAsyncDisposable
 
         lock (_lock)
         {
-            const int idleTimeoutMs = 300_000; // 5 分钟
+            const int idleTimeoutMs = 180_000; // 3 分钟空闲超时（后台进程不可见，更积极清理）
             var now = DateTime.Now;
             var expiredKeys = _sessions
                 .Where(x => !x.Value.IsActive || (now - x.Value.LastActivityAt).TotalMilliseconds > idleTimeoutMs)
@@ -101,7 +101,8 @@ public sealed class SessionRegistry : IAsyncDisposable
                 if (_sessions.Remove(key, out var session))
                 {
                     toDispose.Add(session);
-                    _logger.LogInformation("空闲会话已清理: {SessionId}", key);
+                    _logger.LogInformation("空闲/僵尸会话已清理: {SessionId} (活跃={IsActive}, 上次活动={LastActivity})",
+                        key, session.IsActive, session.LastActivityAt);
                 }
             }
         }

@@ -1,5 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
-using Netor.Cortana.Plugin.Native;
+using Microsoft.Extensions.DependencyInjection;
+using Netor.Cortana.Plugin;
 using System.Net;
 
 namespace Cortana.Plugins.Bt;

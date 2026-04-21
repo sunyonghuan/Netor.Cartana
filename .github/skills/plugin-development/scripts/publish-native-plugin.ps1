@@ -18,7 +18,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$SolutionDir = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+# $PSScriptRoot = <repo>\.github\skills\plugin-development\scripts；向上 4 级 = 仓库根
+$SolutionDir = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
 $FullProjectDir = Join-Path $SolutionDir $ProjectDir
 
 if (-not (Test-Path $FullProjectDir)) {

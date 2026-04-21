@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
+using ProcessDiag = System.Diagnostics.Process;
 
 namespace Netor.Cortana.Plugin.BuiltIn.FileBrowser;
 
@@ -317,7 +318,7 @@ public sealed class FileBrowser
                     return $"错误：不支持的模式 '{mode}'，仅支持 open 或 select";
             }
 
-            var process = Process.Start(new ProcessStartInfo
+            var process = ProcessDiag.Start(new ProcessStartInfo
             {
                 FileName = "explorer.exe",
                 Arguments = arguments,
