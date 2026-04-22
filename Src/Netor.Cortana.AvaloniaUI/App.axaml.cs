@@ -157,8 +157,12 @@ public partial class App : Application
                 options.AddConsole()
                 .AddDebug();
                 options.AddSerilog(new LoggerConfiguration()
-                    .WriteTo.File(
+                    .MinimumLevel
+                    .Warning()
+                    .WriteTo
+                    .File(
                         Path.Combine(UserDataDirectory, "logs", ".log"),
+                        restrictedToMinimumLevel: Serilog.Events.LogEventLevel.Warning,
                         rollingInterval: RollingInterval.Hour,
                         fileSizeLimitBytes: 100 * 1024 * 1024,
                         retainedFileCountLimit: 72,

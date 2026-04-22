@@ -1,18 +1,30 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <OutputType>Exe</OutputType>
     <AssemblyName>script-runner</AssemblyName>
     <RootNamespace>Cortana.Plugins.ScriptRunner</RootNamespace>
-    <Version>1.0.0</Version>
+    <Version>1.0.10</Version>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <InvariantGlobalization>true</InvariantGlobalization>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- 上游 dotnet-script 2.0.0 依赖的 NuGet.Packaging/NuGet.Protocol 6.14.0 带有低危漏洞公告；
          本进程仅在脱机还原时调用，已评估可接受，抑制 NU1901。 -->
     <NoWarn>$(NoWarn);NU1901</NoWarn>
+
+    <!-- 发布：多文件 + ReadyToRun + 自包含。
+         不启用单文件：Roslyn Scripting 内部要求各运行时程序集的 Assembly.Location 非空，
+         单文件（无论是否压缩）都会导致脚本编译时抛
+         "Can't create a metadata reference to an assembly without location"。
+         同样原因，禁用 Trimming / AOT：Roslyn CSharpScript 依赖反射加载与运行时 JIT。 -->
+    <PublishSingleFile>false</PublishSingleFile>
+    <SelfContained Condition="'$(SelfContained)' == ''">true</SelfContained>
+    <PublishReadyToRun Condition="'$(PublishReadyToRun)' == ''">true</PublishReadyToRun>
+    <DebugType>embedded</DebugType>
+    <PublishTrimmed>false</PublishTrimmed>
   </PropertyGroup>
 
   <ItemGroup>
@@ -26,6 +38,7 @@
   <ItemGroup>
     <None Update="plugin.json">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
     </None>
   </ItemGroup>
 

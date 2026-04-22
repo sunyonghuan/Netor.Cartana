@@ -1,6 +1,6 @@
 ---
 title: C# Native DLL 插件开发规范
-version: 1
+version: 2
 ---
 
 # C# Native DLL 插件
@@ -8,7 +8,6 @@ version: 1
 Cortana Native 通道要求**原生 DLL**（C ABI）。C# 走这条路**必须 AOT 发布**——IL DLL 宿主无法加载。
 
 脚手架：[scripts/create-native-plugin.ps1](../scripts/create-native-plugin.ps1)
-参考示例：[Samples/NativeTestPlugin/](../../../../Samples/NativeTestPlugin)
 
 ## 1. csproj 必需配置
 

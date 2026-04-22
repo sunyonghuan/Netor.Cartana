@@ -1,6 +1,6 @@
 ---
 title: Cortana Process 通道协议规范
-version: 1
+version: 2
 ---
 
 # Process 通道协议规范
@@ -123,5 +123,4 @@ version: 1
 
 ## 6. 参考实现
 
-- C# AOT EXE：[Plugins/Src/Cortana.Plugins.ScriptRunner](../../../../Plugins/Src/Cortana.Plugins.ScriptRunner) — 生产级
 - 最小 C# 模板：[template-process-csharp/](./template-process-csharp)

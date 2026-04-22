@@ -3,7 +3,7 @@ using Cortana.Plugins.Office.Models;
 using Cortana.Plugins.Office.Security;
 using Cortana.Plugins.Office.Services;
 using Microsoft.Extensions.Logging;
-using Netor.Cortana.Plugin;
+using Netor.Cortana.Plugin.Native;
 
 namespace Cortana.Plugins.Office.Tools;
 
@@ -37,15 +37,19 @@ public sealed class OfficeExcelRowTools(
         var (validSource, validOutput, error) = ValidateSourceAndOutput(sourcePath, outputPath, overwrite);
         if (error is not null) return error;
 
-        // 解析二维数组
+        // 解析二维数组：接受字符串、数字、布尔、null 等混合类型，统一转换为字符串
         string[][]? parsed;
         try
         {
-            parsed = JsonSerializer.Deserialize(values, PluginJsonContext.Default.StringArrayArray);
+            parsed = ParseValuesAsStringMatrix(values);
         }
         catch (JsonException ex)
         {
             return ToolResult.Fail(ErrorCodes.InvalidArgument, $"values JSON 格式错误: {ex.Message}");
+        }
+        catch (ArgumentException ex)
+        {
+            return ToolResult.Fail(ErrorCodes.InvalidArgument, ex.Message);
         }
 
         if (parsed is null || parsed.Length == 0)
@@ -173,5 +177,43 @@ public sealed class OfficeExcelRowTools(
             return (null, null, ToolResult.Fail(ErrorCodes.ConflictExists, $"文件已存在: {validOutput}"));
 
         return (validSource, validOutput, null);
+    }
+
+    /// <summary>
+    /// 将 JSON 二维数组解析为字符串矩阵，兼容数字、布尔、null 等 JSON 标量类型。
+    /// 使用 JsonDocument 避免类型不匹配（如 [[1,2]] 无法直接反序列化为 string[][]）。
+    /// </summary>
+    private static string[][] ParseValuesAsStringMatrix(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+        if (root.ValueKind != JsonValueKind.Array)
+            throw new ArgumentException("values 必须是 JSON 二维数组。");
+
+        int rowCount = root.GetArrayLength();
+        var matrix = new string[rowCount][];
+        for (int r = 0; r < rowCount; r++)
+        {
+            var rowElement = root[r];
+            if (rowElement.ValueKind != JsonValueKind.Array)
+                throw new ArgumentException($"values 第 {r} 行不是数组。");
+
+            int colCount = rowElement.GetArrayLength();
+            var row = new string[colCount];
+            for (int c = 0; c < colCount; c++)
+            {
+                row[c] = rowElement[c].ValueKind switch
+                {
+                    JsonValueKind.String => rowElement[c].GetString() ?? string.Empty,
+                    JsonValueKind.Number => rowElement[c].GetRawText(),
+                    JsonValueKind.True => "true",
+                    JsonValueKind.False => "false",
+                    JsonValueKind.Null or JsonValueKind.Undefined => string.Empty,
+                    _ => throw new ArgumentException($"values[{r}][{c}] 不支持的 JSON 类型: {rowElement[c].ValueKind}")
+                };
+            }
+            matrix[r] = row;
+        }
+        return matrix;
     }
 }

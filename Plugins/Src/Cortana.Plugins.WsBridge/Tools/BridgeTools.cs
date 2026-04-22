@@ -7,7 +7,7 @@ using Cortana.Plugins.WsBridge.Services;
 
 using Microsoft.Extensions.Logging;
 
-using Netor.Cortana.Plugin;
+using Netor.Cortana.Plugin.Native;
 
 namespace Cortana.Plugins.WsBridge.Tools;
 

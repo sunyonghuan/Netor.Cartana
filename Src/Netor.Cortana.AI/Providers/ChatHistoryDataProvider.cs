@@ -12,6 +12,7 @@ using Netor.EventHub;
 
 using OpenAI.Chat;
 
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -108,6 +109,19 @@ public sealed class ChatHistoryDataProvider(
         {
             logger.LogError(ex, "保存聊天历史到数据库时失败。");
         }
+
+        // ---- 保存 AI 生成的多媒体资源（图片/音频/视频等）到资源库 ----
+        // 注意：用户上传的附件已在 AiChatHostedService.SendMessageAsync 中处理（图片拷贝+入表，
+        // 文档类直接引用原始路径）。此处仅处理"AI 返回的"多媒体内容（AssetKind=generated）。
+        try
+        {
+            await SaveGeneratedAssetsAsync(context, sessionId, assistantMessageId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "保存 AI 生成资源失败。");
+        }
+
         // ---- 新增：压缩后回写 ----
         if (context.Session is null) return;
         await CompactAndReplaceAsync(context.Agent, context.Session, sessionId, cancellationToken);
@@ -236,7 +250,7 @@ public sealed class ChatHistoryDataProvider(
                     AuthorName = t.AuthorName,
                     MessageId = t.Id,
                     CreatedAt = t.CreatedAt?.ToLocalTime(),
-                    Contents = [new TextContent(t.Content)]
+                    Contents = BuildContentsWithAssets(t.Id, t.Content)
                 }));
 
                 return result;
@@ -282,7 +296,7 @@ public sealed class ChatHistoryDataProvider(
                         AuthorName = t.AuthorName,
                         MessageId = t.Id,
                         CreatedAt = t.CreatedAt?.ToLocalTime(),
-                        Contents = [new TextContent(t.Content)]
+                        Contents = BuildContentsWithAssets(t.Id, t.Content)
                     }));
 
                     return result;
@@ -306,7 +320,7 @@ public sealed class ChatHistoryDataProvider(
                     AuthorName = t.AuthorName,
                     MessageId = t.Id,
                     CreatedAt = t.CreatedAt?.ToLocalTime(),
-                    Contents = [new TextContent(t.Content)]
+                    Contents = BuildContentsWithAssets(t.Id, t.Content)
                 });
             return messages;
         }
@@ -646,6 +660,143 @@ public sealed class ChatHistoryDataProvider(
         _cachedCompactionClient?.Dispose();
         _cachedCompactionClient = null;
     }
+
+    // ──────────────────── 资源加载 / 保存辅助 ────────────────────
+
+    /// <summary>
+    /// 构造一条历史消息的 Contents 列表：文本 + （如果存在）ChatMessageAssets 表中的图片资源。
+    /// 非图片资源（文档/音视频）不回灌到 AI 上下文，避免占用 token；它们通过消息 Content 中的
+    /// 链接引用（用户附件）或由 UI 侧的 ResourceCardPanel 独立渲染。
+    /// </summary>
+    private IList<AIContent> BuildContentsWithAssets(string? messageId, string text)
+    {
+        var contents = new List<AIContent> { new TextContent(text ?? string.Empty) };
+        if (string.IsNullOrEmpty(messageId)) return contents;
+
+        try
+        {
+            var assetService = services.GetRequiredService<ChatMessageAssetService>();
+            var assets = assetService.GetByMessageId(messageId);
+            foreach (var asset in assets)
+            {
+                if (asset.AssetGroup != "images") continue; // 仅图片回灌给 AI
+                var fullPath = Path.Combine(appPaths.WorkspaceResourcesDirectory, asset.RelativePath);
+                if (!File.Exists(fullPath)) continue;
+
+                var bytes = File.ReadAllBytes(fullPath);
+                contents.Add(new DataContent(bytes, asset.MimeType));
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "加载消息 {MessageId} 的历史资源失败。", messageId);
+        }
+        return contents;
+    }
+
+    /// <summary>
+    /// 遍历 AI 响应中的所有 <see cref="DataContent"/>，将其持久化到资源库并写入索引。
+    /// 对应 <c>AssetKind="generated"</c> / <c>SourceType="generated"</c> / <c>Role="assistant"</c>。
+    /// 纯 URI 引用（无内联 bytes）直接跳过——运行时下载超出本次职责。
+    /// </summary>
+    private async Task SaveGeneratedAssetsAsync(InvokedContext context, string sessionId, string? assistantMessageId)
+    {
+        if (context.ResponseMessages is null) return;
+
+        var assetService = services.GetRequiredService<ChatMessageAssetService>();
+        var generatedEntities = new List<ChatMessageAssetEntity>();
+        var sortOrder = 0;
+
+        foreach (var msg in context.ResponseMessages)
+        {
+            if (msg.Role != ChatRole.Assistant) continue;
+            if (msg.Contents is null || msg.Contents.Count == 0) continue;
+
+            // 与 ChatMessages 表的 Id 策略保持一致：优先 assistantMessageId，其次 msg.MessageId，再兜底新 Guid
+            var messageId = assistantMessageId ?? msg.MessageId ?? Guid.NewGuid().ToString("N");
+
+            foreach (var content in msg.Contents)
+            {
+                if (content is not DataContent dc) continue;
+                if (dc.Data.Length == 0) continue; // URI-only、无内联二进制 → 跳过
+
+                try
+                {
+                    var mediaType = string.IsNullOrEmpty(dc.MediaType) ? "application/octet-stream" : dc.MediaType;
+                    var assetGroup = ResolveAssetGroupForMime(mediaType);
+                    var extension = InferExtensionFromMediaType(mediaType);
+                    var fileName = $"{Guid.NewGuid():N}{extension}";
+                    var relativePath = Path.Combine("histories", sessionId, assetGroup, messageId, fileName);
+                    var absolutePath = Path.Combine(appPaths.WorkspaceResourcesDirectory, relativePath);
+
+                    var targetDir = Path.GetDirectoryName(absolutePath)!;
+                    if (!Directory.Exists(targetDir)) Directory.CreateDirectory(targetDir);
+
+                    await File.WriteAllBytesAsync(absolutePath, dc.Data.ToArray());
+
+                    var sha256 = Convert.ToHexStringLower(SHA256.HashData(dc.Data.Span));
+                    generatedEntities.Add(new ChatMessageAssetEntity
+                    {
+                        SessionId = sessionId,
+                        MessageId = messageId,
+                        Role = "assistant",
+                        AssetGroup = assetGroup,
+                        AssetKind = "generated",
+                        MimeType = mediaType,
+                        OriginalName = fileName,
+                        RelativePath = relativePath,
+                        FileSizeBytes = dc.Data.Length,
+                        Sha256 = sha256,
+                        SortOrder = sortOrder++,
+                        SourceType = "generated",
+                    });
+
+                    logger.LogInformation("已保存 AI 生成资源：{RelativePath}（{MimeType}，{Bytes} 字节）",
+                        relativePath, mediaType, dc.Data.Length);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "保存单个 AI 生成资源失败。");
+                }
+            }
+        }
+
+        if (generatedEntities.Count > 0)
+        {
+            try { assetService.BatchInsert(generatedEntities); }
+            catch (Exception ex) { logger.LogError(ex, "批量写入 AI 生成资源索引失败。"); }
+        }
+    }
+
+    private static string ResolveAssetGroupForMime(string mimeType)
+    {
+        if (mimeType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)) return "images";
+        if (mimeType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase)) return "audio";
+        if (mimeType.StartsWith("video/", StringComparison.OrdinalIgnoreCase)) return "video";
+        return "files";
+    }
+
+    private static string InferExtensionFromMediaType(string mediaType) => mediaType.ToLowerInvariant() switch
+    {
+        "image/png" => ".png",
+        "image/jpeg" or "image/jpg" => ".jpg",
+        "image/gif" => ".gif",
+        "image/webp" => ".webp",
+        "image/bmp" => ".bmp",
+        "image/svg+xml" => ".svg",
+        "audio/wav" or "audio/x-wav" => ".wav",
+        "audio/mpeg" or "audio/mp3" => ".mp3",
+        "audio/ogg" => ".ogg",
+        "audio/flac" => ".flac",
+        "audio/aac" => ".aac",
+        "video/mp4" => ".mp4",
+        "video/webm" => ".webm",
+        "video/quicktime" => ".mov",
+        "application/pdf" => ".pdf",
+        "application/json" => ".json",
+        "text/plain" => ".txt",
+        _ => string.Empty,
+    };
 }
 
 /// <summary>

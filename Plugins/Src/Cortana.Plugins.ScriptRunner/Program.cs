@@ -37,7 +37,7 @@ internal static class Program
                 {
                     response = HostResponse.Fail(
                         $"请求帧长度 {line.Length} 超过上限 {Runner.Limits.MaxRequestLineBytes}；" +
-                        "请将大脚本通过 sys_csx_run_file 执行，将大参数写入文件后传路径。");
+                        "请将大脚本通过 csx_run_file 执行，将大参数写入文件后传路径。");
                 }
                 else
                 {
@@ -117,26 +117,26 @@ internal static class Program
             : "NuGet：当前宿主未检测到 .NET SDK（仅有 Runtime），#r \"nuget:...\" 暂不可用；如需使用请安装 .NET SDK 后重启插件。";
         var info = new PluginInfo
         {
-            Id = "sys_csx_script",
+            Id = "csx_script",
             Name = "C# Script Runner",
             Version = "1.0.0",
             Description = "在 .NET Runtime 上执行 C# 脚本（CSX）。基于 Roslyn Scripting。",
             Tags = nuget ? ["C#", "脚本", "CSX", "Roslyn", "nuget"] : ["C#", "脚本", "CSX", "Roslyn"],
             Instructions =
                 "本插件提供 C# 脚本（CSX）执行能力。\n" +
-                "- sys_csx_run_str：执行一段源码字符串，返回值与 Console 输出一并返回。\n" +
-                "- sys_csx_run_file：执行 .csx 文件，支持 #load 相对路径。\n" +
-                "- sys_csx_eval：单表达式求值，不允许语句。\n" +
-                "- sys_csx_check：只做语法/语义检查并返回诊断，不执行。\n" +
-                "- sys_csx_format：基础格式化（SyntaxNode.NormalizeWhitespace）。\n" +
-                "- sys_csx_session_create/exec/reset/close：交互式会话，可跨多次调用累积变量与 using。\n" +
+                "- csx_run_str：执行一段源码字符串，返回值与 Console 输出一并返回。\n" +
+                "- csx_run_file：执行 .csx 或 .cs 脚本文件，支持 #load 相对路径。\n" +
+                "- csx_eval：单表达式求值，不允许语句。\n" +
+                "- csx_check：只做语法/语义检查并返回诊断，不执行。\n" +
+                "- csx_format：基础格式化（SyntaxNode.NormalizeWhitespace）。\n" +
+                "- csx_session_create/exec/reset/close：交互式会话，可跨多次调用累积变量与 using。\n" +
                 "脚本可直接使用 Log / Settings / Host 三个全局对象。\n" +
                 nugetLine,
             Tools =
             [
                 new ToolInfo
                 {
-                    Name = "sys_csx_run_str",
+                    Name = "csx_run_str",
                     Description = "执行一段 C# 脚本源码字符串（CSX），返回执行结果、标准输出和耗时。",
                     Parameters =
                     [
@@ -146,17 +146,17 @@ internal static class Program
                 },
                 new ToolInfo
                 {
-                    Name = "sys_csx_run_file",
-                    Description = "执行指定路径的 .csx 脚本文件，支持 #load 相对路径。",
+                    Name = "csx_run_file",
+                    Description = "执行指定路径的 C# 脚本文件（.csx 或 .cs 均可，按 CSX 语义执行；支持 #load 相对路径）。",
                     Parameters =
                     [
-                        new ToolParameter { Name = "path", Type = "string", Description = "脚本文件绝对或相对路径。", Required = true },
+                        new ToolParameter { Name = "path", Type = "string", Description = "脚本文件绝对或相对路径，扩展名可为 .csx 或 .cs。", Required = true },
                         new ToolParameter { Name = "timeoutMs", Type = "integer", Description = "执行超时毫秒数，默认 30000。", Required = false },
                     ],
                 },
                 new ToolInfo
                 {
-                    Name = "sys_csx_eval",
+                    Name = "csx_eval",
                     Description = "对单个 C# 表达式求值并返回其字符串形式与类型。",
                     Parameters =
                     [
@@ -166,7 +166,7 @@ internal static class Program
                 },
                 new ToolInfo
                 {
-                    Name = "sys_csx_check",
+                    Name = "csx_check",
                     Description = "对一段 C# 脚本源码进行语法与语义检查，返回诊断列表，不执行。",
                     Parameters =
                     [
@@ -175,7 +175,7 @@ internal static class Program
                 },
                 new ToolInfo
                 {
-                    Name = "sys_csx_format",
+                    Name = "csx_format",
                     Description = "基础格式化一段 C# 脚本源码（Roslyn SyntaxNode.NormalizeWhitespace）。",
                     Parameters =
                     [
@@ -184,24 +184,24 @@ internal static class Program
                 },
                 new ToolInfo
                 {
-                    Name = "sys_csx_session_create",
-                    Description = "创建一个交互式 C# 会话，返回 sessionId。后续通过 sys_csx_session_exec 在同一会话里累积状态（变量、using、函数）。",
+                    Name = "csx_session_create",
+                    Description = "创建一个交互式 C# 会话，返回 sessionId。后续通过 csx_session_exec 在同一会话里累积状态（变量、using、函数）。",
                     Parameters = [],
                 },
                 new ToolInfo
                 {
-                    Name = "sys_csx_session_exec",
+                    Name = "csx_session_exec",
                     Description = "在指定会话里执行一段 C# 代码。变量、using、局部函数会延续到下次调用。",
                     Parameters =
                     [
-                        new ToolParameter { Name = "sessionId", Type = "string", Description = "由 sys_csx_session_create 返回的会话 ID。", Required = true },
+                        new ToolParameter { Name = "sessionId", Type = "string", Description = "由 csx_session_create 返回的会话 ID。", Required = true },
                         new ToolParameter { Name = "code", Type = "string", Description = "要执行的 C# 代码片段。", Required = true },
                         new ToolParameter { Name = "timeoutMs", Type = "integer", Description = "执行超时毫秒数，默认 30000。", Required = false },
                     ],
                 },
                 new ToolInfo
                 {
-                    Name = "sys_csx_session_reset",
+                    Name = "csx_session_reset",
                     Description = "清空会话已累积的状态（变量、using），但保留 sessionId 供继续使用。",
                     Parameters =
                     [
@@ -210,7 +210,7 @@ internal static class Program
                 },
                 new ToolInfo
                 {
-                    Name = "sys_csx_session_close",
+                    Name = "csx_session_close",
                     Description = "关闭并移除会话。后续对该 sessionId 的调用会失败。",
                     Parameters =
                     [
@@ -275,15 +275,15 @@ internal static class Program
         {
             return toolName switch
             {
-                "sys_csx_run_str" => await RunStrAsync(argsJson).ConfigureAwait(false),
-                "sys_csx_run_file" => await RunFileAsync(argsJson).ConfigureAwait(false),
-                "sys_csx_eval" => await EvalAsync(argsJson).ConfigureAwait(false),
-                "sys_csx_check" => CheckTool(argsJson),
-                "sys_csx_format" => FormatTool(argsJson),
-                "sys_csx_session_create" => SessionCreateTool(),
-                "sys_csx_session_exec" => await SessionExecAsync(argsJson).ConfigureAwait(false),
-                "sys_csx_session_reset" => SessionResetTool(argsJson),
-                "sys_csx_session_close" => SessionCloseTool(argsJson),
+                "csx_run_str" => await RunStrAsync(argsJson).ConfigureAwait(false),
+                "csx_run_file" => await RunFileAsync(argsJson).ConfigureAwait(false),
+                "csx_eval" => await EvalAsync(argsJson).ConfigureAwait(false),
+                "csx_check" => CheckTool(argsJson),
+                "csx_format" => FormatTool(argsJson),
+                "csx_session_create" => SessionCreateTool(),
+                "csx_session_exec" => await SessionExecAsync(argsJson).ConfigureAwait(false),
+                "csx_session_reset" => SessionResetTool(argsJson),
+                "csx_session_close" => SessionCloseTool(argsJson),
                 _ => HostResponse.Fail($"未知工具: {toolName}"),
             };
         }

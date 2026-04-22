@@ -2,7 +2,7 @@ namespace Cortana.Plugins.ScriptRunner.Tools;
 
 using System.Text.Json.Serialization;
 
-/// <summary>sys_csx_run_str 的参数结构。</summary>
+/// <summary>csx_run_str 的参数结构。</summary>
 internal sealed record RunStrArgs
 {
     [JsonPropertyName("code")]

@@ -26,12 +26,16 @@ internal static class DocxTemplate
         </Relationships>
         """;
 
-    /// <summary>主文档内容 word/document.xml。</summary>
+    /// <summary>
+    /// 主文档内容 word/document.xml。
+    /// 包含一个空段落作为锚点，避免空文档时 InsertParagraph/InsertTable 无法使用 anchorIndex=0。
+    /// </summary>
     public const string Document = """
         <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
         <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
                     xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
           <w:body>
+            <w:p/>
             <w:sectPr/>
           </w:body>
         </w:document>
