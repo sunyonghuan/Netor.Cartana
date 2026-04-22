@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Reflection;
+using System.Reflection.Metadata;
 using System.Text;
 
 using Cortana.Plugins.ScriptRunner.Globals;
@@ -24,24 +26,51 @@ internal sealed class ScriptEngine
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, ScriptState<object?>> _sessions
         = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// 把 <see cref="Assembly"/> 转成 Roslyn 能接受的 <see cref="MetadataReference"/>。
+    /// 单文件发布（含压缩）时托管程序集不落盘，<c>Assembly.Location</c> 为空，
+    /// Roslyn 的 <c>WithReferences(params Assembly[])</c> 会抛
+    /// "Can't create a metadata reference to an assembly without location"。
+    /// 此时改从内存元数据构造引用。
+    /// </summary>
+    private static unsafe MetadataReference ToMetadataReference(Assembly assembly)
+    {
+#pragma warning disable IL3000 // 单文件场景 Location 返回空字符串，这里已显式兜底
+        if (!string.IsNullOrEmpty(assembly.Location))
+            return MetadataReference.CreateFromFile(assembly.Location);
+#pragma warning restore IL3000
+
+        if (!assembly.TryGetRawMetadata(out var blob, out var length))
+            throw new InvalidOperationException(
+                $"无法获取程序集元数据：{assembly.FullName}。" +
+                "该程序集可能是动态生成的或运行在不支持 raw metadata 的宿主上。");
+
+        var moduleMetadata = ModuleMetadata.CreateFromMetadata((IntPtr)blob, length);
+        var assemblyMetadata = AssemblyMetadata.Create(moduleMetadata);
+        return assemblyMetadata.GetReference();
+    }
+
     public ScriptEngine(ScriptGlobals globals, NuGetResolver? nugetResolver = null)
     {
         _globals = globals;
         _nugetResolver = nugetResolver;
+        var seedAssemblies = new[]
+        {
+            typeof(object).Assembly,
+            typeof(System.Linq.Enumerable).Assembly,
+            typeof(System.Collections.Generic.List<>).Assembly,
+            typeof(System.IO.File).Assembly,
+            typeof(System.Text.StringBuilder).Assembly,
+            typeof(System.Text.RegularExpressions.Regex).Assembly,
+            typeof(System.Threading.Tasks.Task).Assembly,
+            typeof(System.Console).Assembly,
+            typeof(System.Net.Http.HttpClient).Assembly,
+            typeof(System.Text.Json.JsonSerializer).Assembly,
+            typeof(Microsoft.Extensions.Logging.ILogger).Assembly,
+            typeof(ScriptGlobals).Assembly,
+        };
         _defaultOptions = ScriptOptions.Default
-            .WithReferences(
-                typeof(object).Assembly,
-                typeof(System.Linq.Enumerable).Assembly,
-                typeof(System.Collections.Generic.List<>).Assembly,
-                typeof(System.IO.File).Assembly,
-                typeof(System.Text.StringBuilder).Assembly,
-                typeof(System.Text.RegularExpressions.Regex).Assembly,
-                typeof(System.Threading.Tasks.Task).Assembly,
-                typeof(System.Console).Assembly,
-                typeof(System.Net.Http.HttpClient).Assembly,
-                typeof(System.Text.Json.JsonSerializer).Assembly,
-                typeof(Microsoft.Extensions.Logging.ILogger).Assembly,
-                typeof(ScriptGlobals).Assembly)
+            .WithReferences(seedAssemblies.Select(ToMetadataReference))
             .WithImports(
                 "System",
                 "System.IO",
@@ -58,7 +87,7 @@ internal sealed class ScriptEngine
     {
         if (code.Length > Limits.MaxCodeChars)
             throw new ArgumentException(
-                $"code 长度 {code.Length} 超过上限 {Limits.MaxCodeChars}。大脚本请用 sys_csx_run_file（写到磁盘）。");
+                $"code 长度 {code.Length} 超过上限 {Limits.MaxCodeChars}。大脚本请用 csx_run_file（写到磁盘）。");
         var opts = await PrepareOptionsAsync(code, _defaultOptions, outerToken).ConfigureAwait(false);
         return await ExecuteAsync(code, opts, timeoutMs, outerToken).ConfigureAwait(false);
     }
@@ -168,7 +197,7 @@ internal sealed class ScriptEngine
     {
         if (code.Length > Limits.MaxCodeChars)
             throw new ArgumentException(
-                $"code 长度 {code.Length} 超过上限 {Limits.MaxCodeChars}。大脚本请用 sys_csx_run_file。");
+                $"code 长度 {code.Length} 超过上限 {Limits.MaxCodeChars}。大脚本请用 csx_run_file。");
         if (!_sessions.ContainsKey(sessionId))
             throw new InvalidOperationException($"会话不存在：{sessionId}");
 

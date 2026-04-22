@@ -1,4 +1,4 @@
-using Netor.Cortana.Plugin;
+using Netor.Cortana.Plugin.Native;
 
 namespace Cortana.Plugins.Bt;
 

@@ -1,4 +1,4 @@
-using Netor.Cortana.Plugin;
+using Netor.Cortana.Plugin.Native;
 
 using System.Text.Json;
 

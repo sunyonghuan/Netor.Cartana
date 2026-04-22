@@ -1,7 +1,7 @@
-using Cortana.Plugins.GoogleSearch.Services;
+﻿using Cortana.Plugins.GoogleSearch.Services;
 using Cortana.Plugins.GoogleSearch.Tools;
 using Microsoft.Extensions.DependencyInjection;
-using Netor.Cortana.Plugin;
+using Netor.Cortana.Plugin.Native;
 
 namespace Cortana.Plugins.GoogleSearch;
 
@@ -11,7 +11,7 @@ namespace Cortana.Plugins.GoogleSearch;
 [Plugin(
     Id = "google_search",
     Name = "谷歌搜索插件",
-    Version = "1.0.1",
+    Version = "1.0.11",
     Description = "提供 Google 搜索能力，支持网页搜索、站内搜索和图片搜索。",
     Tags = ["搜索", "Google", "网页搜索", "图片搜索"],
     Instructions = """

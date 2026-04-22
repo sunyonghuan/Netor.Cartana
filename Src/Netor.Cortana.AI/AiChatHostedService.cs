@@ -254,7 +254,11 @@ public sealed class AiChatHostedService(
                 contents.Add(new TextContent(userInput));
             }
 
-            // 读取附件文件并构建对应的 AIContent，同时导入到资源目录
+            // 读取附件文件并构建对应的 AIContent。
+            // 策略（方案 B）：
+            //   - 图片类：拷贝到工作区资源目录并写入 ChatMessageAssets 表，保留历史回看能力；
+            //   - 非图片（文档/代码/音视频等）：直接把**原始路径**发给 AI，不拷贝、不入表。
+            //     这样 AI 调用工具修改文件时，作用于用户看到的原文件，避免"AI 说改好了但原文件没变"的 BUG。
             if (attachments is { Count: > 0 })
             {
                 var assetEntities = new List<ChatMessageAssetEntity>();
@@ -270,58 +274,61 @@ public sealed class AiChatHostedService(
                             continue;
                         }
 
-                        var assetGroup = ResolveAssetGroup(attachment.MimeType);
-                        var relativePath = Path.Combine("histories", currentSessionId, assetGroup, messageId, attachment.Name);
-                        var absolutePath = Path.Combine(appPaths.WorkspaceResourcesDirectory, relativePath);
-
-                        // 确保目标目录存在并复制文件
-                        var targetDir = Path.GetDirectoryName(absolutePath)!;
-                        if (!Directory.Exists(targetDir))
-                            Directory.CreateDirectory(targetDir);
-
-                        File.Copy(attachment.Path, absolutePath, overwrite: true);
-
-                        // 计算文件元数据
-                        var fileInfo = new FileInfo(absolutePath);
-                        var sha256 = ComputeFileSha256(absolutePath);
-
-                        assetEntities.Add(new ChatMessageAssetEntity
-                        {
-                            SessionId = currentSessionId,
-                            MessageId = messageId,
-                            Role = "user",
-                            AssetGroup = assetGroup,
-                            AssetKind = "attachment",
-                            MimeType = attachment.MimeType,
-                            OriginalName = attachment.Name,
-                            RelativePath = relativePath,
-                            FileSizeBytes = fileInfo.Length,
-                            Sha256 = sha256,
-                            SortOrder = sortOrder++,
-                            SourceType = "local",
-                        });
-
                         if (IsImageMimeType(attachment.MimeType))
                         {
+                            // 图片：拷贝到资源目录 + 写入索引，保留历史回看
+                            var assetGroup = ResolveAssetGroup(attachment.MimeType);
+                            var relativePath = Path.Combine("histories", currentSessionId, assetGroup, messageId, attachment.Name);
+                            var absolutePath = Path.Combine(appPaths.WorkspaceResourcesDirectory, relativePath);
+
+                            var targetDir = Path.GetDirectoryName(absolutePath)!;
+                            if (!Directory.Exists(targetDir))
+                                Directory.CreateDirectory(targetDir);
+
+                            File.Copy(attachment.Path, absolutePath, overwrite: true);
+
+                            var fileInfo = new FileInfo(absolutePath);
+                            var sha256 = ComputeFileSha256(absolutePath);
+
+                            assetEntities.Add(new ChatMessageAssetEntity
+                            {
+                                SessionId = currentSessionId,
+                                MessageId = messageId,
+                                Role = "user",
+                                AssetGroup = assetGroup,
+                                AssetKind = "attachment",
+                                MimeType = attachment.MimeType,
+                                OriginalName = attachment.Name,
+                                RelativePath = relativePath,
+                                FileSizeBytes = fileInfo.Length,
+                                Sha256 = sha256,
+                                SortOrder = sortOrder++,
+                                SourceType = "local",
+                            });
+
                             var imageData = await DataContent.LoadFromAsync(absolutePath, attachment.MimeType, cancellationToken: _streamCts.Token);
                             contents.Add(imageData);
                             contents.Add(new TextContent($" ![{attachment.Name}]({absolutePath}) "));
+
+                            logger.LogInformation("已导入图片附件到资源目录：{Name}（{MimeType}）",
+                                attachment.Name, attachment.MimeType);
                         }
                         else
                         {
-                            contents.Add(new TextContent($" [{attachment.Name}]({absolutePath}) "));
-                        }
+                            // 文档/代码/音视频等：直接引用原始路径，不拷贝
+                            contents.Add(new TextContent($" [{attachment.Name}]({attachment.Path}) "));
 
-                        logger.LogInformation("已导入附件到资源目录：{Name}（{MimeType}）",
-                            attachment.Name, attachment.MimeType);
+                            logger.LogInformation("已引用用户附件（原始路径）：{Name}（{MimeType}）",
+                                attachment.Name, attachment.MimeType);
+                        }
                     }
                     catch (Exception ex) when (ex is not OperationCanceledException)
                     {
-                        logger.LogError(ex, "读取附件文件失败：{Path}", attachment.Path);
+                        logger.LogError(ex, "处理附件失败：{Path}", attachment.Path);
                     }
                 }
 
-                // 批量写入资源索引
+                // 批量写入资源索引（仅图片）
                 if (assetEntities.Count > 0)
                 {
                     try { assetService.BatchInsert(assetEntities); }

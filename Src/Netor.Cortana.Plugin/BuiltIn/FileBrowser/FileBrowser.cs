@@ -32,7 +32,7 @@ public sealed class FileBrowser
         // 文本文件
         ".txt", ".md", ".log", ".csv", ".json", ".xml", ".yaml", ".yml", ".ini", ".conf", ".toml", ".env", ".properties", ".rtf",
         // 代码文件
-        ".cs", ".java", ".js", ".ts", ".tsx", ".jsx", ".py", ".cpp", ".c", ".h", ".go", ".rs", ".rb", ".php", ".html", ".css", ".sql", ".sh", ".ps1", ".scala", ".kt", ".swift", ".m", ".lua", ".r", ".gradle", ".vue",
+        ".cs",".csx",  ".java", ".js", ".ts", ".tsx", ".jsx", ".py", ".cpp", ".c", ".h", ".go", ".rs", ".rb", ".php", ".html", ".css", ".sql", ".sh", ".ps1", ".scala", ".kt", ".swift", ".m", ".lua", ".r", ".gradle", ".vue",
         // 图片文件
         ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".svg", ".webp", ".ico", ".tiff", ".webp",
         // 视频文件

@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace Cortana.Plugins.ScriptRunner.Tools;
 
-/// <summary>sys_csx_run_file 参数。</summary>
+/// <summary>csx_run_file 参数。</summary>
 internal sealed record RunFileArgs
 {
     [JsonPropertyName("path")]
@@ -12,7 +12,7 @@ internal sealed record RunFileArgs
     public int? TimeoutMs { get; init; }
 }
 
-/// <summary>sys_csx_eval 参数。</summary>
+/// <summary>csx_eval 参数。</summary>
 internal sealed record EvalArgs
 {
     [JsonPropertyName("expr")]
@@ -22,14 +22,14 @@ internal sealed record EvalArgs
     public int? TimeoutMs { get; init; }
 }
 
-/// <summary>sys_csx_check / sys_csx_format 参数。</summary>
+/// <summary>csx_check / csx_format 参数。</summary>
 internal sealed record CodeArgs
 {
     [JsonPropertyName("code")]
     public string Code { get; init; } = string.Empty;
 }
 
-/// <summary>sys_csx_check 响应。</summary>
+/// <summary>csx_check 响应。</summary>
 internal sealed record CheckResult
 {
     [JsonPropertyName("diagnostics")]
@@ -55,7 +55,7 @@ internal sealed record DiagnosticInfo
     public string Message { get; init; } = string.Empty;
 }
 
-/// <summary>sys_csx_format 响应。</summary>
+/// <summary>csx_format 响应。</summary>
 internal sealed record FormatResult
 {
     [JsonPropertyName("formatted")]

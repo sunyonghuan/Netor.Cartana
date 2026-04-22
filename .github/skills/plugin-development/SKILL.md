@@ -1,6 +1,6 @@
 ---
 name: plugin-development
-version: 2
+version: 3
 description: ' 插件开发全流程技能。按通道类型引导：Native DLL / Process EXE / MCP。主推 C#（提供脚手架），其他语言提供协议规范。触发关键词：插件开发、创建插件、发布插件、Native 插件、Process 插件、MCP 接入。'
 user-invocable: true
 ---
@@ -52,7 +52,6 @@ user-invocable: true
 
 细节：[references/csharp-native.md](./references/csharp-native.md)
 错误速查：[references/csharp-aot-errors.md](./references/csharp-aot-errors.md)
-参考实现：[Samples/NativeTestPlugin/](../../Samples/NativeTestPlugin)
 
 ### 其他语言（C / C++ / Rust / Go / Zig）
 
@@ -72,7 +71,7 @@ user-invocable: true
 .\scripts\publish-process-plugin.ps1 -ProjectDir Samples\MyPlugin
 ```
 
-脚手架基于 [references/template-process-csharp/](./references/template-process-csharp)。生产级参考：[Plugins/Src/Cortana.Plugins.ScriptRunner/](../../Plugins/Src/Cortana.Plugins.ScriptRunner)。
+脚手架基于 [references/template-process-csharp/](./references/template-process-csharp)。
 
 ### 其他语言（Python / Node.js / Go / Rust ...）
 
@@ -99,8 +98,8 @@ user-invocable: true
 
 | 想做 | 看 |
 |---|---|
-| C# 原生 DLL 插件 | [references/csharp-native.md](./references/csharp-native.md) + [Samples/NativeTestPlugin](../../Samples/NativeTestPlugin) |
-| C# EXE 子进程插件 | [references/template-process-csharp/](./references/template-process-csharp) + [ScriptRunner](../../Plugins/Src/Cortana.Plugins.ScriptRunner) |
+| C# 原生 DLL 插件 | [references/csharp-native.md](./references/csharp-native.md) |
+| C# EXE 子进程插件 | [references/template-process-csharp/](./references/template-process-csharp) |
 | Python / Node / Go / Rust 子进程插件 | [references/process-protocol.md](./references/process-protocol.md) |
 | MCP 接入 | [references/mcp-setup.md](./references/mcp-setup.md) |
 | AOT 编译错误 | [references/csharp-aot-errors.md](./references/csharp-aot-errors.md) |

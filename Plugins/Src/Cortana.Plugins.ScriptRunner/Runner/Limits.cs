@@ -2,7 +2,7 @@ namespace Cortana.Plugins.ScriptRunner.Runner;
 
 /// <summary>
 /// 传输/执行尺寸上限。超过即走 Fail 分支，防止"蠢 AI"把巨型负载塞进 args 导致插件 OOM。
-/// 大脚本请用 sys_csx_run_file；大参数请先写到文件再把路径传入。
+/// 大脚本请用 csx_run_file；大参数请先写到文件再把路径传入。
 /// </summary>
 internal static class Limits
 {
