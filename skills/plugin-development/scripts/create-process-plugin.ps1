@@ -60,9 +60,51 @@ Set-Content -Path (Join-Path $ProjectDir "$Name.csproj") -Value $csproj -Encodin
 $program = @"
 using $Name;
 
+if (args.Contains(""--self-test"", StringComparer.OrdinalIgnoreCase))
+{
+#if DEBUG
+    return await SelfTest.RunAsync();
+#else
+    Console.Error.WriteLine(""Self-test is only available in Debug builds."");
+    return 2;
+#endif
+}
+
 await Startup.RunPluginAsync();
+return 0;
 "@
 Set-Content -Path (Join-Path $ProjectDir 'Program.cs') -Value $program -Encoding UTF8
+
+$selfTest = @"
+namespace $Name;
+
+#if DEBUG
+internal static class SelfTest
+{
+    public static async Task<int> RunAsync()
+    {
+        await using var debugger = StartupDebugger.Create();
+        await debugger.InitAsync();
+
+        var failed = false;
+
+        try
+        {
+            var result = await debugger.HelloAsync(""Copilot"");
+            Console.WriteLine(`$""[PASS] HelloAsync => {result}"");
+        }
+        catch (Exception ex)
+        {
+            failed = true;
+            Console.Error.WriteLine(`$""[FAIL] HelloAsync => {ex.Message}"");
+        }
+
+        return failed ? 1 : 0;
+    }
+}
+#endif
+"@
+Set-Content -Path (Join-Path $ProjectDir 'SelfTest.cs') -Value $selfTest -Encoding UTF8
 
 $startup = @"
 using Microsoft.Extensions.DependencyInjection;
@@ -147,16 +189,24 @@ $readme = @"
 1. 在 Tools/ 中继续添加 [Tool] 方法。
 2. 返回自定义对象时，把类型补到 PluginJsonContext。
 3. 执行 dotnet build，检查 obj/generated 和 bin/plugin.json。
+4. 执行 dotnet run -- --self-test，在插件项目自身内跑内置自测入口。
+5. 在 SelfTest.cs 里使用 StartupDebugger 对每一个工具方法逐个测试，确认参数、返回值和序列化都正确。
 
 ## 调试
 
-构建后会自动生成 StartupDebugger，可直接这样调用：
+Program.cs 默认走正式插件入口；传入 --self-test 时会进入 SelfTest.cs。
+SelfTest.cs 只在 Debug 条件编译下参与构建，不进入 Release / AOT 发布路径。
+
+构建后会自动生成 StartupDebugger，可直接在 SelfTest.cs 里这样调用：
 
 ```csharp
 await using var debugger = StartupDebugger.Create();
 await debugger.InitAsync();
 var result = await debugger.HelloAsync("Copilot");
 ```
+
+如果你新增了多个工具方法，要把每个方法都调用一遍；不要只跑一个 Hello 示例就直接发布。
+任一工具测试失败时，SelfTest.RunAsync() 应返回非 0 退出码。
 "@
 Set-Content -Path (Join-Path $ProjectDir 'README.md') -Value $readme -Encoding UTF8
 
@@ -165,5 +215,7 @@ Write-Host ""
 Write-Host "后续步骤:" -ForegroundColor Cyan
 Write-Host "  1. cd $ProjectDir" -ForegroundColor Gray
 Write-Host "  2. dotnet build          # 验证 Generator 输出与 plugin.json" -ForegroundColor Gray
-Write-Host "  3. 查看 obj\...\generated 中的 Program.g.cs 和 StartupDebugger.g.cs" -ForegroundColor Gray
-Write-Host "  4. publish-process-plugin.ps1 -ProjectDir Samples\$Name" -ForegroundColor Gray
+Write-Host "  3. dotnet run -- --self-test   # 在项目自身内跑自测" -ForegroundColor Gray
+Write-Host "  4. 在 SelfTest.cs 里补齐每个工具方法的测试调用" -ForegroundColor Gray
+Write-Host "  5. 查看 obj\...\generated 中的 Program.g.cs 和 StartupDebugger.g.cs" -ForegroundColor Gray
+Write-Host "  6. publish-process-plugin.ps1 -ProjectDir Samples\$Name" -ForegroundColor Gray

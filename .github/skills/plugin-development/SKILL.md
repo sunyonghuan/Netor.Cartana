@@ -1,6 +1,6 @@
 ---
 name: plugin-development
-version: 5
+version: 6
 description: ' 插件开发全流程技能。按通道类型引导：Native DLL / Process EXE / MCP。主推 C#（提供脚手架），其他语言提供协议规范。触发关键词：插件开发、创建插件、发布插件、Native 插件、Process 插件、MCP 接入。'
 user-invocable: true
 ---
@@ -72,6 +72,7 @@ user-invocable: true
 ```
 
 脚手架默认引用 `Netor.Cortana.Plugin.Process` 框架；编译时会自动生成消息循环、`plugin.json` 和 `{PluginClass}Debugger`。
+对于 C# Process 插件，测试优先在插件项目自身内完成，默认使用 `dotnet run -- --self-test` 进入内置自测模式，不额外新建脚本或测试工程。
 
 ### 其他语言（Python / Node.js / Go / Rust ...）
 

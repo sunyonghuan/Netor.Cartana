@@ -39,6 +39,7 @@ public sealed class FileBrowserProvider : AIContextProvider
     - If the user wants to access a path outside the workspace, do not use these tools yet. First get explicit user consent to change the workspace directory, then change the workspace directory, then continue.
     - Prefer relative paths when working inside the workspace.
     - Use sys_list_directory first when the target path is uncertain.
+    - Use sys_read_file with line numbers to inspect exact ranges before calling sys_edit_file.
     - Read only allowed text/code/document/media/archive file types.
     - Read file size limit: 10 MB.
     - Directory listing limit: 100 items. Search result limit: 50 items.
@@ -63,7 +64,7 @@ public sealed class FileBrowserProvider : AIContextProvider
         // 工具3：读取文件内容
         _tools.Add(AIFunctionFactory.Create(
             name: "sys_read_file",
-            description: "Read a text or code file in the current workspace directory. Allowed file types only, up to 10 MB.",
+            description: "Read a text or code file in the current workspace directory. Supports 1-based line ranges, optional line numbers, and returns hash/encoding/newline metadata for safe edits.",
             method: ReadFileAsync));
 
         // 工具4：搜索文件
@@ -176,17 +177,49 @@ public sealed class FileBrowserProvider : AIContextProvider
         }
     }
 
-    private async Task<string> ReadFileAsync(string path, CancellationToken ct = default)
+    private async Task<string> ReadFileAsync(
+        string path,
+        int? startLine = null,
+        int? endLine = null,
+        bool withLineNumbers = true,
+        CancellationToken ct = default)
     {
         try
         {
             if (string.IsNullOrWhiteSpace(path))
                 return "✗ 错误：路径不能为空";
 
-            var content = _fileBrowser.ReadFileContent(path);
+            var readResult = _fileBrowser.ReadFileContent(path, startLine, endLine, withLineNumbers);
 
-            if (content == null || content.StartsWith("错误"))
-                return content ?? "✗ 无法读取文件";
+            if (!readResult.IsSuccess)
+                return $"✗ 错误：{readResult.ErrorMessage}";
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"✓ 文件内容: {readResult.Path}");
+            sb.AppendLine($"总行数: {readResult.TotalLines}");
+            sb.AppendLine($"当前范围: {readResult.StartLine}-{readResult.EndLine}");
+            sb.AppendLine($"编码: {readResult.Encoding}");
+            sb.AppendLine($"换行: {readResult.NewLine}");
+            sb.AppendLine($"哈希: {readResult.Hash}");
+            sb.AppendLine();
+
+            if (readResult.Lines.Count == 0)
+            {
+                sb.AppendLine("(空文件)");
+            }
+            else
+            {
+                var lineNumberWidth = readResult.EndLine.ToString().Length;
+                foreach (var line in readResult.Lines)
+                {
+                    if (readResult.WithLineNumbers)
+                        sb.AppendLine($"{line.LineNumber.ToString().PadLeft(lineNumberWidth)}: {line.Content}");
+                    else
+                        sb.AppendLine(line.Content);
+                }
+            }
+
+            var content = sb.ToString();
 
             // 限制输出大小（防止过长）
             var maxLength = 50000;
@@ -195,7 +228,7 @@ public sealed class FileBrowserProvider : AIContextProvider
                 content = content.Substring(0, maxLength) + $"\n\n... (文件过长，只显示前 {maxLength} 字符)";
             }
 
-            return $"✓ 文件内容:\n\n{content}";
+            return content;
         }
         catch (Exception ex)
         {
