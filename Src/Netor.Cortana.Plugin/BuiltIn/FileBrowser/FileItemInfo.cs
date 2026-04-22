@@ -192,3 +192,71 @@ public sealed class FileSearchResult
     /// </summary>
     public long ElapsedMs { get; set; }
 }
+
+internal sealed record TextFileLine(int LineNumber, string Content);
+
+internal sealed class TextFileReadResult
+{
+    private TextFileReadResult(
+        bool isSuccess,
+        string path,
+        int totalLines,
+        int startLine,
+        int endLine,
+        bool withLineNumbers,
+        string encoding,
+        string newLine,
+        string hash,
+        List<TextFileLine> lines,
+        string? errorMessage)
+    {
+        IsSuccess = isSuccess;
+        Path = path;
+        TotalLines = totalLines;
+        StartLine = startLine;
+        EndLine = endLine;
+        WithLineNumbers = withLineNumbers;
+        Encoding = encoding;
+        NewLine = newLine;
+        Hash = hash;
+        Lines = lines;
+        ErrorMessage = errorMessage;
+    }
+
+    public bool IsSuccess { get; }
+
+    public string Path { get; }
+
+    public int TotalLines { get; }
+
+    public int StartLine { get; }
+
+    public int EndLine { get; }
+
+    public bool WithLineNumbers { get; }
+
+    public string Encoding { get; }
+
+    public string NewLine { get; }
+
+    public string Hash { get; }
+
+    public List<TextFileLine> Lines { get; }
+
+    public string? ErrorMessage { get; }
+
+    public static TextFileReadResult CreateSuccess(
+        string path,
+        int totalLines,
+        int startLine,
+        int endLine,
+        bool withLineNumbers,
+        string encoding,
+        string newLine,
+        string hash,
+        List<TextFileLine> lines)
+        => new(true, path, totalLines, startLine, endLine, withLineNumbers, encoding, newLine, hash, lines, null);
+
+    public static TextFileReadResult CreateError(string path, string errorMessage)
+        => new(false, path, 0, 0, 0, false, string.Empty, string.Empty, string.Empty, [], errorMessage);
+}

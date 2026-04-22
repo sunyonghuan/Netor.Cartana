@@ -62,8 +62,13 @@ public sealed class FileOperationProvider : AIContextProvider
 
         _tools.Add(AIFunctionFactory.Create(
             name: "sys_write_file",
-            description: "Write or replace a file in the current workspace directory. backup defaults to true.",
+            description: "Write a file in the current workspace directory. Creates the file if it does not exist, or replaces it if it already exists. backup defaults to true for existing files.",
             method: (string path, string content, bool backup) => _fileOperator.WriteFile(path, content, backup)));
+
+        _tools.Add(AIFunctionFactory.Create(
+            name: "sys_edit_file",
+            description: "Edit an existing text file by 1-based line numbers. operation supports replace, insert, and delete. Use sys_read_file first to get exact line numbers and hash. backup defaults to true.",
+            method: EditFileAsync));
 
         _tools.Add(AIFunctionFactory.Create(
             name: "sys_delete_file",
@@ -100,11 +105,55 @@ public sealed class FileOperationProvider : AIContextProvider
         - If the user wants to operate on a path outside the workspace, do not use these tools yet. First get explicit user consent to change the workspace directory, then change the workspace directory, then continue.
         - Prefer relative paths when working inside the workspace.
         - Do not use .. to escape the workspace boundary.
-        - sys_write_file and sys_delete_file back up files by default.
+        - sys_write_file and sys_delete_file back up existing files by default.
+        - sys_edit_file backs up the original file by default before applying line-based edits.
         - Backups are stored under .cortana/backups inside the workspace.
         - Keep backup enabled unless the user explicitly asks to disable it.
-        - sys_create_file does not overwrite existing files. Use sys_write_file when replacement is intended.
+        - sys_create_file does not overwrite existing files. Use it when creation must fail if the file already exists.
+        - sys_write_file creates a new file when missing, or replaces the existing file when present.
+        - Before sys_edit_file, call sys_read_file to get exact 1-based line numbers and the latest hash.
+        - sys_edit_file operations: replace and delete require startLine/endLine; insert inserts before startLine, and startLine can be totalLines + 1 to append.
+        - Pass expectedHash from sys_read_file whenever possible to avoid editing stale content.
         - sys_delete_directory only works for empty directories.
         - For move operations, both source and destination must stay inside the workspace.
         """;
+
+    private Task<string> EditFileAsync(
+        string path,
+        string operation,
+        int startLine,
+        int? endLine = null,
+        string? content = null,
+        bool backup = true,
+        string? expectedHash = null)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return Task.FromResult("✗ 错误：路径不能为空");
+
+            if (string.IsNullOrWhiteSpace(operation))
+                return Task.FromResult("✗ 错误：operation 不能为空");
+
+            var result = _fileOperator.EditFile(path, operation, startLine, endLine, content, backup, expectedHash);
+            if (!result.IsSuccess)
+                return Task.FromResult($"✗ 错误：{result.ErrorMessage}");
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"✓ 文件已编辑: {result.Path}");
+            sb.AppendLine($"操作: {result.Operation}");
+            sb.AppendLine($"改动范围: {result.StartLine}-{result.EndLine}");
+            sb.AppendLine($"改动行数: {result.ChangedLineCount}");
+
+            if (!string.IsNullOrWhiteSpace(result.BackupPath))
+                sb.AppendLine($"备份: {result.BackupPath}");
+
+            return Task.FromResult(sb.ToString().TrimEnd());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "按行编辑文件失败: {Path} Operation: {Operation}", path, operation);
+            return Task.FromResult($"✗ 错误：{ex.Message}");
+        }
+    }
 }

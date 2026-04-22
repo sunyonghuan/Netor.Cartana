@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 
 using Microsoft.Extensions.Logging;
@@ -12,6 +13,8 @@ namespace Netor.Cortana.Plugin.BuiltIn.FileBrowser;
 /// </summary>
 public sealed class FileOperator
 {
+    private const string WorkspaceBoundaryViolationMessage = "当前路径超出工作目录边界。如需访问工作目录外的路径，请先提醒用户并获得用户明确同意。";
+
     private readonly IAppPaths _appPaths;
     private readonly ILogger<FileOperator> _logger;
 
@@ -57,7 +60,7 @@ public sealed class FileOperator
     }
 
     /// <summary>
-    /// 修改/覆盖文件内容。
+    /// 写入文件内容；文件不存在时创建，已存在时覆盖。
     /// </summary>
     public string WriteFile(string path, string content, bool backup = true)
     {
@@ -65,24 +68,96 @@ public sealed class FileOperator
         {
             var fullPath = ResolveSafePath(path);
 
-            if (!File.Exists(fullPath))
-                return $"错误：文件不存在 - {fullPath}";
+            var fileExists = File.Exists(fullPath);
+
+            var dir = Path.GetDirectoryName(fullPath);
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
 
             string? backupPath = null;
-            if (backup)
+            if (fileExists && backup)
+            {
                 backupPath = BackupFile(fullPath);
+            }
 
-            File.WriteAllText(fullPath, content ?? "", Encoding.UTF8);
+            if (fileExists)
+            {
+                var document = TextFileDocument.Load(fullPath);
+                document.SetContent(content ?? string.Empty);
+                document.Save();
+            }
+            else
+            {
+                File.WriteAllText(fullPath, content ?? "", new UTF8Encoding(false));
+            }
 
-            _logger.LogInformation("文件已修改：{Path}", fullPath);
+            if (!fileExists)
+            {
+                _logger.LogInformation("文件已写入：{Path}", fullPath);
+                return $"文件已写入：{fullPath}";
+            }
+
+            _logger.LogInformation("文件已写入：{Path}", fullPath);
             return backupPath is not null
-                ? $"文件已修改：{fullPath}，已备份到 {backupPath}"
-                : $"文件已修改：{fullPath}";
+                ? $"文件已写入：{fullPath}，已备份到 {backupPath}"
+                : $"文件已写入：{fullPath}";
         }
         catch (Exception ex) when (ex is not SecurityException)
         {
-            _logger.LogError(ex, "修改文件失败：{Path}", path);
-            return $"错误：修改文件失败 - {ex.Message}";
+            _logger.LogError(ex, "写入文件失败：{Path}", path);
+            return $"错误：写入文件失败 - {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// 按 1-based 行号编辑文件内容。
+    /// </summary>
+    internal FileEditResult EditFile(
+        string path,
+        string operation,
+        int startLine,
+        int? endLine = null,
+        string? content = null,
+        bool backup = true,
+        string? expectedHash = null)
+    {
+        try
+        {
+            var fullPath = ResolveSafePath(path);
+
+            if (!File.Exists(fullPath))
+                return FileEditResult.CreateError(path, "文件不存在");
+
+            var document = TextFileDocument.Load(fullPath);
+
+            if (!string.IsNullOrWhiteSpace(expectedHash)
+                && !string.Equals(document.Hash, expectedHash, StringComparison.OrdinalIgnoreCase))
+            {
+                return FileEditResult.CreateError(path, "文件内容已变化，请先重新调用 sys_read_file 获取最新行号和哈希");
+            }
+
+            var normalizedOperation = operation?.Trim().ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(normalizedOperation))
+                return FileEditResult.CreateError(path, "operation 不能为空，仅支持 replace / insert / delete");
+
+            string? backupPath = null;
+            if (backup)
+            {
+                backupPath = BackupFile(fullPath);
+            }
+
+            return normalizedOperation switch
+            {
+                "replace" => ReplaceLines(path, document, startLine, endLine, content, backupPath),
+                "insert" => InsertLines(path, document, startLine, content, backupPath),
+                "delete" => DeleteLines(path, document, startLine, endLine, backupPath),
+                _ => FileEditResult.CreateError(path, $"不支持的 operation: {operation}，仅支持 replace / insert / delete")
+            };
+        }
+        catch (Exception ex) when (ex is not SecurityException)
+        {
+            _logger.LogError(ex, "按行编辑文件失败：{Path} Operation: {Operation}", path, operation);
+            return FileEditResult.CreateError(path, $"按行编辑文件失败 - {ex.Message}");
         }
     }
 
@@ -221,7 +296,7 @@ public sealed class FileOperator
         if (!fullPath.StartsWith(workspace + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
             && !fullPath.Equals(workspace, StringComparison.OrdinalIgnoreCase))
         {
-            throw new SecurityException($"禁止操作工作目录以外的路径：{fullPath}");
+            throw new SecurityException($"{WorkspaceBoundaryViolationMessage} 路径：{fullPath}");
         }
 
         return fullPath;
@@ -253,4 +328,327 @@ public sealed class FileOperator
     /// 安全异常，用于路径越界。
     /// </summary>
     private sealed class SecurityException(string message) : Exception(message);
+
+    private FileEditResult ReplaceLines(
+        string path,
+        TextFileDocument document,
+        int startLine,
+        int? endLine,
+        string? content,
+        string? backupPath)
+    {
+        if (endLine is null)
+            return FileEditResult.CreateError(path, "replace 操作必须提供 endLine");
+
+        if (content is null)
+            return FileEditResult.CreateError(path, "replace 操作必须提供 content");
+
+        if (!TryValidateLineRange(document.TotalLines, startLine, endLine.Value, out var rangeError))
+            return FileEditResult.CreateError(path, rangeError);
+
+        var replacementLines = TextFileDocument.ParseContentLines(content);
+        document.Lines.RemoveRange(startLine - 1, endLine.Value - startLine + 1);
+        document.Lines.InsertRange(startLine - 1, replacementLines);
+        document.Save();
+
+        var changedLineCount = Math.Max(endLine.Value - startLine + 1, replacementLines.Count);
+        var affectedEndLine = replacementLines.Count == 0 ? startLine - 1 : startLine + replacementLines.Count - 1;
+
+        _logger.LogInformation("文件已按行替换：{Path} {StartLine}-{EndLine}", document.FullPath, startLine, endLine.Value);
+
+        return FileEditResult.CreateSuccess(
+            path: document.FullPath,
+            operation: "replace",
+            startLine: startLine,
+            endLine: affectedEndLine,
+            changedLineCount: changedLineCount,
+            backupPath: backupPath);
+    }
+
+    private FileEditResult InsertLines(
+        string path,
+        TextFileDocument document,
+        int startLine,
+        string? content,
+        string? backupPath)
+    {
+        if (content is null)
+            return FileEditResult.CreateError(path, "insert 操作必须提供 content");
+
+        if (startLine < 1 || startLine > document.TotalLines + 1)
+        {
+            return FileEditResult.CreateError(
+                path,
+                $"startLine 越界：{startLine}，有效范围为 1 到 {document.TotalLines + 1}");
+        }
+
+        var insertedLines = TextFileDocument.ParseContentLines(content);
+        document.Lines.InsertRange(startLine - 1, insertedLines);
+        document.Save();
+
+        var affectedEndLine = insertedLines.Count == 0 ? startLine - 1 : startLine + insertedLines.Count - 1;
+
+        _logger.LogInformation("文件已按行插入：{Path} BeforeLine: {StartLine}", document.FullPath, startLine);
+
+        return FileEditResult.CreateSuccess(
+            path: document.FullPath,
+            operation: "insert",
+            startLine: startLine,
+            endLine: affectedEndLine,
+            changedLineCount: insertedLines.Count,
+            backupPath: backupPath);
+    }
+
+    private FileEditResult DeleteLines(
+        string path,
+        TextFileDocument document,
+        int startLine,
+        int? endLine,
+        string? backupPath)
+    {
+        if (endLine is null)
+            return FileEditResult.CreateError(path, "delete 操作必须提供 endLine");
+
+        if (!TryValidateLineRange(document.TotalLines, startLine, endLine.Value, out var rangeError))
+            return FileEditResult.CreateError(path, rangeError);
+
+        document.Lines.RemoveRange(startLine - 1, endLine.Value - startLine + 1);
+        document.Save();
+
+        _logger.LogInformation("文件已按行删除：{Path} {StartLine}-{EndLine}", document.FullPath, startLine, endLine.Value);
+
+        return FileEditResult.CreateSuccess(
+            path: document.FullPath,
+            operation: "delete",
+            startLine: startLine,
+            endLine: endLine.Value,
+            changedLineCount: endLine.Value - startLine + 1,
+            backupPath: backupPath);
+    }
+
+    private static bool TryValidateLineRange(int totalLines, int startLine, int endLine, out string error)
+    {
+        if (totalLines == 0)
+        {
+            error = "文件为空，没有可编辑的行";
+            return false;
+        }
+
+        if (startLine < 1 || startLine > totalLines)
+        {
+            error = $"startLine 越界：{startLine}，有效范围为 1 到 {totalLines}";
+            return false;
+        }
+
+        if (endLine < startLine || endLine > totalLines)
+        {
+            error = $"endLine 越界：{endLine}，有效范围为 {startLine} 到 {totalLines}";
+            return false;
+        }
+
+        error = string.Empty;
+        return true;
+    }
+}
+
+internal sealed class TextFileDocument
+{
+    private static readonly UTF8Encoding StrictUtf8NoBom = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+
+    private TextFileDocument(
+        string fullPath,
+        List<string> lines,
+        Encoding encoding,
+        bool hasBom,
+        string newLine,
+        bool endsWithNewLine,
+        string hash)
+    {
+        FullPath = fullPath;
+        Lines = lines;
+        Encoding = encoding;
+        HasBom = hasBom;
+        NewLine = newLine;
+        EndsWithNewLine = endsWithNewLine;
+        Hash = hash;
+    }
+
+    public string FullPath { get; }
+
+    public List<string> Lines { get; }
+
+    public Encoding Encoding { get; }
+
+    public bool HasBom { get; }
+
+    public string NewLine { get; }
+
+    public bool EndsWithNewLine { get; private set; }
+
+    public string Hash { get; }
+
+    public int TotalLines => Lines.Count;
+
+    public string EncodingDisplayName => HasBom ? $"{Encoding.WebName} (BOM)" : Encoding.WebName;
+
+    public string NewLineDisplayName => NewLine == "\r\n" ? "CRLF" : "LF";
+
+    public static TextFileDocument Load(string fullPath)
+    {
+        var bytes = File.ReadAllBytes(fullPath);
+        var (encoding, preambleLength, hasBom) = DetectEncoding(bytes);
+        var content = encoding.GetString(bytes, preambleLength, bytes.Length - preambleLength);
+        var endsWithNewLine = content.EndsWith("\r\n", StringComparison.Ordinal)
+            || content.EndsWith("\n", StringComparison.Ordinal);
+        var newLine = DetectNewLine(content);
+        var lines = ParseContentLines(content);
+        var hash = Convert.ToHexString(SHA256.HashData(bytes));
+
+        return new TextFileDocument(fullPath, lines, encoding, hasBom, newLine, endsWithNewLine, hash);
+    }
+
+    public void SetContent(string content)
+    {
+        var normalizedContent = content ?? string.Empty;
+        EndsWithNewLine = normalizedContent.EndsWith("\r\n", StringComparison.Ordinal)
+            || normalizedContent.EndsWith("\n", StringComparison.Ordinal);
+
+        Lines.Clear();
+        Lines.AddRange(ParseContentLines(normalizedContent));
+    }
+
+    public void Save()
+    {
+        var content = Lines.Count == 0
+            ? string.Empty
+            : string.Join(NewLine, Lines);
+
+        if (EndsWithNewLine && Lines.Count > 0)
+        {
+            content += NewLine;
+        }
+
+        File.WriteAllText(FullPath, content, Encoding);
+    }
+
+    public static List<string> ParseContentLines(string content)
+    {
+        if (string.IsNullOrEmpty(content))
+            return [];
+
+        var normalized = content.Replace("\r\n", "\n", StringComparison.Ordinal);
+        var endsWithNewLine = normalized.EndsWith('\n');
+
+        if (endsWithNewLine)
+            normalized = normalized[..^1];
+
+        if (normalized.Length == 0)
+            return [string.Empty];
+
+        return normalized.Split('\n').ToList();
+    }
+
+    private static string DetectNewLine(string content)
+    {
+        if (content.Contains("\r\n", StringComparison.Ordinal))
+            return "\r\n";
+
+        if (content.Contains('\n'))
+            return "\n";
+
+        return Environment.NewLine == "\r\n" ? "\r\n" : "\n";
+    }
+
+    private static (Encoding Encoding, int PreambleLength, bool HasBom) DetectEncoding(byte[] bytes)
+    {
+        if (StartsWith(bytes, 0xEF, 0xBB, 0xBF))
+            return (new UTF8Encoding(encoderShouldEmitUTF8Identifier: true), 3, true);
+
+        if (StartsWith(bytes, 0xFF, 0xFE, 0x00, 0x00))
+            return (new UTF32Encoding(bigEndian: false, byteOrderMark: true), 4, true);
+
+        if (StartsWith(bytes, 0x00, 0x00, 0xFE, 0xFF))
+            return (new UTF32Encoding(bigEndian: true, byteOrderMark: true), 4, true);
+
+        if (StartsWith(bytes, 0xFF, 0xFE))
+            return (new UnicodeEncoding(bigEndian: false, byteOrderMark: true), 2, true);
+
+        if (StartsWith(bytes, 0xFE, 0xFF))
+            return (new UnicodeEncoding(bigEndian: true, byteOrderMark: true), 2, true);
+
+        try
+        {
+            StrictUtf8NoBom.GetString(bytes);
+            return (new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), 0, false);
+        }
+        catch (DecoderFallbackException)
+        {
+            return (Encoding.Default, 0, false);
+        }
+    }
+
+    private static bool StartsWith(byte[] bytes, params byte[] prefix)
+    {
+        if (bytes.Length < prefix.Length)
+            return false;
+
+        for (var index = 0; index < prefix.Length; index++)
+        {
+            if (bytes[index] != prefix[index])
+                return false;
+        }
+
+        return true;
+    }
+}
+
+internal sealed class FileEditResult
+{
+    private FileEditResult(
+        bool isSuccess,
+        string path,
+        string operation,
+        int startLine,
+        int endLine,
+        int changedLineCount,
+        string? backupPath,
+        string? errorMessage)
+    {
+        IsSuccess = isSuccess;
+        Path = path;
+        Operation = operation;
+        StartLine = startLine;
+        EndLine = endLine;
+        ChangedLineCount = changedLineCount;
+        BackupPath = backupPath;
+        ErrorMessage = errorMessage;
+    }
+
+    public bool IsSuccess { get; }
+
+    public string Path { get; }
+
+    public string Operation { get; }
+
+    public int StartLine { get; }
+
+    public int EndLine { get; }
+
+    public int ChangedLineCount { get; }
+
+    public string? BackupPath { get; }
+
+    public string? ErrorMessage { get; }
+
+    public static FileEditResult CreateSuccess(
+        string path,
+        string operation,
+        int startLine,
+        int endLine,
+        int changedLineCount,
+        string? backupPath)
+        => new(true, path, operation, startLine, endLine, changedLineCount, backupPath, null);
+
+    public static FileEditResult CreateError(string path, string errorMessage)
+        => new(false, path, string.Empty, 0, 0, 0, null, errorMessage);
 }
