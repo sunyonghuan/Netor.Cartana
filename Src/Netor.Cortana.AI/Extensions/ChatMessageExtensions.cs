@@ -65,6 +65,7 @@ public static class ChatMessageExtensions
         return content switch
         {
             TextContent text => text.Text,
+            TextReasoningContent reasoning => reasoning.Text,
             FunctionCallContent functionCall => RenderFunctionCall(functionCall),
             FunctionResultContent functionResult => RenderFunctionResult(functionResult),
             DataContent data => RenderDataContent(data),
@@ -251,6 +252,14 @@ public static class ChatMessageExtensions
             case TextContent text:
                 return new PersistedContent { Kind = "text", Text = text.Text };
 
+            case TextReasoningContent reasoning:
+                return new PersistedContent
+                {
+                    Kind = "reasoning",
+                    Text = reasoning.Text,
+                    ProtectedData = reasoning.ProtectedData
+                };
+
             case FunctionCallContent call:
                 string? argsJson = null;
                 if (call.Arguments is not null && call.Arguments.Count > 0)
@@ -299,6 +308,38 @@ public static class ChatMessageExtensions
                     ExceptionMessage = result.Exception?.Message
                 };
 
+            case McpServerToolCallContent mcpToolCall:
+                return new PersistedContent
+                {
+                    Kind = "toolCall",
+                    CallId = mcpToolCall.CallId,
+                    Name = mcpToolCall.Name,
+                    ServerName = mcpToolCall.ServerName,
+                    RawArgumentsJson = SerializeToolArguments(mcpToolCall.Arguments)
+                };
+
+            case ToolCallContent toolCall:
+                return new PersistedContent
+                {
+                    Kind = "toolCall",
+                    CallId = toolCall.CallId
+                };
+
+            case McpServerToolResultContent mcpToolResult:
+                return new PersistedContent
+                {
+                    Kind = "toolResult",
+                    CallId = mcpToolResult.CallId,
+                    RawOutputsJson = SerializeOutputs(mcpToolResult.Outputs)
+                };
+
+            case ToolResultContent toolResult:
+                return new PersistedContent
+                {
+                    Kind = "toolResult",
+                    CallId = toolResult.CallId
+                };
+
             case DataContent data:
                 // 仅存引用信息，不内联二进制（由 ChatMessageAssets 表维护）
                 return new PersistedContent
@@ -322,6 +363,11 @@ public static class ChatMessageExtensions
         {
             case "text":
                 return string.IsNullOrEmpty(p.Text) ? null : new TextContent(p.Text);
+
+            case "reasoning":
+                var reasoning = new TextReasoningContent(p.Text);
+                reasoning.ProtectedData = p.ProtectedData;
+                return reasoning;
 
             case "functionCall":
                 IDictionary<string, object?>? args = null;
@@ -356,6 +402,29 @@ public static class ChatMessageExtensions
                     callId: p.CallId ?? string.Empty,
                     result: resultObj);
 
+            case "toolCall":
+                if (!string.IsNullOrWhiteSpace(p.Name))
+                {
+                    var mcpCall = new McpServerToolCallContent(
+                        callId: p.CallId ?? string.Empty,
+                        name: p.Name,
+                        serverName: p.ServerName);
+                    mcpCall.Arguments = DeserializeToolArguments(p.RawArgumentsJson);
+                    return mcpCall;
+                }
+                return string.IsNullOrWhiteSpace(p.CallId) ? null : new ToolCallContent(p.CallId);
+
+            case "toolResult":
+                if (!string.IsNullOrWhiteSpace(p.RawOutputsJson))
+                {
+                    var mcpResult = new McpServerToolResultContent(p.CallId ?? string.Empty)
+                    {
+                        Outputs = DeserializeOutputs(p.RawOutputsJson)
+                    };
+                    return mcpResult;
+                }
+                return string.IsNullOrWhiteSpace(p.CallId) ? null : new ToolResultContent(p.CallId);
+
             case "data":
                 // 历史 Data 内容不回灌到 AI 上下文（由 BuildContentsWithAssets 单独处理图片资源）
                 return null;
@@ -383,6 +452,102 @@ public static class ChatMessageExtensions
             _ => JsonSerializer.Serialize(value.ToString(), PersistedArgumentsJsonContext.Default.String)
         };
         return JsonDocument.Parse(json).RootElement;
+    }
+
+    private static string? SerializeToolArguments(IDictionary<string, object?>? arguments)
+    {
+        if (arguments is null || arguments.Count == 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            var normalized = new Dictionary<string, JsonElement>(arguments.Count, StringComparer.Ordinal);
+            foreach (var pair in arguments)
+            {
+                normalized[pair.Key] = NormalizeToJsonElement(pair.Value);
+            }
+
+            return JsonSerializer.Serialize(
+                normalized,
+                PersistedArgumentsJsonContext.Default.DictionaryStringJsonElement);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    private static IDictionary<string, object?>? DeserializeToolArguments(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        try
+        {
+            var parsed = JsonSerializer.Deserialize(
+                json,
+                PersistedArgumentsJsonContext.Default.DictionaryStringJsonElement);
+
+            if (parsed is null || parsed.Count == 0)
+            {
+                return null;
+            }
+
+            var result = new Dictionary<string, object?>(parsed.Count, StringComparer.Ordinal);
+            foreach (var pair in parsed)
+            {
+                result[pair.Key] = pair.Value;
+            }
+
+            return result;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string? SerializeOutputs(IList<AIContent>? outputs)
+    {
+        if (outputs is null || outputs.Count == 0)
+        {
+            return null;
+        }
+
+        var textOutputs = outputs
+            .Select(static o => o?.ToString())
+            .Where(static s => !string.IsNullOrWhiteSpace(s))
+            .ToArray();
+
+        if (textOutputs.Length == 0)
+        {
+            return null;
+        }
+
+        return string.Join("\n", textOutputs);
+    }
+
+    private static IList<AIContent>? DeserializeOutputs(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        var values = json.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (values.Length == 0)
+        {
+            return null;
+        }
+
+        return values
+            .Where(static s => !string.IsNullOrWhiteSpace(s))
+            .Select(static s => (AIContent)new TextContent(s))
+            .ToList();
     }
 }
 
