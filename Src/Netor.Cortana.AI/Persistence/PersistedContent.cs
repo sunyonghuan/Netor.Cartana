@@ -14,17 +14,32 @@ namespace Netor.Cortana.AI.Persistence;
 /// </remarks>
 public sealed class PersistedContent
 {
-    /// <summary>内容类型：text / functionCall / functionResult / data。</summary>
+    /// <summary>内容类型：text / reasoning / functionCall / functionResult / toolCall / toolResult / data。</summary>
     public string Kind { get; set; } = "text";
 
     /// <summary>文本内容（Kind=text 或作为通用可读文本）。</summary>
     public string? Text { get; set; }
+
+    /// <summary>
+    /// 思考内容的受保护数据（Kind=reasoning）。
+    /// 用于将模型返回的 reasoning 元数据原样回传给同一提供方。
+    /// </summary>
+    public string? ProtectedData { get; set; }
 
     /// <summary>工具调用 ID（Kind=functionCall / functionResult）。</summary>
     public string? CallId { get; set; }
 
     /// <summary>工具名（Kind=functionCall）。</summary>
     public string? Name { get; set; }
+
+    /// <summary>MCP 服务名（Kind=toolCall 且为 MCP 调用时）。</summary>
+    public string? ServerName { get; set; }
+
+    /// <summary>工具调用参数的原始快照（Kind=toolCall，兼容非 functionCall 场景）。</summary>
+    public string? RawArgumentsJson { get; set; }
+
+    /// <summary>工具结果输出的原始快照（Kind=toolResult，兼容非 functionResult 场景）。</summary>
+    public string? RawOutputsJson { get; set; }
 
     /// <summary>
     /// 工具调用参数的 JSON（Kind=functionCall）。

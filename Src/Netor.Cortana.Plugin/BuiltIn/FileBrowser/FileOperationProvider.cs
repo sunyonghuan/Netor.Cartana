@@ -2,6 +2,9 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
+using System.ComponentModel;
+using System.Text.Json;
+
 namespace Netor.Cortana.Plugin.BuiltIn.FileBrowser;
 
 /// <summary>
@@ -26,6 +29,198 @@ public sealed class FileOperationProvider : AIContextProvider
 
         _logger = logger;
         _fileOperator = fileOperator;
+    }
+
+    private Task<string> CreateFileToolAsync(CreateFileToolArgs? args)
+    {
+        var path = args?.Path;
+        var content = args?.Content ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(path))
+            return Task.FromResult(BuildErrorJson("create_file", string.Empty, "缺少必填参数 path"));
+
+        return CreateFileAsync(path, content);
+    }
+
+    private Task<string> WriteFileToolAsync(WriteFileToolArgs? args)
+    {
+        var path = args?.Path;
+        var content = args?.Content ?? string.Empty;
+        var backup = args?.Backup ?? true;
+
+        if (string.IsNullOrWhiteSpace(path))
+            return Task.FromResult(BuildErrorJson("write_file", string.Empty, "缺少必填参数 path"));
+
+        return WriteFileAsync(path, content, backup);
+    }
+
+    private Task<string> WriteLargeFileToolAsync(WriteLargeFileToolArgs? args)
+    {
+        var path = args?.Path;
+        var content = args?.Content ?? string.Empty;
+        var overwrite = args?.Overwrite ?? true;
+        var backup = args?.Backup ?? true;
+
+        if (string.IsNullOrWhiteSpace(path))
+            return Task.FromResult(BuildErrorJson("write_large_file", string.Empty, "缺少必填参数 path"));
+
+        return WriteLargeFileAsync(path, content, overwrite, backup);
+    }
+
+    private Task<string> EditFileToolAsync(EditFileToolArgs? args)
+    {
+        var path = args?.Path;
+        var operation = args?.Operation;
+        var startLine = args?.StartLine;
+        var endLine = args?.EndLine;
+        var content = args?.Content;
+        var backup = args?.Backup ?? true;
+        var expectedHash = args?.ExpectedHash;
+
+        if (string.IsNullOrWhiteSpace(path))
+            return Task.FromResult(BuildErrorJson("edit_file", string.Empty, "缺少必填参数 path"));
+
+        if (string.IsNullOrWhiteSpace(operation))
+            return Task.FromResult(BuildErrorJson("edit_file", path, "缺少必填参数 operation"));
+
+        if (startLine is null)
+            return Task.FromResult(BuildErrorJson("edit_file", path, "缺少必填参数 startLine"));
+
+        return EditFileAsync(path, operation, startLine.Value, endLine, content, backup, expectedHash);
+    }
+
+    private Task<string> DeleteFileToolAsync(DeleteFileToolArgs? args)
+    {
+        var path = args?.Path;
+        var backup = args?.Backup ?? true;
+
+        if (string.IsNullOrWhiteSpace(path))
+            return Task.FromResult(BuildErrorJson("delete_file", string.Empty, "缺少必填参数 path"));
+
+        return DeleteFileAsync(path, backup);
+    }
+
+    private Task<string> MoveFileToolAsync(MoveFileToolArgs? args)
+    {
+        var sourcePath = args?.SourcePath;
+        var destPath = args?.DestPath;
+
+        if (string.IsNullOrWhiteSpace(sourcePath))
+            return Task.FromResult(BuildErrorJson("move_file", string.Empty, "缺少必填参数 sourcePath"));
+
+        if (string.IsNullOrWhiteSpace(destPath))
+            return Task.FromResult(BuildErrorJson("move_file", sourcePath, "缺少必填参数 destPath"));
+
+        return MoveFileAsync(sourcePath, destPath);
+    }
+
+    private Task<string> CreateDirectoryToolAsync(DirectoryToolArgs? args)
+    {
+        var path = args?.Path;
+        if (string.IsNullOrWhiteSpace(path))
+            return Task.FromResult(BuildErrorJson("create_directory", string.Empty, "缺少必填参数 path"));
+
+        return CreateDirectoryAsync(path);
+    }
+
+    private Task<string> DeleteDirectoryToolAsync(DirectoryToolArgs? args)
+    {
+        var path = args?.Path;
+        if (string.IsNullOrWhiteSpace(path))
+            return Task.FromResult(BuildErrorJson("delete_directory", string.Empty, "缺少必填参数 path"));
+
+        return DeleteDirectoryAsync(path);
+    }
+
+    [Description("创建文件工具参数")]
+    public sealed record CreateFileToolArgs
+    {
+        [Description("目标文件相对路径。")]
+        public string? Path { get; init; }
+
+        [Description("文件内容，允许为空字符串。")]
+        public string? Content { get; init; }
+    }
+
+    [Description("写入文件工具参数")]
+    public sealed record WriteFileToolArgs
+    {
+        [Description("目标文件相对路径。")]
+        public string? Path { get; init; }
+
+        [Description("要写入的内容。")]
+        public string? Content { get; init; }
+
+        [Description("是否为已存在文件保留备份，默认 true。")]
+        public bool? Backup { get; init; }
+    }
+
+    [Description("大文件写入工具参数")]
+    public sealed record WriteLargeFileToolArgs
+    {
+        [Description("目标文件相对路径。")]
+        public string? Path { get; init; }
+
+        [Description("要写入的完整内容。")]
+        public string? Content { get; init; }
+
+        [Description("是否允许覆盖已存在文件，默认 true。")]
+        public bool? Overwrite { get; init; }
+
+        [Description("是否备份原文件，默认 true。")]
+        public bool? Backup { get; init; }
+    }
+
+    [Description("按行编辑文件工具参数")]
+    public sealed record EditFileToolArgs
+    {
+        [Description("目标文件相对路径。")]
+        public string? Path { get; init; }
+
+        [Description("操作类型：replace / insert / delete。")]
+        public string? Operation { get; init; }
+
+        [Description("开始行号（1-based）。")]
+        public int? StartLine { get; init; }
+
+        [Description("结束行号（可选）。")]
+        public int? EndLine { get; init; }
+
+        [Description("编辑内容（insert/replace 时使用）。")]
+        public string? Content { get; init; }
+
+        [Description("是否备份原文件，默认 true。")]
+        public bool? Backup { get; init; }
+
+        [Description("内容哈希保护值。")]
+        public string? ExpectedHash { get; init; }
+    }
+
+    [Description("删除文件工具参数")]
+    public sealed record DeleteFileToolArgs
+    {
+        [Description("目标文件相对路径。")]
+        public string? Path { get; init; }
+
+        [Description("是否备份原文件，默认 true。")]
+        public bool? Backup { get; init; }
+    }
+
+    [Description("移动文件工具参数")]
+    public sealed record MoveFileToolArgs
+    {
+        [Description("源文件相对路径。")]
+        public string? SourcePath { get; init; }
+
+        [Description("目标文件相对路径。")]
+        public string? DestPath { get; init; }
+    }
+
+    [Description("目录操作工具参数")]
+    public sealed record DirectoryToolArgs
+    {
+        [Description("目录相对路径。")]
+        public string? Path { get; init; }
     }
 
     /// <summary>
@@ -53,22 +248,31 @@ public sealed class FileOperationProvider : AIContextProvider
     /// <summary>
     /// 注册文件与目录操作工具。
     /// </summary>
+#if NET5_0_OR_GREATER
+    [System.Diagnostics.CodeAnalysis.DynamicDependency(System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicProperties, typeof(CreateFileToolArgs))]
+    [System.Diagnostics.CodeAnalysis.DynamicDependency(System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicProperties, typeof(WriteFileToolArgs))]
+    [System.Diagnostics.CodeAnalysis.DynamicDependency(System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicProperties, typeof(WriteLargeFileToolArgs))]
+    [System.Diagnostics.CodeAnalysis.DynamicDependency(System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicProperties, typeof(EditFileToolArgs))]
+    [System.Diagnostics.CodeAnalysis.DynamicDependency(System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicProperties, typeof(DeleteFileToolArgs))]
+    [System.Diagnostics.CodeAnalysis.DynamicDependency(System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicProperties, typeof(MoveFileToolArgs))]
+    [System.Diagnostics.CodeAnalysis.DynamicDependency(System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicProperties, typeof(DirectoryToolArgs))]
+#endif
     private void RegisterTools()
     {
         _tools.Add(AIFunctionFactory.Create(
             name: "sys_create_file",
             description: "Create a new file in the current workspace directory. Fails if the file already exists.",
-            method: (string path, string content) => CreateFileAsync(path, content)));
+            method: CreateFileToolAsync));
 
         _tools.Add(AIFunctionFactory.Create(
             name: "sys_write_file",
             description: "Write a file in the current workspace directory. Creates the file if it does not exist, or replaces it if it already exists. backup defaults to true for existing files.",
-            method: (string path, string content, bool backup) => WriteFileAsync(path, content, backup)));
+            method: WriteFileToolAsync));
 
         _tools.Add(AIFunctionFactory.Create(
             name: "sys_write_large_file",
             description: "Write a large file in the current workspace directory. Supports overwrite and optional backup.",
-            method: WriteLargeFileAsync));
+            method: WriteLargeFileToolAsync));
 
         _tools.Add(AIFunctionFactory.Create(
             name: "sys_write_files_batch",
@@ -78,27 +282,27 @@ public sealed class FileOperationProvider : AIContextProvider
         _tools.Add(AIFunctionFactory.Create(
             name: "sys_edit_file",
             description: "Edit an existing text file by 1-based line numbers. operation supports replace, insert, and delete. Use sys_read_file first to get exact line numbers and hash. backup defaults to true.",
-            method: EditFileAsync));
+            method: EditFileToolAsync));
 
         _tools.Add(AIFunctionFactory.Create(
             name: "sys_delete_file",
             description: "Delete a file in the current workspace directory. backup defaults to true.",
-            method: (string path, bool backup) => DeleteFileAsync(path, backup)));
+            method: DeleteFileToolAsync));
 
         _tools.Add(AIFunctionFactory.Create(
             name: "sys_move_file",
             description: "Move or rename a file within the current workspace directory.",
-            method: (string sourcePath, string destPath) => MoveFileAsync(sourcePath, destPath)));
+            method: MoveFileToolAsync));
 
         _tools.Add(AIFunctionFactory.Create(
             name: "sys_create_directory",
             description: "Create a directory in the current workspace directory, including parent directories when needed.",
-            method: (string path) => CreateDirectoryAsync(path)));
+            method: CreateDirectoryToolAsync));
 
         _tools.Add(AIFunctionFactory.Create(
             name: "sys_delete_directory",
             description: "Delete an empty directory in the current workspace directory. Non-empty directories are not allowed.",
-            method: (string path) => DeleteDirectoryAsync(path)));
+            method: DeleteDirectoryToolAsync));
     }
 
     // ──────── 使用说明 ────────
@@ -199,13 +403,58 @@ public sealed class FileOperationProvider : AIContextProvider
     }
 
     private Task<string> WriteFilesBatchAsync(
-        List<FileOperator.BatchWriteFile> files,
+        JsonElement files,
         bool backup = true,
         bool stopOnError = false)
     {
         try
         {
-            var result = _fileOperator.SysWriteFilesBatch(files, backup, stopOnError);
+            if (files.ValueKind is not JsonValueKind.Array)
+                return Task.FromResult(BuildErrorJson("write_files_batch", string.Empty, "files 必须是数组"));
+
+            var parsedFiles = new List<FileOperator.BatchWriteFile>();
+            foreach (var item in files.EnumerateArray())
+            {
+                if (item.ValueKind is not JsonValueKind.Object)
+                    return Task.FromResult(BuildErrorJson("write_files_batch", string.Empty, "files 中每一项都必须是对象"));
+
+                if (!item.TryGetProperty("path", out var pathElement)
+                    || pathElement.ValueKind is not JsonValueKind.String)
+                {
+                    return Task.FromResult(BuildErrorJson("write_files_batch", string.Empty, "files[*].path 必须是字符串"));
+                }
+
+                string? content = string.Empty;
+                if (item.TryGetProperty("content", out var contentElement))
+                {
+                    if (contentElement.ValueKind is not JsonValueKind.String and not JsonValueKind.Null)
+                        return Task.FromResult(BuildErrorJson("write_files_batch", pathElement.GetString() ?? string.Empty, "files[*].content 必须是字符串或 null"));
+
+                    content = contentElement.ValueKind == JsonValueKind.Null ? string.Empty : contentElement.GetString();
+                }
+
+                bool? overwrite = true;
+                if (item.TryGetProperty("overwrite", out var overwriteElement))
+                {
+                    if (overwriteElement.ValueKind is JsonValueKind.True)
+                        overwrite = true;
+                    else if (overwriteElement.ValueKind is JsonValueKind.False)
+                        overwrite = false;
+                    else if (overwriteElement.ValueKind is JsonValueKind.Null)
+                        overwrite = true;
+                    else
+                        return Task.FromResult(BuildErrorJson("write_files_batch", pathElement.GetString() ?? string.Empty, "files[*].overwrite 必须是布尔值或 null"));
+                }
+
+                parsedFiles.Add(new FileOperator.BatchWriteFile
+                {
+                    Path = pathElement.GetString() ?? string.Empty,
+                    Content = content ?? string.Empty,
+                    Overwrite = overwrite
+                });
+            }
+
+            var result = _fileOperator.SysWriteFilesBatch(parsedFiles, backup, stopOnError);
             return Task.FromResult(BuildResponseJson(new FileOperator.FileToolResult
             {
                 Tool = "write_files_batch",
@@ -313,24 +562,6 @@ public sealed class FileOperationProvider : AIContextProvider
             return Task.FromResult(BuildErrorJson("delete_directory", path, ex.Message));
         }
     }
-
-    private Task<string> CreateFileAsync(string path, string content, CancellationToken _)
-        => CreateFileAsync(path, content);
-
-    private Task<string> WriteFileAsync(string path, string content, bool backup, CancellationToken _)
-        => WriteFileAsync(path, content, backup);
-
-    private Task<string> DeleteFileAsync(string path, bool backup, CancellationToken _)
-        => DeleteFileAsync(path, backup);
-
-    private Task<string> MoveFileAsync(string sourcePath, string destPath, CancellationToken _)
-        => MoveFileAsync(sourcePath, destPath);
-
-    private Task<string> CreateDirectoryAsync(string path, CancellationToken _)
-        => CreateDirectoryAsync(path);
-
-    private Task<string> DeleteDirectoryAsync(string path, CancellationToken _)
-        => DeleteDirectoryAsync(path);
 
     private static string BuildErrorJson(string tool, string path, string errorMessage, string? targetPath = null)
         => BuildResponseJson(new FileOperator.FileToolResult
