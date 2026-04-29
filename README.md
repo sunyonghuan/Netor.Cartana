@@ -73,6 +73,15 @@
 
 Cortana 内置了一个 **Ollama 本地协议代理**，可以把你已经配置好的国产模型、企业模型、私有 API 模型，直接伪装成本机 Ollama 模型暴露出去。
 
+<div align="center">
+<table>
+<tr>
+<td><img src="Res/images/001.png" width="180" /><br/><sub>↑ 托盘菜单中快速打开 AI 代理配置</sub></td>
+<td><img src="Res/images/002.png" width="420" /><br/><sub>↑ AI 代理配置：端口、厂商、协议版本、并发与上下文监控</sub></td>
+</tr>
+</table>
+</div>
+
 这意味着：
 
 > 不安装任何第三方 VSCode 插件，不修改 VSCode 一句代码，不修改 Visual Studio 一句代码，就能让支持 Ollama 本地协议的编辑器和工具，把网络 API 当成本地模型来调用。
