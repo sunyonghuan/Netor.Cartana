@@ -396,8 +396,10 @@
 					<StackPanel x:Name="WelcomePanel"
 								VerticalAlignment="Center" HorizontalAlignment="Center"
 								Spacing="8">
-						<TextBlock Text="🤖" FontSize="48"
-								   HorizontalAlignment="Center" />
+						<Image Source="avares://Cortana/Assets/logo.300.png"
+							   Width="180" Height="180"
+							   Stretch="Uniform"
+							   HorizontalAlignment="Center" />
 						<TextBlock Text="你好，有什么可以帮你的？"
 								   FontSize="18" FontWeight="SemiBold"
 								   Foreground="#cccccc" HorizontalAlignment="Center" />
