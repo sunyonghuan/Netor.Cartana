@@ -28,7 +28,6 @@ public static class ChatMessageExtensions
     /// </summary>
     public static string ToPersistedContent(this ChatMessage message)
     {
-        return message.Text;
         return BuildPersistedContent(message.Text, message.Contents);
     }
 
@@ -37,7 +36,6 @@ public static class ChatMessageExtensions
     /// </summary>
     public static string BuildPersistedContent(string? fallbackText, IList<AIContent>? contents)
     {
-        return fallbackText ?? string.Empty;
         if (contents is null || contents.Count == 0)
         {
             return fallbackText ?? string.Empty;
@@ -311,7 +309,7 @@ public static class ChatMessageExtensions
                 };
 
             case FunctionCallContent call:
-                string? argsJson = null;
+                string? argsJson = "{}";
                 if (call.Arguments is not null && call.Arguments.Count > 0)
                 {
                     // 把参数值规范化为 JsonElement，避免 object 多态要求反射
@@ -328,7 +326,7 @@ public static class ChatMessageExtensions
                     }
                     catch (Exception)
                     {
-                        argsJson = null; // 序列化失败则降级（文本快照已覆盖人类可读）
+                        argsJson = "{}"; // 序列化失败则降级为空对象，避免 OpenAI 兼容接口收到 null arguments
                     }
                 }
                 return new PersistedContent
@@ -428,7 +426,7 @@ public static class ChatMessageExtensions
                 return reasoning;
 
             case "functionCall":
-                IDictionary<string, object?>? args = null;
+                IDictionary<string, object?> args = new Dictionary<string, object?>(StringComparer.Ordinal);
                 if (!string.IsNullOrWhiteSpace(p.ArgumentsJson))
                 {
                     try
@@ -442,7 +440,7 @@ public static class ChatMessageExtensions
                             foreach (var kv in dict) args[kv.Key] = kv.Value;
                         }
                     }
-                    catch (JsonException) { args = null; }
+                    catch (JsonException) { args = new Dictionary<string, object?>(StringComparer.Ordinal); }
                 }
                 return new FunctionCallContent(
                     callId: p.CallId ?? string.Empty,

@@ -74,7 +74,7 @@ public sealed class AIAgentFactory(
             {
                 logger.LogWarning(ex, "TokenUsageChanged 事件订阅者抛出异常");
             }
-        }, enableReasoning);
+        }, enableReasoning, appPaths);
     }
 
     /// <summary>重置 token 统计（新建会话或切换工作区时调用）。</summary>

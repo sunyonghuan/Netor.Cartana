@@ -1,102 +1,83 @@
----
+﻿---
 name: skill-plugin-installation
-description: '安装或更新 Cortana 技能/插件。处理 zip 解压、结构校验、插件热更新（卸载→替换→重载）。'
+description: '安装 Cortana 技能或插件。处理 zip 安装、目录选择、解压和结构校验。'
 user-invocable: true
 ---
 
 # Skill Plugin Installation
 
-安装或更新 Cortana 技能和插件。
+用于指导 AI 安装 Cortana 技能和插件。
 
-## 安装目录
+## 目标
 
-| 类型 | 用户数据目录 | 工作目录 |
-|------|-------------|---------|
-| 插件 | `{用户数据目录}/plugins/` | `{工作目录}/.cortana/plugins/` |
-| 技能 | `{用户数据目录}/skills/` | `{工作目录}/.cortana/skills/` |
+- 安装 skill 或 plugin
+- 支持单个 zip 或目录批量安装
+- 让脚本执行安装、解压和校验
+- AI 直接组装最终安装目录传给脚本
+- AI 根据脚本结果判断是否成功和失败原因
 
-安装前确认用户选择哪个目录。
+## 目录规则
 
-## 输入要求
+- 用户数据目录中的插件：`{用户数据目录}/plugins/`
+- 用户数据目录中的技能：`{用户数据目录}/skills/`
+- 工作目录中的插件：`{工作目录}/.cortana/plugins/`
+- 工作目录中的技能：`{工作目录}/.cortana/skills/`
+- AI 负责按安装目标选择并组装最终目录
 
-- 用户提供 `.zip` 文件路径或包含 `.zip` 的目录路径
-- 提供目录时，处理其下所有 `.zip`
+## 输入规则
 
-## 流程
+- 用户必须提供 zip 文件路径或目录路径
+- 如果提供目录，只处理该目录下的 `.zip`
+- 一个技能或插件安装后必须对应一个文件夹
+- AI 需要先确认安装到用户数据目录还是工作目录
+- 复杂安装过程不要在技能文件里展开，交给脚本处理
 
-### 新安装（目标目录不存在）
+## 执行流程
 
-1. 确认类型：skill 或 plugin
-2. 获取 zip 路径
-3. 确认安装目录
-4. 运行安装脚本
-5. **仅 plugin**：调用 `sys_reload_plugin` 加载新插件
-
-### 更新安装（目标目录已存在）
-
-1. 确认类型：skill 或 plugin
-2. 获取 zip 路径
-3. 确认安装目录
-4. **仅 plugin**：调用 `sys_unload_plugin` 卸载目标插件，释放文件占用
-5. 运行安装脚本（加 `-Force` 覆盖）
-6. **仅 plugin**：调用 `sys_reload_plugin` 重新加载插件
-
-### 判断是否已存在
-
-- 调用 `sys_list_loaded_plugins` 查看已加载插件列表
-- 或检查目标安装目录下是否已有同名文件夹
-
-## 插件管理工具
-
-| 工具 | 用途 |
-|------|------|
-| `sys_list_loaded_plugins` | 列出已加载的插件和目录名 |
-| `sys_unload_plugin(dirName)` | 卸载插件，释放文件占用 |
-| `sys_reload_plugin(dirName)` | 重新加载插件 |
-
-**关键**：plugin 类型更新时必须先 unload 再替换文件，否则进程占用导致替换失败。skill 类型无需 unload（纯文件，无进程占用）。
-
-## 安装脚本
-
-```powershell
-.\skills\skill-plugin-installation\scripts\install-package.ps1 -PackageType <skill|plugin> -SourcePath <path> -InstallDirectory <path> [-Force]
-```
-
-- `-Force`：覆盖已存在的目标目录
-- 脚本负责解压、结构校验、结果输出
-- 根据脚本返回的 `Success` 和 `Message` 判断结果
-
-## 资源
-
-- resources/install-flow.md
-
-### 示例
-
-```powershell
-# 新装技能
-.\skills\skill-plugin-installation\scripts\install-package.ps1 -PackageType skill -SourcePath C:\pkg\my-skill.zip -InstallDirectory C:\Users\me\AppData\Roaming\Netor\skills
-
-# 新装插件
-.\skills\skill-plugin-installation\scripts\install-package.ps1 -PackageType plugin -SourcePath C:\pkg\my-plugin.zip -InstallDirectory C:\Users\me\AppData\Roaming\Netor\plugins
-
-# 覆盖更新插件
-.\skills\skill-plugin-installation\scripts\install-package.ps1 -PackageType plugin -SourcePath C:\pkg\my-plugin.zip -InstallDirectory C:\Users\me\AppData\Roaming\Netor\plugins -Force
-
-# 批量安装（目录下所有 zip）
-.\skills\skill-plugin-installation\scripts\install-package.ps1 -PackageType plugin -SourcePath C:\pkg\ -InstallDirectory C:\Users\me\AppData\Roaming\Netor\plugins
-```
+1. 确认安装对象是 skill 还是 plugin
+2. 获取 zip 文件路径或目录路径
+3. 提醒用户选择安装范围
+4. 调用安装脚本
+5. 等待用户反馈脚本执行结果
+6. 根据结果判断安装成功或失败原因
 
 ## 校验规则
 
 ### 技能
-- 根目录必须有 `SKILL.md` 或 `skill.md`
-- 技能描述文件需含 Markdown 标题；有 YAML 头时需含 `name` 和 `description`
+
+- 根目录必须直接存在 `skill.md`
+- `skill.md` 必须是有效的技能描述文件
+- 缺少或格式明显不对时，安装失败
 
 ### 插件
-- 根目录必须有 `plugin.json`（有效 JSON）
-- 不允许嵌套：`plugins/foo/plugin.json` ✓ · `plugins/foo/foo/plugin.json` ✗
+
+- 根目录必须直接存在 `plugin.json`
+- `plugin.json` 必须位于插件根目录
+- 不允许再多嵌套一层插件目录
+- 正确：`plugins/add-services/plugin.json`
+- 错误：`plugins/add-services/add-services/plugin.json`
+
+## 脚本
+
+```powershell
+scripts\install-package.ps1
+```
+
+- 脚本负责解压、覆盖、结构校验和结果输出
+- AI 不需要在技能文件里展开脚本内部实现
+- 如果脚本返回失败，AI 根据失败信息继续分析
+
+## 示例
+
+```powershell
+scripts\install-package.ps1 -PackageType skill -SourcePath C:\Packages\my-skill.zip -InstallDirectory C:\Users\me\AppData\Roaming\Netor\skills
+scripts\install-package.ps1 -PackageType plugin -SourcePath C:\Packages\my-plugin.zip -InstallDirectory D:\Repo\.cortana\plugins
+scripts\install-package.ps1 -PackageType plugin -SourcePath C:\Packages -InstallDirectory C:\Users\me\AppData\Roaming\Netor\plugins
+```
 
 ## 约束
 
-- 批量安装时单个失败不阻断其余处理
-- 安装和校验由脚本完成，AI 只组装参数并根据结果反馈
+- 安装前提醒用户选择目录
+- 安装和校验主要由脚本完成
+- AI 依据用户反馈的脚本结果判断原因
+- 批量安装时，单个失败不影响其他包继续处理

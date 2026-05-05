@@ -1,16 +1,25 @@
 ﻿using Microsoft.Extensions.AI;
 
+using System.Collections;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Net;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+using Netor.Cortana.Entitys;
+using Netor.Cortana.Entitys.Services;
 
 namespace Netor.Cortana.AI.Providers;
 
 /// <summary>
 /// 跟踪对话 Token 使用情况的聊天客户端包装器。
 /// </summary>
-public class TokenTrackingChatClient : DelegatingChatClient
+public partial class TokenTrackingChatClient : DelegatingChatClient
 {
+    private const string TraceEnabledEnvironmentVariable = "CORTANA_AI_TRACE_ENABLED";
+
     /// <summary>最近一次调用的输入 token 数（= 当前上下文窗口占用）</summary>
     public long LastInputTokens => Volatile.Read(ref _lastInputTokens);
 
@@ -29,6 +38,9 @@ public class TokenTrackingChatClient : DelegatingChatClient
     private StringBuilder _lastAssistantReasoning = new();
     private readonly bool _enableReasoning;
     private volatile bool _requireReasoningPassback;
+    private readonly IAppPaths? _appPaths;
+    private readonly bool _traceEnabled;
+    private readonly SystemSettingsService? _systemSettings;
 
     /// <summary>
     /// Usage 上报抑制计数（支持嵌套）。>0 时 <see cref="RecordUsage"/> 直接忽略。
@@ -52,12 +64,17 @@ public class TokenTrackingChatClient : DelegatingChatClient
         IChatClient innerClient,
         long maxContextTokens,
         Action<UsageDetails>? usageObserver = null,
-        bool enableReasoning = false)
+        bool enableReasoning = false,
+        IAppPaths? appPaths = null,
+        SystemSettingsService? systemSettings = null)
         : base(innerClient)
     {
         MaxContextTokens = maxContextTokens <= 0 ? 128000 : maxContextTokens;
         _usageObserver = usageObserver;
         _enableReasoning = enableReasoning;
+        _appPaths = appPaths;
+        _systemSettings = systemSettings;
+        _traceEnabled = ResolveTraceEnabled(systemSettings);
     }
 
     /// <summary>
@@ -118,10 +135,17 @@ public class TokenTrackingChatClient : DelegatingChatClient
         IEnumerable<ChatMessage> messages, ChatOptions? options = null,
         CancellationToken ct = default)
     {
+        var requestId = CreateTraceId();
+        var outboundMessages = ((_enableReasoning || _requireReasoningPassback || _lastAssistantReasoning.Length > 0)
+            ? EnsureReasoningPassed(messages)
+            : messages).ToList();
+
+        WriteTraceLog(requestId, "request", outboundMessages, options, null);
+
         var response = await base.GetResponseAsync(
-            (_enableReasoning || _requireReasoningPassback || _lastAssistantReasoning.Length > 0)
-                ? EnsureReasoningPassed(messages) : messages,
+            outboundMessages,
             options, ct);
+        WriteTraceLog(requestId, "response", null, options, response);
         RecordUsage(response.Usage);
         return response;
     }
@@ -137,16 +161,45 @@ public class TokenTrackingChatClient : DelegatingChatClient
         IEnumerable<ChatMessage> messages, ChatOptions? options = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
+        var requestId = CreateTraceId();
+        var outboundMessages = messages.ToList();
+        WriteTraceLog(requestId, "stream-request", outboundMessages, options, null);
+
         // 流式期间累积 usage：取 InputToken 的最大值、OutputToken 累加，流结束统一提交一次
         long? pendingInput = null;
         long pendingOutput = 0;
         UsageDetails? lastUsage = null;
+        var responseText = new StringBuilder();
+        var responseUpdates = 0;
+        var updateSnapshots = new List<AiTraceMessage>();
         //_lastAssistantReasoning.Clear();
         //await foreach (var update in base.GetStreamingResponseAsync(
         //    (_enableReasoning || _requireReasoningPassback || _lastAssistantReasoning.Length > 0)
         //        ? EnsureReasoningPassed(messages) : messages, options, ct))
-        await foreach (var update in base.GetStreamingResponseAsync(messages, options, ct))
+        await using var enumerator = base.GetStreamingResponseAsync(outboundMessages, options, ct).GetAsyncEnumerator(ct);
+        while (true)
         {
+            ChatResponseUpdate update;
+
+            try
+            {
+                if (!await enumerator.MoveNextAsync())
+                {
+                    break;
+                }
+
+                update = enumerator.Current;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                WriteTraceLog(requestId, "stream-error", outboundMessages, options, null,
+                    responseText.ToString(), responseUpdates, lastUsage, updateSnapshots, ex);
+                throw;
+            }
+
+            responseUpdates++;
+            updateSnapshots.Add(DescribeStreamingUpdate(responseUpdates, update));
+
             foreach (var content in update.Contents)
             {
                 if (content is UsageContent usage)
@@ -163,9 +216,16 @@ public class TokenTrackingChatClient : DelegatingChatClient
                     // 捕获最近一条 assistant 的 reasoning 内容，供同轮工具二次调用时回传
                     _lastAssistantReasoning.Append(reasoning.Text);
                 }
+                else if (content is TextContent text && !string.IsNullOrEmpty(text.Text))
+                {
+                    responseText.Append(text.Text);
+                }
             }
+
             yield return update;
         }
+
+        WriteTraceLog(requestId, "stream-response", null, options, null, responseText.ToString(), responseUpdates, lastUsage, updateSnapshots);
 
         if (lastUsage is not null)
         {
@@ -237,6 +297,479 @@ public class TokenTrackingChatClient : DelegatingChatClient
 
         foreach (var m in listInput) yield return m;
     }
+
+    private static string CreateTraceId() => DateTimeOffset.Now.ToString("yyyyMMdd-HHmmss-fff") + "-" + Guid.NewGuid().ToString("N")[..8];
+
+    private void WriteTraceLog(
+        string requestId,
+        string stage,
+        IReadOnlyList<ChatMessage>? messages,
+        ChatOptions? options,
+        ChatResponse? response,
+        string? streamingText = null,
+        int? streamingUpdates = null,
+        UsageDetails? streamingUsage = null,
+        IReadOnlyList<AiTraceMessage>? updateSnapshots = null,
+        Exception? exception = null)
+    {
+        if (!_traceEnabled)
+        {
+            return;
+        }
+
+        try
+        {
+            var logRoot = Environment.GetEnvironmentVariable("CORTANA_AI_TRACE_DIR");
+            if (string.IsNullOrWhiteSpace(logRoot))
+            {
+                var workspace = _appPaths?.WorkspaceDirectory;
+                logRoot = string.IsNullOrWhiteSpace(workspace)
+                    ? Path.Combine(AppContext.BaseDirectory, "logs", "ai-traces")
+                    : Path.Combine(workspace, ".cortana", "logs", "ai-traces");
+            }
+
+            Directory.CreateDirectory(logRoot);
+            var filePath = Path.Combine(logRoot, $"ai-{requestId}-{stage}.json");
+            var payload = new AiTracePayload
+            {
+                RequestId = requestId,
+                Stage = stage,
+                Timestamp = DateTimeOffset.Now,
+                Options = DescribeOptions(options),
+                Messages = messages?.Select((m, i) => DescribeMessage(i, m)).ToList(),
+                Response = response is null ? null : DescribeResponse(response),
+                StreamingText = streamingText,
+                StreamingUpdateCount = streamingUpdates,
+                StreamingUsage = streamingUsage is null ? null : DescribeUsage(streamingUsage),
+                StreamingUpdates = updateSnapshots?.ToList(),
+                ProtocolDiagnostics = messages is null ? null : AnalyzeMessages(messages),
+                Error = exception is null ? null : DescribeException(exception)
+            };
+
+            var json = JsonSerializer.Serialize(payload, AiTraceJsonContext.Default.AiTracePayload);
+            File.WriteAllText(filePath, json, Encoding.UTF8);
+        }
+        catch
+        {
+            // 诊断日志不能影响主对话流程。
+        }
+    }
+
+    private static AiTraceMessage DescribeMessage(int index, ChatMessage message) => new()
+    {
+        Index = index,
+        Role = message.Role.ToString(),
+        AuthorName = message.AuthorName,
+        MessageId = message.MessageId,
+        CreatedAt = message.CreatedAt,
+        Text = message.Text,
+        Contents = message.Contents.Select((c, i) => DescribeContent(i, c)).ToList()
+    };
+
+    private static AiTraceMessage DescribeStreamingUpdate(int index, ChatResponseUpdate update) => new()
+    {
+        Index = index,
+        Role = "update",
+        AuthorName = update.AuthorName,
+        MessageId = update.MessageId,
+        CreatedAt = update.CreatedAt,
+        Text = update.Text,
+        Contents = update.Contents.Select((c, i) => DescribeContent(i, c)).ToList()
+    };
+
+    private static AiTraceContent DescribeContent(int index, AIContent content) => content switch
+    {
+        TextContent text => new AiTraceContent { Index = index, Kind = "text", Text = text.Text },
+        TextReasoningContent reasoning => new AiTraceContent { Index = index, Kind = "reasoning", Text = reasoning.Text, ProtectedData = reasoning.ProtectedData },
+        FunctionCallContent functionCall => new AiTraceContent { Index = index, Kind = "functionCall", CallId = functionCall.CallId, Name = functionCall.Name, ArgumentsJson = SerializeObject(functionCall.Arguments) },
+        FunctionResultContent functionResult => new AiTraceContent { Index = index, Kind = "functionResult", CallId = functionResult.CallId, ResultJson = SerializeObject(functionResult.Result), ExceptionMessage = functionResult.Exception?.ToString() },
+        McpServerToolCallContent mcpCall => new AiTraceContent { Index = index, Kind = "mcpToolCall", CallId = mcpCall.CallId, Name = mcpCall.Name, ServerName = mcpCall.ServerName, ArgumentsJson = SerializeObject(mcpCall.Arguments) },
+        ToolCallContent toolCall => new AiTraceContent { Index = index, Kind = "toolCall", CallId = toolCall.CallId },
+        McpServerToolResultContent mcpResult => new AiTraceContent { Index = index, Kind = "mcpToolResult", CallId = mcpResult.CallId, ResultJson = SerializeObject(mcpResult.Outputs) },
+        ToolResultContent toolResult => new AiTraceContent { Index = index, Kind = "toolResult", CallId = toolResult.CallId },
+        DataContent data => new AiTraceContent { Index = index, Kind = "data", MediaType = data.MediaType, Uri = data.Uri?.ToString(), DataLength = data.Data.Length },
+        UsageContent usage => new AiTraceContent { Index = index, Kind = "usage", ResultJson = SerializeObject(DescribeUsage(usage.Details)) },
+        _ => new AiTraceContent { Index = index, Kind = content.GetType().FullName ?? content.GetType().Name, Text = content.ToString() }
+    };
+
+    private static AiTraceResponse DescribeResponse(ChatResponse response) => new()
+    {
+        Text = response.Text,
+        MessageCount = response.Messages.Count,
+        Messages = response.Messages.Select((m, i) => DescribeMessage(i, m)).ToList(),
+        Usage = response.Usage is null ? null : DescribeUsage(response.Usage)
+    };
+
+    private static AiTraceUsage DescribeUsage(UsageDetails usage) => new()
+    {
+        InputTokenCount = usage.InputTokenCount,
+        OutputTokenCount = usage.OutputTokenCount,
+        TotalTokenCount = usage.TotalTokenCount,
+        AdditionalCountsJson = SerializeObject(usage.AdditionalCounts)
+    };
+
+    private static string? DescribeOptions(ChatOptions? options) => options is null ? null : SerializeObject(options);
+
+    private static string? SerializeObject(object? value)
+    {
+        if (value is null) return null;
+        try
+        {
+            return value switch
+            {
+                string text => text,
+                JsonElement json => json.GetRawText(),
+                IDictionary<string, object?> dictionary => SerializeDictionary(dictionary),
+                IDictionary<string, JsonElement> jsonDictionary => JsonSerializer.Serialize(
+                    jsonDictionary,
+                    AiTraceJsonContext.Default.DictionaryStringJsonElement),
+                IEnumerable enumerable when value is not string => SerializeEnumerable(enumerable),
+                _ => SerializeScalar(value)
+            };
+        }
+        catch
+        {
+            return value.ToString();
+        }
+    }
+
+    private static string SerializeDictionary(IDictionary<string, object?> dictionary)
+    {
+        var normalized = new Dictionary<string, JsonElement>(dictionary.Count, StringComparer.Ordinal);
+        foreach (var pair in dictionary)
+        {
+            normalized[pair.Key] = NormalizeTraceValue(pair.Value);
+        }
+
+        return JsonSerializer.Serialize(normalized, AiTraceJsonContext.Default.DictionaryStringJsonElement);
+    }
+
+    private static string SerializeEnumerable(IEnumerable enumerable)
+    {
+        var values = new List<JsonElement>();
+        foreach (var item in enumerable)
+        {
+            values.Add(NormalizeTraceValue(item));
+        }
+
+        return JsonSerializer.Serialize(values, AiTraceJsonContext.Default.ListJsonElement);
+    }
+
+    private static string SerializeScalar(object value)
+    {
+        var json = NormalizeTraceValue(value);
+        return json.GetRawText();
+    }
+
+    private static JsonElement NormalizeTraceValue(object? value)
+    {
+        if (value is null) return JsonDocument.Parse("null").RootElement.Clone();
+        if (value is JsonElement json) return json.Clone();
+
+        var raw = value switch
+        {
+            string text => JsonSerializer.Serialize(text, AiTraceJsonContext.Default.String),
+            bool boolean => boolean ? "true" : "false",
+            byte number => number.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            sbyte number => number.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            short number => number.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ushort number => number.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            int number => number.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            uint number => number.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            long number => number.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ulong number => number.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            float number => number.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
+            double number => number.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
+            decimal number => number.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            IDictionary<string, object?> dictionary => SerializeDictionary(dictionary),
+            IDictionary<string, JsonElement> jsonDictionary => JsonSerializer.Serialize(
+                jsonDictionary,
+                AiTraceJsonContext.Default.DictionaryStringJsonElement),
+            IEnumerable enumerable when value is not string => SerializeEnumerable(enumerable),
+            _ => JsonSerializer.Serialize(value.ToString(), AiTraceJsonContext.Default.String)
+        };
+
+        return JsonDocument.Parse(raw).RootElement.Clone();
+    }
+
+    private static bool ResolveTraceEnabled(SystemSettingsService? systemSettings)
+    {
+        var environmentValue = Environment.GetEnvironmentVariable(TraceEnabledEnvironmentVariable);
+        if (bool.TryParse(environmentValue, out var enabledFromEnvironment))
+        {
+            return enabledFromEnvironment;
+        }
+
+        if (systemSettings is not null)
+        {
+            return systemSettings.GetValue("AI.Trace.Enabled", false);
+        }
+
+#if DEBUG
+        return true;
+#else
+        return false;
+#endif
+    }
+
+    private static AiTraceProtocolDiagnostics AnalyzeMessages(IReadOnlyList<ChatMessage> messages)
+    {
+        var diagnostics = new AiTraceProtocolDiagnostics();
+        var toolCallOwnerByCallId = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        for (var index = 0; index < messages.Count; index++)
+        {
+            var message = messages[index];
+            if (message.Role == ChatRole.Assistant)
+            {
+                var callIds = GetToolCallIds(message).ToList();
+                if (callIds.Count > 0)
+                {
+                    diagnostics.AssistantToolCallMessages++;
+                    foreach (var callId in callIds)
+                    {
+                        toolCallOwnerByCallId.TryAdd(callId, index);
+                    }
+                }
+            }
+
+            if (message.Role == ChatRole.Tool)
+            {
+                diagnostics.ToolMessages++;
+                var callIds = GetToolResultCallIds(message).ToList();
+                if (callIds.Count == 0)
+                {
+                    diagnostics.OrphanToolMessages.Add(new AiTraceProtocolIssue
+                    {
+                        MessageIndex = index,
+                        MessageId = message.MessageId,
+                        Reason = "tool message does not contain any call id"
+                    });
+                    continue;
+                }
+
+                foreach (var callId in callIds)
+                {
+                    if (!toolCallOwnerByCallId.TryGetValue(callId, out var assistantIndex))
+                    {
+                        diagnostics.OrphanToolMessages.Add(new AiTraceProtocolIssue
+                        {
+                            MessageIndex = index,
+                            MessageId = message.MessageId,
+                            CallId = callId,
+                            Reason = "no preceding assistant tool_call found"
+                        });
+                        continue;
+                    }
+
+                    if (index != assistantIndex + 1)
+                    {
+                        diagnostics.NonAdjacentToolMessages.Add(new AiTraceProtocolIssue
+                        {
+                            MessageIndex = index,
+                            MessageId = message.MessageId,
+                            CallId = callId,
+                            RelatedAssistantIndex = assistantIndex,
+                            Reason = "tool message is not adjacent to its assistant tool_call"
+                        });
+                    }
+                }
+            }
+        }
+
+        for (var index = 0; index < messages.Count; index++)
+        {
+            var message = messages[index];
+            if (message.Role != ChatRole.Assistant)
+            {
+                continue;
+            }
+
+            var callIds = GetToolCallIds(message).ToList();
+            if (callIds.Count == 0)
+            {
+                continue;
+            }
+
+            foreach (var callId in callIds)
+            {
+                var matched = false;
+                for (var candidateIndex = index + 1; candidateIndex < messages.Count; candidateIndex++)
+                {
+                    var candidate = messages[candidateIndex];
+                    if (candidate.Role != ChatRole.Tool)
+                    {
+                        if (candidateIndex == index + 1)
+                        {
+                            break;
+                        }
+                        continue;
+                    }
+
+                    if (GetToolResultCallIds(candidate).Contains(callId, StringComparer.Ordinal))
+                    {
+                        matched = true;
+                        break;
+                    }
+
+                    if (candidateIndex == index + 1)
+                    {
+                        break;
+                    }
+                }
+
+                if (!matched)
+                {
+                    diagnostics.MissingToolResponses.Add(new AiTraceProtocolIssue
+                    {
+                        MessageIndex = index,
+                        MessageId = message.MessageId,
+                        CallId = callId,
+                        Reason = "assistant tool_call does not have an adjacent tool response"
+                    });
+                }
+            }
+        }
+
+        return diagnostics;
+    }
+
+    private static IEnumerable<string> GetToolCallIds(ChatMessage message)
+    {
+        foreach (var content in message.Contents)
+        {
+            var callId = content switch
+            {
+                FunctionCallContent functionCall => functionCall.CallId,
+                McpServerToolCallContent mcpToolCall => mcpToolCall.CallId,
+                ToolCallContent toolCall => toolCall.CallId,
+                _ => null
+            };
+
+            if (!string.IsNullOrWhiteSpace(callId))
+            {
+                yield return callId;
+            }
+        }
+    }
+
+    private static IEnumerable<string> GetToolResultCallIds(ChatMessage message)
+    {
+        foreach (var content in message.Contents)
+        {
+            var callId = content switch
+            {
+                FunctionResultContent functionResult => functionResult.CallId,
+                McpServerToolResultContent mcpToolResult => mcpToolResult.CallId,
+                ToolResultContent toolResult => toolResult.CallId,
+                _ => null
+            };
+
+            if (!string.IsNullOrWhiteSpace(callId))
+            {
+                yield return callId;
+            }
+        }
+    }
+
+    private static AiTraceError DescribeException(Exception exception) => new()
+    {
+        Type = exception.GetType().FullName ?? exception.GetType().Name,
+        Message = exception.Message,
+        StackTrace = exception.ToString()
+    };
+
+    private sealed partial class AiTracePayload
+    {
+        public string RequestId { get; set; } = string.Empty;
+        public string Stage { get; set; } = string.Empty;
+        public DateTimeOffset Timestamp { get; set; }
+        public string? Options { get; set; }
+        public List<AiTraceMessage>? Messages { get; set; }
+        public AiTraceResponse? Response { get; set; }
+        public string? StreamingText { get; set; }
+        public int? StreamingUpdateCount { get; set; }
+        public AiTraceUsage? StreamingUsage { get; set; }
+        public List<AiTraceMessage>? StreamingUpdates { get; set; }
+        public AiTraceProtocolDiagnostics? ProtocolDiagnostics { get; set; }
+        public AiTraceError? Error { get; set; }
+    }
+
+    private sealed partial class AiTraceMessage
+    {
+        public int Index { get; set; }
+        public string Role { get; set; } = string.Empty;
+        public string? AuthorName { get; set; }
+        public string? MessageId { get; set; }
+        public DateTimeOffset? CreatedAt { get; set; }
+        public string? Text { get; set; }
+        public List<AiTraceContent> Contents { get; set; } = [];
+    }
+
+    private sealed partial class AiTraceContent
+    {
+        public int Index { get; set; }
+        public string Kind { get; set; } = string.Empty;
+        public string? Text { get; set; }
+        public string? ProtectedData { get; set; }
+        public string? CallId { get; set; }
+        public string? Name { get; set; }
+        public string? ServerName { get; set; }
+        public string? ArgumentsJson { get; set; }
+        public string? ResultJson { get; set; }
+        public string? ExceptionMessage { get; set; }
+        public string? MediaType { get; set; }
+        public string? Uri { get; set; }
+        public int? DataLength { get; set; }
+    }
+
+    private sealed partial class AiTraceResponse
+    {
+        public string? Text { get; set; }
+        public int MessageCount { get; set; }
+        public List<AiTraceMessage> Messages { get; set; } = [];
+        public AiTraceUsage? Usage { get; set; }
+    }
+
+    private sealed partial class AiTraceUsage
+    {
+        public long? InputTokenCount { get; set; }
+        public long? OutputTokenCount { get; set; }
+        public long? TotalTokenCount { get; set; }
+        public string? AdditionalCountsJson { get; set; }
+    }
+
+    private sealed partial class AiTraceProtocolDiagnostics
+    {
+        public int AssistantToolCallMessages { get; set; }
+        public int ToolMessages { get; set; }
+        public List<AiTraceProtocolIssue> OrphanToolMessages { get; set; } = [];
+        public List<AiTraceProtocolIssue> MissingToolResponses { get; set; } = [];
+        public List<AiTraceProtocolIssue> NonAdjacentToolMessages { get; set; } = [];
+    }
+
+    private sealed partial class AiTraceProtocolIssue
+    {
+        public int MessageIndex { get; set; }
+        public string? MessageId { get; set; }
+        public string? CallId { get; set; }
+        public int? RelatedAssistantIndex { get; set; }
+        public string Reason { get; set; } = string.Empty;
+    }
+
+    private sealed partial class AiTraceError
+    {
+        public string Type { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
+        public string StackTrace { get; set; } = string.Empty;
+    }
+
+    [JsonSourceGenerationOptions(WriteIndented = true)]
+    [JsonSerializable(typeof(AiTracePayload))]
+    [JsonSerializable(typeof(string))]
+    [JsonSerializable(typeof(Dictionary<string, JsonElement>))]
+    [JsonSerializable(typeof(List<JsonElement>))]
+    private sealed partial class AiTraceJsonContext : JsonSerializerContext;
 
     /// <summary>
     /// 记录 Usage 统计信息，并在需要时通知外部观察者。

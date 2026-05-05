@@ -33,7 +33,10 @@ public partial class App : Application
 #pragma warning disable CS8618
     internal static IServiceProvider Services { get; private set; }
 #pragma warning restore CS8618
-
+    /// <summary>
+    /// 应用名称
+    /// </summary>
+    internal static string AppName {get;}="玛得令";
     internal static CancellationTokenSource CancellationTokenSource => _cts;
 
     /// <summary>
@@ -159,18 +162,18 @@ public partial class App : Application
                 options.AddConsole()
                 .AddDebug();
                 var logDir = Environment.GetEnvironmentVariable("CORTANA_LOG_DIR")
-                    ?? Path.Combine(WorkspaceDirectory, ".cortana", "logs");
+                    ?? Path.Combine(WorkspaceDirectory, "logs");
                 try { Directory.CreateDirectory(logDir); } catch { }
 
                 options.AddSerilog(new LoggerConfiguration()
                     .MinimumLevel
-                    .Warning()
+                    .Information()
                     .WriteTo
                     .File(
                         // 将日志写入可覆写目录（支持 CORTANA_LOG_DIR 环境变量）
                         Path.Combine(logDir, "app-.log"),
                         restrictedToMinimumLevel: Serilog.Events.LogEventLevel.Warning,
-                        rollingInterval: RollingInterval.Hour,
+                        rollingInterval: RollingInterval.Minute,
                         fileSizeLimitBytes: 100 * 1024 * 1024,
                         retainedFileCountLimit: 72,
                         rollOnFileSizeLimit: true,
@@ -178,11 +181,7 @@ public partial class App : Application
                     .CreateLogger(), dispose: true);
             })
             .AddEventHub()
-            //.AddTransient<HttpLoggingHandler>()
             .AddHttpClient()
-            //.AddHttpClient("OpenAiCompatible")
-            //.AddHttpMessageHandler<HttpLoggingHandler>()
-            //.Services
             // 窗口
             .AddSingleton<MainWindow>()
             .AddSingleton<FloatWindow>()
@@ -316,6 +315,11 @@ public partial class App : Application
             description: "插件申请 LLM 用于记忆提取/更新/检索时所使用的模型。留空则回退到当前对话模型。",
             defaultValue: "", valueType: "model", sortOrder: 0);
 
+        sysSettings.EnsureSetting("AI.Trace.Enabled",
+            group: "调试", displayName: "AI 全量调试日志",
+            description: "记录 AI 请求、流式更新、响应和异常的完整调试日志。发布版默认关闭，开启后可用于排查工具调用与上下文问题。",
+            defaultValue: "false", valueType: "bool", sortOrder: 0);
+
         // v1.3: Ollama 兼容代理配置，供 ProxyWindow 设置页和网络代理服务读取。
         sysSettings.EnsureOllamaProxySettings();
         // 版本迁移：移除已废弃的旧压缩配置项
@@ -399,7 +403,7 @@ public partial class App : Application
         _trayIcon = new TrayIcon
         {
             Icon = new WindowIcon(iconStream),
-            ToolTipText = "小娜宝贝 · AI 助手",
+            ToolTipText = $"{AppName} · AI 助手",
             Menu = menu,
             IsVisible = true,
         };

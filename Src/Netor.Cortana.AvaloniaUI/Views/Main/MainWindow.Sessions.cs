@@ -2,8 +2,11 @@ using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Threading;
 
+using Netor.Cortana.AI;
 using Netor.Cortana.Entitys;
 using Netor.Cortana.Entitys.Extensions;
+
+using Microsoft.Extensions.AI;
 
 namespace Netor.Cortana.AvaloniaUI.Views;
 
@@ -160,13 +163,14 @@ public partial class MainWindow
 
             foreach (var msg in messages)
             {
-                if (string.IsNullOrWhiteSpace(msg.Content))
+                var displayContent = BuildDisplayContent(msg);
+                if (string.IsNullOrWhiteSpace(displayContent))
                     continue;
 
                 bool isUser = string.Equals(msg.Role, "user", StringComparison.OrdinalIgnoreCase);
                 assetsByMessage.TryGetValue(msg.Id, out var msgAssets);
                 var name = !string.IsNullOrWhiteSpace(msg.AuthorName) ? msg.AuthorName : null;
-                AddMessageBubble(msg.Content, isUser, msgAssets, name, msg.CreatedAt);
+                AddMessageBubble(displayContent, isUser, msgAssets, name, msg.CreatedAt);
             }
 
             // 加载完消息后强制滚动到底部（等待布局完成后执行）
@@ -188,6 +192,51 @@ public partial class MainWindow
             var logger = App.Services.GetRequiredService<ILogger<MainWindow>>();
             logger.LogError(ex, "切换会话失败: {SessionId}", sessionId);
         }
+    }
+
+    /// <summary>
+    /// 构造聊天气泡显示内容。reasoning 只保留在结构化历史和 AI 上下文中，不直接渲染到聊天气泡。
+    /// </summary>
+    private static string BuildDisplayContent(ChatMessageEntity message)
+    {
+        var structured = Netor.Cortana.AI.ChatMessageExtensions.ParseContentsJson(message.ContentsJson);
+        if (structured is { Count: > 0 })
+        {
+            var textParts = structured
+                .OfType<TextContent>()
+                .Select(static text => text.Text?.Trim())
+                .Where(static text => !string.IsNullOrWhiteSpace(text))
+                .ToList();
+
+            if (textParts.Count > 0)
+            {
+                return string.Join("\n\n", textParts);
+            }
+
+            if (structured.Any(static content => content is TextReasoningContent))
+            {
+                return string.Empty;
+            }
+        }
+
+        return message.Content ?? string.Empty;
+    }
+
+    /// <summary>
+    /// 预留：后续如需单独显示思考过程，可从结构化历史中提取 reasoning 内容。
+    /// </summary>
+    private static string BuildReasoningDisplayContent(ChatMessageEntity message)
+    {
+        var structured = Netor.Cortana.AI.ChatMessageExtensions.ParseContentsJson(message.ContentsJson);
+        if (structured is not { Count: > 0 }) return string.Empty;
+
+        var reasoningParts = structured
+            .OfType<TextReasoningContent>()
+            .Select(static reasoning => reasoning.Text?.Trim())
+            .Where(static text => !string.IsNullOrWhiteSpace(text))
+            .ToList();
+
+        return reasoningParts.Count == 0 ? string.Empty : string.Join("\n\n", reasoningParts);
     }
 
     /// <summary>

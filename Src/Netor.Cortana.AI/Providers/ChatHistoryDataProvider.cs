@@ -82,8 +82,10 @@ public sealed class ChatHistoryDataProvider(
         var agentIdForMessages = context.Session?.StateBag.GetValue<string>("agentid") ?? context.Agent?.Id ?? string.Empty;
         var agentNameForMessages = context.Agent?.Name ?? string.Empty;
 
+        var responseMessages = (context.ResponseMessages ?? []).ToList();
+
         // ──── 完整工具链条落库：保证消息顺序，每条消息独立 ID ────
-        var messages = (context.ResponseMessages ?? [])
+        var messages = responseMessages
             .Select((t, index) => new ChatMessageEntity
             {
                 Role = t.Role.ToString(),
@@ -310,7 +312,8 @@ public sealed class ChatHistoryDataProvider(
                     Contents = BuildContentsWithAssets(t)
                 }));
 
-                return ReorderForToolCallProtocol(result);
+                var reordered = ReorderForToolCallProtocol(result);
+                return reordered;
             }
 
             // ── 老版兼容：CompactedContext 缓存（只读回退） ──
@@ -356,7 +359,8 @@ public sealed class ChatHistoryDataProvider(
                         Contents = BuildContentsWithAssets(t)
                     }));
 
-                    return ReorderForToolCallProtocol(result);
+                    var reordered = ReorderForToolCallProtocol(result);
+                    return reordered;
                 }
 
                 // 摘要无效 → 跳过老版缓存，回退到加载全部消息
@@ -379,7 +383,8 @@ public sealed class ChatHistoryDataProvider(
                     CreatedAt = t.CreatedAt?.ToLocalTime(),
                     Contents = BuildContentsWithAssets(t)
                 });
-            return ReorderForToolCallProtocol(messages);
+            var reorderedMessages = ReorderForToolCallProtocol(messages);
+            return reorderedMessages;
         }
         catch (Exception ex)
         {
@@ -792,13 +797,10 @@ public sealed class ChatHistoryDataProvider(
         {
             var msg = input[i];
             if (msg.Role != ChatRole.Tool) continue;
-            foreach (var c in msg.Contents)
+            foreach (var callId in GetToolResultCallIds(msg))
             {
-                if (c is FunctionResultContent fr && !string.IsNullOrWhiteSpace(fr.CallId))
-                {
-                    // 同 CallId 多次结果取首次（理论上不应发生）
-                    toolByCallId.TryAdd(fr.CallId, i);
-                }
+                // 同 CallId 多次结果取首次（理论上不应发生）
+                toolByCallId.TryAdd(callId, i);
             }
         }
 
@@ -816,27 +818,33 @@ public sealed class ChatHistoryDataProvider(
             {
                 // 走到这里说明该 tool 消息没有被任何 assistant(tool_calls) 紧邻消费
                 // 如果它有对应的 assistant 在前面但顺序错乱 —— 在第二遍 assistant 处理时已经会把它拉过去；
-                // 如果到这里仍未被消费 —— 说明它是孤立的 tool 消息，丢弃以避免 OpenAI 协议错误。
+                // 如果到这里仍未被消费，或本身没有 CallId —— 说明它是孤立/无效的 tool 消息，丢弃以避免 OpenAI 协议错误。
                 droppedOrphanTools++;
                 continue;
             }
 
-            if (msg.Role == ChatRole.Assistant && msg.Contents.OfType<FunctionCallContent>().Any())
+            if (msg.Role == ChatRole.Assistant && HasToolCalls(msg))
             {
-                var callIds = msg.Contents.OfType<FunctionCallContent>()
-                    .Select(c => c.CallId)
-                    .Where(static id => !string.IsNullOrWhiteSpace(id))
-                    .ToList();
+                var callIds = GetToolCallIds(msg).ToList();
 
-                // 检查是否所有 CallId 都能找到对应 tool 消息
-                var missingCallIds = callIds.Where(id => !toolByCallId.ContainsKey(id) || consumedToolIndexes.Contains(toolByCallId[id])).ToList();
+                // 检查是否所有 CallId 都能找到对应 tool 消息。没有 CallId 的 tool_call 也必须降级，不能原样发给 OpenAI。
+                var missingCallIds = callIds.Count == 0
+                    ? [string.Empty]
+                    : callIds.Where(id => !toolByCallId.ContainsKey(id) || consumedToolIndexes.Contains(toolByCallId[id])).ToList();
 
                 if (missingCallIds.Count == 0)
                 {
                     output.Add(msg);
+                    var toolIndexes = new List<int>();
                     foreach (var id in callIds)
                     {
                         var idx = toolByCallId[id];
+                        if (toolIndexes.Contains(idx)) continue;
+                        toolIndexes.Add(idx);
+                    }
+
+                    foreach (var idx in toolIndexes)
+                    {
                         output.Add(input[idx]);
                         consumedToolIndexes.Add(idx);
                     }
@@ -868,6 +876,57 @@ public sealed class ChatHistoryDataProvider(
         }
 
         return output;
+    }
+
+    private static bool HasToolCalls(AIChatMessage message)
+    {
+        foreach (var content in message.Contents)
+        {
+            if (content is FunctionCallContent or ToolCallContent or McpServerToolCallContent)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static IEnumerable<string> GetToolCallIds(AIChatMessage message)
+    {
+        foreach (var content in message.Contents)
+        {
+            var callId = content switch
+            {
+                FunctionCallContent functionCall => functionCall.CallId,
+                McpServerToolCallContent mcpToolCall => mcpToolCall.CallId,
+                ToolCallContent toolCall => toolCall.CallId,
+                _ => null
+            };
+
+            if (!string.IsNullOrWhiteSpace(callId))
+            {
+                yield return callId;
+            }
+        }
+    }
+
+    private static IEnumerable<string> GetToolResultCallIds(AIChatMessage message)
+    {
+        foreach (var content in message.Contents)
+        {
+            var callId = content switch
+            {
+                FunctionResultContent functionResult => functionResult.CallId,
+                McpServerToolResultContent mcpToolResult => mcpToolResult.CallId,
+                ToolResultContent toolResult => toolResult.CallId,
+                _ => null
+            };
+
+            if (!string.IsNullOrWhiteSpace(callId))
+            {
+                yield return callId;
+            }
+        }
     }
 
     /// <summary>

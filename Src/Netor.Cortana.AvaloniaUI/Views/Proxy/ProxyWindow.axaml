@@ -5,7 +5,7 @@
         x:DataType="proxy:ProxyViewModel"
         x:CompileBindings="True"
         Title="AI 代理"
-        Width="340" Height="500"
+        Width="340" Height="520"
         MinWidth="300" MinHeight="420"
         CanResize="False"
         WindowStartupLocation="Manual"

@@ -378,6 +378,21 @@ namespace Netor.Cortana.Entitys.Services
         }
 
         /// <summary>
+        /// 获取 AI 调试日志是否开启。
+        /// 环境变量优先，其次读取系统设置，最后回退到默认值。
+        /// </summary>
+        public bool IsAiTraceEnabled(bool defaultValue = false)
+        {
+            var env = Environment.GetEnvironmentVariable("CORTANA_AI_TRACE_ENABLED");
+            if (bool.TryParse(env, out var envEnabled))
+            {
+                return envEnabled;
+            }
+
+            return GetValue("AI.Trace.Enabled", defaultValue);
+        }
+
+        /// <summary>
         /// 删除指定键的设置项（用于版本升级时移除废弃配置）。
         /// </summary>
         public void DeleteSetting(string key)

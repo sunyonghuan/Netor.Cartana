@@ -2,13 +2,14 @@ using Microsoft.Data.Sqlite;
 
 using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 
 namespace Netor.Cortana.Entitys.Services
 {
     /// <summary>
     /// 聊天消息数据服务，提供对 ChatMessages 表的查询操作。
     /// </summary>
-    public sealed class ChatMessageService
+    public sealed partial class ChatMessageService
     {
         private readonly CortanaDbContext _db;
 
@@ -33,7 +34,7 @@ namespace Netor.Cortana.Entitys.Services
 
             // 前端聊天窗口不显示：
             // 1) 工具消息（role = 'tool'）
-            // 2) 仅包含工具调用而无可读文本/结果的助手占位消息（纯 functionCall/toolCall）
+            // 2) 任何包含工具调用的助手占位消息。工具调用链条只服务于 AI 协议，不属于用户可读聊天内容。
             return _db.Query(
                 "SELECT * FROM ChatMessages\n"
                 + "WHERE SessionId = @SessionId\n"
@@ -41,16 +42,35 @@ namespace Netor.Cortana.Entitys.Services
                 + "  AND Content NOT LIKE '[工具调用]%'\n"
                 + "  AND NOT (Role = 'assistant'\n"
                 + "           AND IFNULL(ContentsJson,'') <> ''\n"
-                + "           AND (ContentsJson LIKE '%\"functionCall\"%' OR ContentsJson LIKE '%\"toolCall\"%')\n"
-                + "           AND ContentsJson NOT LIKE '%\"text\"%'\n"
-                + "           AND ContentsJson NOT LIKE '%\"functionResult\"%'\n"
-                + "           AND ContentsJson NOT LIKE '%\"toolResult\"%')\n"
+                + "           AND (ContentsJson LIKE '%\"functionCall\"%' OR ContentsJson LIKE '%\"toolCall\"%'))\n"
                 // 加入 rowid 作为 tie-breaker，确保同一时间戳的多条消息按入库顺序返回，
                 // 避免工具调用链条因时间戳精度不足而错乱。
                 + "ORDER BY CreatedTimestamp ASC, rowid ASC",
-                ReadEntity,
+                ReadDisplayEntity,
                 cmd => cmd.Parameters.AddWithValue("@SessionId", sessionId));
         }
+
+        private static ChatMessageEntity ReadDisplayEntity(SqliteDataReader r)
+        {
+            var entity = ReadEntity(r);
+            entity.Content = StripToolBlocks(entity.Content);
+            return entity;
+        }
+
+        private static string StripToolBlocks(string content)
+        {
+            if (string.IsNullOrWhiteSpace(content)) return string.Empty;
+
+            var cleaned = ToolCallBlockRegex().Replace(content, string.Empty);
+            cleaned = ToolResultBlockRegex().Replace(cleaned, string.Empty);
+            return cleaned.Trim();
+        }
+
+        [GeneratedRegex(@"(?ms)^\[工具调用\]\s*.*?(?=^\[工具调用\]|^\[工具结果\]|\z)")]
+        private static partial Regex ToolCallBlockRegex();
+
+        [GeneratedRegex(@"(?ms)^\[工具结果\]\s*.*?(?=^\[工具调用\]|^\[工具结果\]|\z)")]
+        private static partial Regex ToolResultBlockRegex();
 
         public static ChatMessageEntity ReadEntity(SqliteDataReader r)
         {

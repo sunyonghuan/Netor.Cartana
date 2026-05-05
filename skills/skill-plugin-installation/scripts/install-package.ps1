@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     安装 Cortana 技能或插件。
 .DESCRIPTION
@@ -27,6 +27,8 @@ param(
 
     [switch]$Force
 )
+
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -71,7 +73,7 @@ function Test-SkillManifest {
 
     $content = Get-Content -LiteralPath $ManifestPath -Raw -Encoding UTF8
     if ([string]::IsNullOrWhiteSpace($content)) {
-        return 'SKILL.md 或 skill.md 内容不能为空。'
+        return 'skill.md 内容不能为空。'
     }
 
     $hasHeading = $content -match '(?m)^#\s+\S+'
@@ -80,11 +82,11 @@ function Test-SkillManifest {
     $hasDescription = $content -match '(?m)^description\s*:'
 
     if (-not $hasHeading) {
-        return 'SKILL.md 或 skill.md 必须包含 Markdown 标题。'
+        return 'skill.md 必须包含 Markdown 标题。'
     }
 
     if ($hasFrontMatter -and (-not $hasName -or -not $hasDescription)) {
-        return 'SKILL.md 或 skill.md 的 YAML 头至少需要 name 和 description。'
+        return 'skill.md 的 YAML 头至少需要 name 和 description。'
     }
 
     return $null
@@ -101,13 +103,9 @@ function Test-PackageStructure {
     }
 
     if ($Type -eq 'skill') {
-        $manifestCandidates = @(
-            (Join-Path $PackageRoot 'SKILL.md'),
-            (Join-Path $PackageRoot 'skill.md')
-        )
-        $manifestPath = $manifestCandidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
-        if (-not $manifestPath) {
-            return '技能根目录缺少 SKILL.md 或 skill.md。'
+        $manifestPath = Join-Path $PackageRoot 'skill.md'
+        if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+            return '技能根目录缺少 skill.md。'
         }
 
         return (Test-SkillManifest -ManifestPath $manifestPath)

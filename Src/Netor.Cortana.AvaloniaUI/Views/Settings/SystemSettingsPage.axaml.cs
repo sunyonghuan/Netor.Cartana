@@ -31,6 +31,11 @@ public partial class SystemSettingsPage : UserControl
 
     private void LoadSettings()
     {
+        SettingsService.EnsureSetting("AI.Trace.Enabled",
+            group: "调试", displayName: "AI 全量调试日志",
+            description: "记录 AI 请求、流式更新、响应和异常的完整调试日志。发布版默认关闭，开启后可用于排查工具调用与上下文问题。",
+            defaultValue: "false", valueType: "bool", sortOrder: 0);
+
         SettingsContainer.Children.Clear();
         _editors.Clear();
 
