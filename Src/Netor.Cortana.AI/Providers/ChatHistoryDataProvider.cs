@@ -91,7 +91,7 @@ public sealed class ChatHistoryDataProvider(
                 Role = t.Role.ToString(),
                 Content = ChatMessageExtensions.BuildPersistedContent(t.Text, t.Contents),
                 ContentsJson = ChatMessageExtensions.BuildContentsJson(t.Contents),
-                AuthorName = GetChatRoleText(t.Role, context.Agent.Name ?? "未知"),
+                AuthorName = GetChatRoleText(t.Role, context.Agent?.Name ?? "未知"),
                 CreatedAt = t.CreatedAt ?? DateTimeOffset.UtcNow,
                 // CreatedTimestamp 用归一化后的单调递增值，保证入库 / 读取 / 排序顺序与 ResponseMessages 一致；
                 // 真实业务时间继续保留在 CreatedAt 列，UI 展示时间应优先取 CreatedAt。
@@ -172,14 +172,16 @@ public sealed class ChatHistoryDataProvider(
 
         // ---- 新增：压缩后回写 ----
         if (context.Session is null) return;
-        await CompactAndReplaceAsync(context.Agent, context.Session, sessionId, cancellationToken);
+        if (context.Agent is not null)
+            await CompactAndReplaceAsync(context.Agent, context.Session, sessionId, cancellationToken);
 
         // ---- 新会话首次对话：异步生成 AI 摘要标题 ----
         if (context.Session.StateBag.GetValue<string>(IsNewSessionStateKey) == bool.TrueString)
         {
             context.Session.StateBag.SetValue(IsNewSessionStateKey, bool.FalseString);
             var aiResponse = context.ResponseMessages?.FirstOrDefault(m => m.Role == ChatRole.Assistant)?.Text ?? "";
-            _ = GenerateAndUpdateTitleAsync(context.Agent, sessionId, firstText, aiResponse);
+            if (context.Agent is not null)
+                _ = GenerateAndUpdateTitleAsync(context.Agent, sessionId, firstText, aiResponse);
         }
     }
 
@@ -217,7 +219,7 @@ public sealed class ChatHistoryDataProvider(
                 Role = ChatRole.Assistant.ToString(),
                 Content = ChatMessageExtensions.BuildPersistedContent(partialResponse, partialContents),
                 ContentsJson = ChatMessageExtensions.BuildContentsJson(partialContents),
-                AuthorName = GetChatRoleText(ChatRole.Assistant, agent.Name ?? "未知"),
+                AuthorName = GetChatRoleText(ChatRole.Assistant, agent?.Name ?? "未知"),
                 CreatedAt = DateTimeOffset.UtcNow,
                 CreatedTimestamp = DateTimeOffset.UtcNow.ToLocalTime().ToUnixTimeMilliseconds(),
                 Id = messageId ?? Guid.NewGuid().ToString("N"),
@@ -392,8 +394,9 @@ public sealed class ChatHistoryDataProvider(
             return [];
         }
 
-        static string BuildChatHistoryQuery(string suffix, IReadOnlyList<string> excludedMessageIds)
+        static string BuildChatHistoryQuery(string suffix, IReadOnlyList<string?>? excludedMessageIds)
         {
+            if (excludedMessageIds is null) return string.Empty;
             var builder = new StringBuilder("SELECT * FROM ChatMessages WHERE SessionId = @SessionId");
             for (var index = 0; index < excludedMessageIds.Count; index++)
             {
@@ -409,8 +412,9 @@ public sealed class ChatHistoryDataProvider(
             return builder.ToString();
         }
 
-        static void BindChatHistoryParameters(Microsoft.Data.Sqlite.SqliteCommand cmd, string sessionId, IReadOnlyList<string> excludedMessageIds)
+        static void BindChatHistoryParameters(Microsoft.Data.Sqlite.SqliteCommand cmd, string sessionId, IReadOnlyList<string?>? excludedMessageIds)
         {
+            if (excludedMessageIds is null) return;
             cmd.Parameters.AddWithValue("@SessionId", sessionId);
             for (var index = 0; index < excludedMessageIds.Count; index++)
             {

@@ -8,7 +8,7 @@ namespace Netor.Cortana.AI.Drivers;
 
 internal class DeepseekOverrideHandler(ILogger<DeepseekOverrideHandler> logger) : DelegatingHandler
 {
-    private readonly ILogger<DeepseekOverrideHandler> _logger = logger;
+    //private readonly ILogger<DeepseekOverrideHandler> _logger = logger;
 
     /// <summary>
     /// 拦截 DeepSeek 请求，在最终 JSON 中补写 reasoning_content。
@@ -24,7 +24,7 @@ internal class DeepseekOverrideHandler(ILogger<DeepseekOverrideHandler> logger) 
             {
                 var originalBody = await request.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
 #if DEBUG
-                logger.LogWarning($"DeepSeek 请求原始内容：{originalBody}");
+                logger.LogWarning("DeepSeek 请求原始内容：{originalBody}", originalBody);
 #endif
 
                 var rewrittenBody = RewriteRequestBody(originalBody);
@@ -38,7 +38,7 @@ internal class DeepseekOverrideHandler(ILogger<DeepseekOverrideHandler> logger) 
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            _logger.LogDebug("DeepSeek 请求已取消。");
+            logger.LogDebug("DeepSeek 请求已取消。");
             throw;
         }
     }

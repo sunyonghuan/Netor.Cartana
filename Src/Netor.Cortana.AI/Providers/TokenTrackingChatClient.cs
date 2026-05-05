@@ -1,15 +1,15 @@
 ﻿using Microsoft.Extensions.AI;
 
+using Netor.Cortana.Entitys;
+using Netor.Cortana.Entitys.Services;
+
 using System.Collections;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Net;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-
-using Netor.Cortana.Entitys;
-using Netor.Cortana.Entitys.Services;
 
 namespace Netor.Cortana.AI.Providers;
 
@@ -265,37 +265,37 @@ public partial class TokenTrackingChatClient : DelegatingChatClient
         };
         foreach (var m in results) yield return m;
         yield break;
-        // 1) 针对包含 tool_calls 但缺失 reasoning 的 assistant：注入 reasoning
-        for (var i = 0; i < listInput.Count; i++)
-        {
-            var m = listInput[i];
-            if (m.Role != ChatRole.Assistant) continue;
-            var hasReasoning = m.Contents?.Any(c => c is TextReasoningContent) == true;
-            var hasToolCall = m.Contents?.Any(c => c is ToolCallContent or McpServerToolCallContent) == true;
-            if (hasToolCall && !hasReasoning)
-            {
-                var c = m.Contents is null ? [] : new List<AIContent>(m.Contents);
-                c.Insert(0, new TextReasoningContent(_lastAssistantReasoning.ToString()));
-                listInput[i] = new ChatMessage { Role = m.Role, AuthorName = m.AuthorName, MessageId = m.MessageId, CreatedAt = m.CreatedAt, Contents = c };
-            }
-        }
+        //// 1) 针对包含 tool_calls 但缺失 reasoning 的 assistant：注入 reasoning
+        //for (var i = 0; i < listInput.Count; i++)
+        //{
+        //    var m = listInput[i];
+        //    if (m.Role != ChatRole.Assistant) continue;
+        //    var hasReasoning = m.Contents?.Any(c => c is TextReasoningContent) == true;
+        //    var hasToolCall = m.Contents?.Any(c => c is ToolCallContent or McpServerToolCallContent) == true;
+        //    if (hasToolCall && !hasReasoning)
+        //    {
+        //        var c = m.Contents is null ? [] : new List<AIContent>(m.Contents);
+        //        c.Insert(0, new TextReasoningContent(_lastAssistantReasoning.ToString()));
+        //        listInput[i] = new ChatMessage { Role = m.Role, AuthorName = m.AuthorName, MessageId = m.MessageId, CreatedAt = m.CreatedAt, Contents = c };
+        //    }
+        //}
 
-        // 2) 兜底：若“最近一条 assistant”仍缺 reasoning，也补上（覆盖“无 tool_calls”场景）
-        for (int i = listInput.Count - 1; i >= 0; i--)
-        {
-            var m = listInput[i];
-            if (m.Role != ChatRole.Assistant) continue;
-            var hasReasoning = m.Contents?.Any(c => c is TextReasoningContent) == true;
-            if (!hasReasoning)
-            {
-                var c = m.Contents is null ? [] : new List<AIContent>(m.Contents);
-                c.Insert(0, new TextReasoningContent(_lastAssistantReasoning.ToString()));
-                listInput[i] = new ChatMessage { Role = m.Role, AuthorName = m.AuthorName, MessageId = m.MessageId, CreatedAt = m.CreatedAt, Contents = c };
-            }
-            break; // 只处理最近一条 assistant
-        }
+        //// 2) 兜底：若“最近一条 assistant”仍缺 reasoning，也补上（覆盖“无 tool_calls”场景）
+        //for (int i = listInput.Count - 1; i >= 0; i--)
+        //{
+        //    var m = listInput[i];
+        //    if (m.Role != ChatRole.Assistant) continue;
+        //    var hasReasoning = m.Contents?.Any(c => c is TextReasoningContent) == true;
+        //    if (!hasReasoning)
+        //    {
+        //        var c = m.Contents is null ? [] : new List<AIContent>(m.Contents);
+        //        c.Insert(0, new TextReasoningContent(_lastAssistantReasoning.ToString()));
+        //        listInput[i] = new ChatMessage { Role = m.Role, AuthorName = m.AuthorName, MessageId = m.MessageId, CreatedAt = m.CreatedAt, Contents = c };
+        //    }
+        //    break; // 只处理最近一条 assistant
+        //}
 
-        foreach (var m in listInput) yield return m;
+        //foreach (var m in listInput) yield return m;
     }
 
     private static string CreateTraceId() => DateTimeOffset.Now.ToString("yyyyMMdd-HHmmss-fff") + "-" + Guid.NewGuid().ToString("N")[..8];
