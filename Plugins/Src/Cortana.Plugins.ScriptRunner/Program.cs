@@ -118,8 +118,8 @@ internal static class Program
         var info = new PluginInfo
         {
             Id = "csx_script",
-            Name = "C# Script Runner",
-            Version = "1.0.0",
+            Name = "C# 脚本执行器",
+            Version = "1.0.1",
             Description = "在 .NET Runtime 上执行 C# 脚本（CSX）。基于 Roslyn Scripting。",
             Tags = nuget ? ["C#", "脚本", "CSX", "Roslyn", "nuget"] : ["C#", "脚本", "CSX", "Roslyn"],
             Instructions =

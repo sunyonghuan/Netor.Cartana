@@ -28,8 +28,8 @@ public static class AIServiceExtensions
             .AddHttpClient("Deepseek")
             .AddHttpMessageHandler<DeepseekOverrideHandler>();
         // Providers（同时作为 AIContextProvider 注入到 AIAgentFactory）
-        services.AddSingleton<FileMemoryProvider>();
-        services.AddSingleton<AIContextProvider>(sp => sp.GetRequiredService<FileMemoryProvider>());
+        services.AddSingleton<ProjectSettingsProvider>();
+        services.AddSingleton<AIContextProvider>(sp => sp.GetRequiredService<ProjectSettingsProvider>());
         services.AddSingleton<ChatHistoryDataProvider>();
         services.AddSingleton<ModelPurposeResolver>();
         services.AddSingleton<IHostCapabilityBroker, HostCapabilityBroker>();

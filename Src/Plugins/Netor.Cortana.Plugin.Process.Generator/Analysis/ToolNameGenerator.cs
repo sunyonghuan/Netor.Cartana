@@ -11,7 +11,12 @@ namespace Netor.Cortana.Plugin.Process.Generator.Analysis;
 internal static class ToolNameGenerator
 {
     public static string GenerateFullName(string pluginId, string methodSnake)
-        => $"{pluginId}_{methodSnake}";
+    {
+        var prefix = pluginId + "_";
+        return methodSnake.StartsWith(prefix, StringComparison.Ordinal)
+            ? methodSnake
+            : $"{pluginId}_{methodSnake}";
+    }
 
     public static bool IsValidToolNamePart(string name)
     {

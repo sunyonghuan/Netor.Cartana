@@ -12,7 +12,7 @@ public sealed class BtSiteSecurityTools(BtApiClient client)
     /// 统一管理站点安全相关设置。
     /// action 支持 toggle_userini、set_pwd、close_pwd、toggle_logs。
     /// </summary>
-    [Tool(Name = "bt_set_site_security", Description = "设置防跨站、密码访问或访问日志开关。")]
+    [Tool(Name = "set_site_security", Description = "设置防跨站、密码访问或访问日志开关。")]
     public async Task<string> SetSiteSecurity(
         [Parameter(Description = "宝塔面板地址，例如 http://127.0.0.1:8888")] string panelUrl,
         [Parameter(Description = "宝塔 API 密钥 apiSk")] string apiSk,

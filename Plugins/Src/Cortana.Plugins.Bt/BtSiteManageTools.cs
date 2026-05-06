@@ -12,7 +12,7 @@ public sealed class BtSiteManageTools(BtApiClient client)
     /// 创建一个新的宝塔网站。
     /// 当前实现按 PHP 站点创建，默认不开启 FTP 和数据库。
     /// </summary>
-    [Tool(Name = "bt_add_site", Description = "创建宝塔网站。")]
+    [Tool(Name = "add_site", Description = "创建宝塔网站。")]
     public async Task<string> AddSite(
         [Parameter(Description = "宝塔面板地址，例如 http://127.0.0.1:8888")] string panelUrl,
         [Parameter(Description = "宝塔 API 密钥 apiSk")] string apiSk,
@@ -50,7 +50,7 @@ public sealed class BtSiteManageTools(BtApiClient client)
     /// 删除一个宝塔网站。
     /// 可选同时删除站点目录，但不会自动删除数据库和 FTP。
     /// </summary>
-    [Tool(Name = "bt_delete_site", Description = "删除宝塔网站。")]
+    [Tool(Name = "delete_site", Description = "删除宝塔网站。")]
     public async Task<string> DeleteSite(
         [Parameter(Description = "宝塔面板地址，例如 http://127.0.0.1:8888")] string panelUrl,
         [Parameter(Description = "宝塔 API 密钥 apiSk")] string apiSk,
@@ -79,7 +79,7 @@ public sealed class BtSiteManageTools(BtApiClient client)
     /// 启用或停用指定网站。
     /// targetStatus 只允许 start 或 stop。
     /// </summary>
-    [Tool(Name = "bt_set_site_status", Description = "启用或停用网站。")]
+    [Tool(Name = "set_site_status", Description = "启用或停用网站。")]
     public async Task<string> SetSiteStatus(
         [Parameter(Description = "宝塔面板地址，例如 http://127.0.0.1:8888")] string panelUrl,
         [Parameter(Description = "宝塔 API 密钥 apiSk")] string apiSk,

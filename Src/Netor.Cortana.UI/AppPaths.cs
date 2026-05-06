@@ -15,6 +15,7 @@ internal sealed class AppPaths : IAppPaths
     public string WorkspaceSkillsDirectory => Path.Combine(App.WorkspaceDirectory, ".cortana", "skills");
 
     /// <inheritdoc />
+    [Obsolete("工作区插件目录已废弃，请使用 UserPluginsDirectory。")]
     public string WorkspacePluginsDirectory => Path.Combine(App.WorkspaceDirectory, ".cortana", "plugins");
 
     /// <inheritdoc />
@@ -24,7 +25,7 @@ internal sealed class AppPaths : IAppPaths
     public string UserPluginsDirectory => Path.Combine(App.UserDataDirectory, "plugins");
 
     /// <inheritdoc />
-    public string PluginDirectory => WorkspacePluginsDirectory;
+    public string PluginDirectory => UserPluginsDirectory;
 
     /// <inheritdoc />
     public string WorkspaceResourcesDirectory => Path.Combine(App.WorkspaceDirectory, ".cortana", "resources");

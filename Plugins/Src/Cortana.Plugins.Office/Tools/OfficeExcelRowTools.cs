@@ -17,7 +17,7 @@ public sealed class OfficeExcelRowTools(
     ILogger<OfficeExcelRowTools> logger)
 {
     /// <summary>从指定起始单元格写入二维数据块。</summary>
-    [Tool(Name = "office_excel_write_range",
+    [Tool(Name = "excel_write_range",
         Description = "从指定起始单元格写入二维数据块。values 为 JSON 二维数组，外层为行，内层为列。以 = 开头的字符串按公式写入。")]
     public string WriteRange(
         [Parameter(Description = "源文件路径（.xlsx）")] string sourcePath,
@@ -77,7 +77,7 @@ public sealed class OfficeExcelRowTools(
     }
 
     /// <summary>在指定行之前插入空行。</summary>
-    [Tool(Name = "office_excel_insert_row",
+    [Tool(Name = "excel_insert_row",
         Description = "在指定行之前插入一个或多个空行。row_index 从 1 开始。row_count 默认 1，最大 1000。")]
     public string InsertRow(
         [Parameter(Description = "源文件路径（.xlsx）")] string sourcePath,
@@ -115,7 +115,7 @@ public sealed class OfficeExcelRowTools(
     }
 
     /// <summary>删除指定工作表中的连续行。</summary>
-    [Tool(Name = "office_excel_delete_row",
+    [Tool(Name = "excel_delete_row",
         Description = "删除指定工作表中的一个或多个连续行。row_index 从 1 开始。require_non_empty 为 1 时仅删除含数据的行。")]
     public string DeleteRow(
         [Parameter(Description = "源文件路径（.xlsx）")] string sourcePath,

@@ -273,6 +273,16 @@ namespace Netor.Cortana.Entitys
                 """);
 
             Execute("""
+                CREATE TABLE IF NOT EXISTS GlobalPlugins (
+                    Id TEXT PRIMARY KEY,
+                    CreatedTimestamp INTEGER NOT NULL,
+                    UpdatedTimestamp INTEGER NOT NULL,
+                    PluginId TEXT NOT NULL UNIQUE,
+                    IsEnabled INTEGER NOT NULL DEFAULT 1
+                );
+                """);
+
+            Execute("""
                 CREATE TABLE IF NOT EXISTS ChatMessageAssets (
                     Id TEXT PRIMARY KEY,
                     CreatedTimestamp INTEGER NOT NULL,
@@ -393,6 +403,7 @@ namespace Netor.Cortana.Entitys
             Execute("CREATE INDEX IF NOT EXISTS IX_McpServers_IsEnabled ON McpServers(IsEnabled);");
             Execute("CREATE INDEX IF NOT EXISTS IX_SystemSettings_Group ON SystemSettings([Group]);");
             Execute("CREATE INDEX IF NOT EXISTS IX_SystemSettings_SortOrder ON SystemSettings(SortOrder);");
+            Execute("CREATE INDEX IF NOT EXISTS IX_GlobalPlugins_IsEnabled ON GlobalPlugins(IsEnabled);");
 
             // ChatMessageAssets 索引
             Execute("CREATE INDEX IF NOT EXISTS IX_ChatMessageAssets_SessionId ON ChatMessageAssets(SessionId);");

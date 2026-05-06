@@ -2,52 +2,54 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using ProcessDiag = System.Diagnostics.Process;
 
-namespace Netor.Cortana.Plugin.BuiltIn.ApplicationLauncher;
+namespace Cortana.Plugins.ApplicationLauncher;
 
 /// <summary>
-/// 应用启动管理器，负责发现、验证和启动应用程序
+/// 应用启动管理器，负责基于白名单发现、验证和启动本机应用程序。
 /// </summary>
-public class ApplicationLauncher
+public sealed class ApplicationLauncher
 {
     private readonly ILogger<ApplicationLauncher> _logger;
 
-    // 应用白名单：应用友好名称 -> 执行路径（支持通配符查询）
-    private static readonly Dictionary<string, string[]> ApplicationWhitelist = new()
+    /// <summary>
+    /// 应用启动白名单。键为用户友好的应用名称，值为可执行文件名或常见安装路径模式。
+    /// </summary>
+    private static readonly Dictionary<string, string[]> ApplicationWhitelist = new(StringComparer.OrdinalIgnoreCase)
     {
-        // IDE
-        { "Visual Studio", new[] { "devenv.exe", @"C:\Program Files\Microsoft Visual Studio\*\Enterprise\Common7\IDE\devenv.exe", @"C:\Program Files (x86)\Microsoft Visual Studio\*\Enterprise\Common7\IDE\devenv.exe" } },
-        { "VS Code", new[] { "code.exe", @"C:\Users\*\AppData\Local\Programs\Microsoft VS Code\Code.exe" } },
-        { "Visual Studio Code", new[] { "code.exe", @"C:\Users\*\AppData\Local\Programs\Microsoft VS Code\Code.exe" } },
+        { "Visual Studio", ["devenv.exe", @"C:\Program Files\Microsoft Visual Studio\*\Enterprise\Common7\IDE\devenv.exe", @"C:\Program Files (x86)\Microsoft Visual Studio\*\Enterprise\Common7\IDE\devenv.exe"] },
+        { "VS Code", ["code.exe", @"C:\Users\*\AppData\Local\Programs\Microsoft VS Code\Code.exe"] },
+        { "Visual Studio Code", ["code.exe", @"C:\Users\*\AppData\Local\Programs\Microsoft VS Code\Code.exe"] },
 
-        // 浏览器
-        { "Chrome", new[] { "chrome.exe", @"C:\Program Files\Google\Chrome\Application\chrome.exe", @"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe" } },
-        { "Firefox", new[] { "firefox.exe", @"C:\Program Files\Mozilla Firefox\firefox.exe", @"C:\Program Files (x86)\Mozilla Firefox\firefox.exe" } },
-        { "Edge", new[] { "msedge.exe", @"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" } },
+        { "Chrome", ["chrome.exe", @"C:\Program Files\Google\Chrome\Application\chrome.exe", @"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"] },
+        { "Firefox", ["firefox.exe", @"C:\Program Files\Mozilla Firefox\firefox.exe", @"C:\Program Files (x86)\Mozilla Firefox\firefox.exe"] },
+        { "Edge", ["msedge.exe", @"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"] },
 
-        // 开发工具
-        { "Git Bash", new[] { "bash.exe", @"C:\Program Files\Git\bin\bash.exe" } },
-        { "PowerShell", new[] { "powershell.exe", "pwsh.exe" } },
-        { "Notepad++", new[] { "notepad++.exe", @"C:\Program Files\Notepad++\notepad++.exe", @"C:\Program Files (x86)\Notepad++\notepad++.exe" } },
+        { "Git Bash", ["bash.exe", @"C:\Program Files\Git\bin\bash.exe"] },
+        { "PowerShell", ["powershell.exe", "pwsh.exe"] },
+        { "Notepad++", ["notepad++.exe", @"C:\Program Files\Notepad++\notepad++.exe", @"C:\Program Files (x86)\Notepad++\notepad++.exe"] },
 
-        // 通讯工具
-        { "QQ", new[] { "QQ.exe", @"C:\Program Files\Tencent\QQ\*\QQ.exe", @"C:\Program Files (x86)\Tencent\QQ\*\QQ.exe" } },
-        { "WeChat", new[] { "WeChat.exe", @"C:\Program Files\Tencent\WeChat\*\WeChat.exe", @"C:\Program Files (x86)\Tencent\WeChat\*\WeChat.exe" } },
+        { "QQ", ["QQ.exe", @"C:\Program Files\Tencent\QQ\*\QQ.exe", @"C:\Program Files (x86)\Tencent\QQ\*\QQ.exe"] },
+        { "WeChat", ["WeChat.exe", @"C:\Program Files\Tencent\WeChat\*\WeChat.exe", @"C:\Program Files (x86)\Tencent\WeChat\*\WeChat.exe"] },
 
-        // 系统工具
-        { "Notepad", new[] { "notepad.exe" } },
-        { "Paint", new[] { "mspaint.exe" } },
-        { "Calculator", new[] { "calc.exe" } },
-        { "Explorer", new[] { "explorer.exe" } },
+        { "Notepad", ["notepad.exe"] },
+        { "Paint", ["mspaint.exe"] },
+        { "Calculator", ["calc.exe"] },
+        { "Explorer", ["explorer.exe"] },
     };
 
+    /// <summary>
+    /// 初始化应用启动管理器。
+    /// </summary>
+    /// <param name="logger">日志记录器。</param>
     public ApplicationLauncher(ILogger<ApplicationLauncher> logger)
     {
         _logger = logger;
     }
 
     /// <summary>
-    /// 列出所有可启动的应用
+    /// 获取白名单中所有应用的可用状态信息。
     /// </summary>
+    /// <returns>应用信息列表，包含已安装和未安装的应用。</returns>
     public List<ApplicationInfo> GetLaunchableApplications()
     {
         var result = new List<ApplicationInfo>();
@@ -55,7 +57,7 @@ public class ApplicationLauncher
         foreach (var (appName, pathPatterns) in ApplicationWhitelist)
         {
             var appInfo = FindApplication(appName, pathPatterns);
-            if (appInfo != null)
+            if (appInfo is not null)
             {
                 result.Add(appInfo);
             }
@@ -66,8 +68,10 @@ public class ApplicationLauncher
     }
 
     /// <summary>
-    /// 查找指定的应用
+    /// 根据应用名称查找应用信息。
     /// </summary>
+    /// <param name="applicationName">白名单中的应用名称。</param>
+    /// <returns>找到的应用信息；如果名称不在白名单中则返回 <see langword="null" />。</returns>
     public ApplicationInfo? FindApplication(string applicationName)
     {
         if (!ApplicationWhitelist.TryGetValue(applicationName, out var pathPatterns))
@@ -80,8 +84,11 @@ public class ApplicationLauncher
     }
 
     /// <summary>
-    /// 启动指定的应用
+    /// 启动指定应用。
     /// </summary>
+    /// <param name="applicationName">白名单中的应用名称。</param>
+    /// <param name="workingDirectory">可选工作目录。</param>
+    /// <returns>应用启动结果。</returns>
     public ApplicationLaunchResult LaunchApplication(string applicationName, string? workingDirectory = null)
     {
         var stopwatch = Stopwatch.StartNew();
@@ -93,13 +100,12 @@ public class ApplicationLauncher
 
         try
         {
-            // 查找应用
             var appInfo = FindApplication(applicationName);
-            if (appInfo == null)
+            if (appInfo is null)
             {
                 result.Success = false;
                 result.ErrorMessage = $"未找到应用 '{applicationName}' 或应用不在允许列表中";
-                _logger.LogWarning(result.ErrorMessage);
+                _logger.LogWarning("{ErrorMessage}", result.ErrorMessage);
                 return result;
             }
 
@@ -107,11 +113,10 @@ public class ApplicationLauncher
             {
                 result.Success = false;
                 result.ErrorMessage = $"应用 '{applicationName}' 的执行文件不存在：{appInfo.ExecutablePath}";
-                _logger.LogWarning(result.ErrorMessage);
+                _logger.LogWarning("{ErrorMessage}", result.ErrorMessage);
                 return result;
             }
 
-            // 启动进程
             var processInfo = new ProcessStartInfo
             {
                 FileName = appInfo.ExecutablePath,
@@ -125,11 +130,11 @@ public class ApplicationLauncher
             }
 
             var process = ProcessDiag.Start(processInfo);
-            if (process == null)
+            if (process is null)
             {
                 result.Success = false;
                 result.ErrorMessage = $"无法启动应用 '{applicationName}'";
-                _logger.LogError(result.ErrorMessage);
+                _logger.LogError("{ErrorMessage}", result.ErrorMessage);
                 return result;
             }
 
@@ -153,8 +158,11 @@ public class ApplicationLauncher
     }
 
     /// <summary>
-    /// 用指定应用打开文件
+    /// 使用指定应用打开文件。
     /// </summary>
+    /// <param name="filePath">要打开的文件完整路径。</param>
+    /// <param name="applicationName">白名单中的应用名称。</param>
+    /// <returns>打开文件操作结果。</returns>
     public OpenFileResult OpenFileWithApplication(string filePath, string applicationName)
     {
         var stopwatch = Stopwatch.StartNew();
@@ -166,22 +174,20 @@ public class ApplicationLauncher
 
         try
         {
-            // 验证文件存在
             if (!File.Exists(filePath))
             {
                 result.Success = false;
                 result.ErrorMessage = $"文件不存在：{filePath}";
-                _logger.LogWarning(result.ErrorMessage);
+                _logger.LogWarning("{ErrorMessage}", result.ErrorMessage);
                 return result;
             }
 
-            // 查找应用
             var appInfo = FindApplication(applicationName);
-            if (appInfo == null)
+            if (appInfo is null)
             {
                 result.Success = false;
                 result.ErrorMessage = $"未找到应用 '{applicationName}' 或应用不在允许列表中";
-                _logger.LogWarning(result.ErrorMessage);
+                _logger.LogWarning("{ErrorMessage}", result.ErrorMessage);
                 return result;
             }
 
@@ -189,11 +195,10 @@ public class ApplicationLauncher
             {
                 result.Success = false;
                 result.ErrorMessage = $"应用的执行文件不存在：{appInfo.ExecutablePath}";
-                _logger.LogWarning(result.ErrorMessage);
+                _logger.LogWarning("{ErrorMessage}", result.ErrorMessage);
                 return result;
             }
 
-            // 启动进程并传入文件路径
             var processInfo = new ProcessStartInfo
             {
                 FileName = appInfo.ExecutablePath,
@@ -203,18 +208,17 @@ public class ApplicationLauncher
             };
 
             var process = ProcessDiag.Start(processInfo);
-            if (process == null)
+            if (process is null)
             {
                 result.Success = false;
                 result.ErrorMessage = $"无法用应用 '{applicationName}' 打开文件";
-                _logger.LogError(result.ErrorMessage);
+                _logger.LogError("{ErrorMessage}", result.ErrorMessage);
                 return result;
             }
 
             result.Success = true;
             result.ProcessId = process.Id;
-            _logger.LogInformation("成功用应用 {AppName} 打开文件 {FilePath}，进程ID: {ProcessId}",
-                applicationName, filePath, process.Id);
+            _logger.LogInformation("成功用应用 {AppName} 打开文件 {FilePath}，进程ID: {ProcessId}", applicationName, filePath, process.Id);
         }
         catch (Exception ex)
         {
@@ -232,8 +236,11 @@ public class ApplicationLauncher
     }
 
     /// <summary>
-    /// 根据应用名称和路径模式查找应用
+    /// 根据路径模式集合解析指定应用的实际安装位置。
     /// </summary>
+    /// <param name="applicationName">应用名称。</param>
+    /// <param name="pathPatterns">可执行文件名或安装路径模式。</param>
+    /// <returns>应用信息；如果所有路径均不可用，则返回不可用状态的应用信息。</returns>
     private ApplicationInfo? FindApplication(string applicationName, string[] pathPatterns)
     {
         foreach (var pattern in pathPatterns)
@@ -243,15 +250,14 @@ public class ApplicationLauncher
             {
                 try
                 {
-                    var fileInfo = new FileInfo(executablePath);
                     var versionInfo = FileVersionInfo.GetVersionInfo(executablePath);
 
                     return new ApplicationInfo
                     {
                         Name = applicationName,
                         ExecutablePath = executablePath,
-                        Description = versionInfo.FileDescription ?? "",
-                        Version = versionInfo.FileVersion ?? "",
+                        Description = versionInfo.FileDescription ?? string.Empty,
+                        Version = versionInfo.FileVersion ?? string.Empty,
                         IconPath = executablePath,
                         IsAvailable = true,
                         IsLaunchable = true,
@@ -265,11 +271,10 @@ public class ApplicationLauncher
             }
         }
 
-        // 如果没有找到，返回一个"不可用"的应用信息
         return new ApplicationInfo
         {
             Name = applicationName,
-            ExecutablePath = pathPatterns.FirstOrDefault() ?? "",
+            ExecutablePath = pathPatterns.FirstOrDefault() ?? string.Empty,
             IsAvailable = false,
             IsLaunchable = false,
             Category = DetermineCategory(applicationName)
@@ -277,27 +282,28 @@ public class ApplicationLauncher
     }
 
     /// <summary>
-    /// 解析执行路径（处理通配符和环境变量）
+    /// 解析可执行文件路径，支持环境变量和简单通配符。
     /// </summary>
+    /// <param name="pattern">可执行文件名或路径模式。</param>
+    /// <returns>解析后的可执行文件路径；解析失败时返回 <see langword="null" />。</returns>
     private string? ResolveExecutablePath(string pattern)
     {
-        // 展开环境变量
         var expandedPath = Environment.ExpandEnvironmentVariables(pattern);
 
-        // 如果没有通配符，直接返回
         if (!expandedPath.Contains('*') && !expandedPath.Contains('?'))
         {
             return expandedPath;
         }
 
-        // 处理通配符
         try
         {
             var directory = Path.GetDirectoryName(expandedPath);
             var searchPattern = Path.GetFileName(expandedPath);
 
             if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
+            {
                 return null;
+            }
 
             var files = Directory.GetFiles(directory, searchPattern, SearchOption.TopDirectoryOnly);
             return files.FirstOrDefault();
@@ -310,9 +316,11 @@ public class ApplicationLauncher
     }
 
     /// <summary>
-    /// 根据应用名称判断分类
+    /// 根据应用名称推断应用分类。
     /// </summary>
-    private string DetermineCategory(string applicationName)
+    /// <param name="applicationName">应用名称。</param>
+    /// <returns>应用分类名称。</returns>
+    private static string DetermineCategory(string applicationName)
     {
         return applicationName switch
         {

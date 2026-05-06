@@ -17,7 +17,7 @@ public sealed class OfficeExcelWorkbookTools(
     ILogger<OfficeExcelWorkbookTools> logger)
 {
     /// <summary>创建空白 xlsx 工作簿或基于模板复制创建。</summary>
-    [Tool(Name = "office_excel_create_workbook",
+    [Tool(Name = "excel_create_workbook",
         Description = "创建空白 xlsx 工作簿或基于模板复制创建。sheet_names 为 JSON 数组或逗号分隔的工作表名称，空字符串时默认创建 Sheet1。")]
     public string CreateWorkbook(
         [Parameter(Description = "输出文件路径（.xlsx）")] string outputPath,
@@ -61,7 +61,7 @@ public sealed class OfficeExcelWorkbookTools(
     }
 
     /// <summary>读取工作簿中的工作表列表。</summary>
-    [Tool(Name = "office_excel_list_sheets",
+    [Tool(Name = "excel_list_sheets",
         Description = "读取 xlsx 工作簿中的工作表列表，返回名称、状态和已用区域等信息。include_dimensions 为 1 时计算每个工作表的行列范围。")]
     public string ListSheets(
         [Parameter(Description = "源文件路径（.xlsx）")] string sourcePath,
@@ -88,7 +88,7 @@ public sealed class OfficeExcelWorkbookTools(
     }
 
     /// <summary>读取指定工作表中的单元格区域。</summary>
-    [Tool(Name = "office_excel_read_range",
+    [Tool(Name = "excel_read_range",
         Description = "读取指定工作表中的单元格区域。range_ref 使用 A1 表示法（如 A1:C5）。include_formula 为 1 时公式单元格返回 =formula 文本。")]
     public string ReadRange(
         [Parameter(Description = "源文件路径（.xlsx）")] string sourcePath,
@@ -130,7 +130,7 @@ public sealed class OfficeExcelWorkbookTools(
     }
 
     /// <summary>将工作簿复制保存到新路径。</summary>
-    [Tool(Name = "office_excel_save_as",
+    [Tool(Name = "excel_save_as",
         Description = "将 xlsx 工作簿复制保存到新路径，不修改内容。source_path 和 output_path 不能相同。")]
     public string SaveAs(
         [Parameter(Description = "源文件路径（.xlsx）")] string sourcePath,

@@ -8,7 +8,7 @@ namespace Cortana.Plugins.Bt;
 [Tool]
 public sealed class BtSiteQueryTools(BtApiClient client)
 {
-    [Tool(Name = "bt_list_sites", Description = "分页查询网站列表。")]
+    [Tool(Name = "list_sites", Description = "分页查询网站列表。")]
     public async Task<string> ListSites(
         [Parameter(Description = "宝塔面板地址，例如 http://127.0.0.1:8888")] string panelUrl,
         [Parameter(Description = "宝塔 API 密钥 apiSk")] string apiSk,
@@ -33,7 +33,7 @@ public sealed class BtSiteQueryTools(BtApiClient client)
             : BtToolSupport.Failure("BT_API_ERROR", result.ErrorMessage ?? "获取网站列表失败。", BtToolSupport.CreateResponseEnvelope(result));
     }
 
-    [Tool(Name = "bt_get_php_versions", Description = "查询已安装 PHP 版本列表。")]
+    [Tool(Name = "get_php_versions", Description = "查询已安装 PHP 版本列表。")]
     public async Task<string> GetPhpVersions(
         [Parameter(Description = "宝塔面板地址，例如 http://127.0.0.1:8888")] string panelUrl,
         [Parameter(Description = "宝塔 API 密钥 apiSk")] string apiSk)

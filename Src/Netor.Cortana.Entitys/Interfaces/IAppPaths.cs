@@ -15,7 +15,8 @@ public interface IAppPaths
     /// <summary>工作区技能目录。</summary>
     string WorkspaceSkillsDirectory { get; }
 
-    /// <summary>工作区插件目录。</summary>
+    /// <summary>工作区插件目录。已废弃，插件统一安装到用户全局插件目录。</summary>
+    [Obsolete("工作区插件目录已废弃，请使用 UserPluginsDirectory。")]
     string WorkspacePluginsDirectory { get; }
 
     /// <summary>用户数据技能目录。</summary>

@@ -12,7 +12,7 @@ public sealed class BtSiteBackupTools(BtApiClient client)
     /// 创建或删除网站备份。
     /// create 需要网站 ID，delete 需要备份 ID。
     /// </summary>
-    [Tool(Name = "bt_site_backup", Description = "创建或删除网站备份。")]
+    [Tool(Name = "site_backup", Description = "创建或删除网站备份。")]
     public async Task<string> SiteBackup(
         [Parameter(Description = "宝塔面板地址，例如 http://127.0.0.1:8888")] string panelUrl,
         [Parameter(Description = "宝塔 API 密钥 apiSk")] string apiSk,

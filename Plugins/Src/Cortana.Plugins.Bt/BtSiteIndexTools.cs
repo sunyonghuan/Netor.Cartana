@@ -12,7 +12,7 @@ public sealed class BtSiteIndexTools(BtApiClient client)
     /// 获取或设置默认文档。
     /// action=get 时读取当前配置，action=set 时覆盖默认文档列表。
     /// </summary>
-    [Tool(Name = "bt_get_or_set_site_index", Description = "读取或设置网站默认文档。")]
+    [Tool(Name = "get_or_set_site_index", Description = "读取或设置网站默认文档。")]
     public async Task<string> GetOrSetSiteIndex(
         [Parameter(Description = "宝塔面板地址，例如 http://127.0.0.1:8888")] string panelUrl,
         [Parameter(Description = "宝塔 API 密钥 apiSk")] string apiSk,

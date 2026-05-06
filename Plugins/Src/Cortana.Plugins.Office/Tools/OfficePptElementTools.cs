@@ -17,7 +17,7 @@ public sealed class OfficePptElementTools(
     ILogger<OfficePptElementTools> logger)
 {
     /// <summary>替换指定幻灯片的标题占位符文本。</summary>
-    [Tool(Name = "office_ppt_update_slide_title",
+    [Tool(Name = "ppt_update_slide_title",
         Description = "替换指定幻灯片的标题占位符文本。当目标幻灯片不存在标题占位符时返回错误。")]
     public string UpdateSlideTitle(
         [Parameter(Description = "源文件路径（.pptx）")] string sourcePath,
@@ -55,7 +55,7 @@ public sealed class OfficePptElementTools(
     }
 
     /// <summary>替换指定幻灯片的正文占位符文本。</summary>
-    [Tool(Name = "office_ppt_update_slide_body",
+    [Tool(Name = "ppt_update_slide_body",
         Description = "替换指定幻灯片的正文占位符文本。body 中的 \\n 分隔多个段落。当目标幻灯片不存在正文占位符时返回错误。")]
     public string UpdateSlideBody(
         [Parameter(Description = "源文件路径（.pptx）")] string sourcePath,
@@ -92,7 +92,7 @@ public sealed class OfficePptElementTools(
     }
 
     /// <summary>设置或替换指定幻灯片的备注文本。</summary>
-    [Tool(Name = "office_ppt_update_slide_notes",
+    [Tool(Name = "ppt_update_slide_notes",
         Description = "设置或替换指定幻灯片的备注文本。notes 中的 \\n 分隔多个段落。幻灯片无备注页时自动创建。")]
     public string UpdateSlideNotes(
         [Parameter(Description = "源文件路径（.pptx）")] string sourcePath,

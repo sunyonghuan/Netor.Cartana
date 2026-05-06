@@ -17,7 +17,7 @@ public sealed class OfficeExcelSheetTools(
     ILogger<OfficeExcelSheetTools> logger)
 {
     /// <summary>在工作簿中新增工作表。</summary>
-    [Tool(Name = "office_excel_add_sheet",
+    [Tool(Name = "excel_add_sheet",
         Description = "在 xlsx 工作簿中新增工作表。sheet_name 在同一工作簿内必须唯一。position_index 为 0 时追加到末尾，大于 0 时插入到指定位置之前。")]
     public string AddSheet(
         [Parameter(Description = "源文件路径（.xlsx）")] string sourcePath,

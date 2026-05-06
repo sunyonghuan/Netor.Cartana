@@ -429,14 +429,13 @@ public partial class ChatHistoryPanel : UserControl
 
     private static CheckBox? FindCheckBox(Border border)
     {
-        if (border.Child is StackPanel sp)
+        return border.Child switch
         {
-            foreach (var child in sp.Children)
-            {
-                if (child is CheckBox cb) return cb;
-            }
-        }
-        return null;
+            Grid grid => grid.Children.OfType<CheckBox>().FirstOrDefault(),
+            StackPanel sp => sp.Children.OfType<CheckBox>().FirstOrDefault(),
+            CheckBox cb => cb,
+            _ => null
+        };
     }
 
     private static ChatSessionEntity ReadSessionEntity(Microsoft.Data.Sqlite.SqliteDataReader r)

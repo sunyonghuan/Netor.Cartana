@@ -12,7 +12,7 @@ public sealed class BtSiteDomainTools(BtApiClient client)
     /// 为网站添加或删除域名。
     /// 添加和删除共用同一个工具，通过 action 区分具体行为。
     /// </summary>
-    [Tool(Name = "bt_manage_site_domain", Description = "添加或删除网站域名。")]
+    [Tool(Name = "manage_site_domain", Description = "添加或删除网站域名。")]
     public async Task<string> ManageSiteDomain(
         [Parameter(Description = "宝塔面板地址，例如 http://127.0.0.1:8888")] string panelUrl,
         [Parameter(Description = "宝塔 API 密钥 apiSk")] string apiSk,

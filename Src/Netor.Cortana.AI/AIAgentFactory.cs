@@ -348,44 +348,30 @@ public sealed class AIAgentFactory(
         List<AIContextProvider> providers,
         Dictionary<string, string> registeredTools)
     {
+        var globalPluginService = services.GetService<GlobalPluginService>();
+        var globalPluginIds = globalPluginService?.GetEnabledPluginIds() ?? [];
+        var injectedPluginIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // 合并全局插件 Provider。仅全局插件目录中的插件允许生效。
+        foreach (var pluginInfo in pluginLoader.GetLoadedPluginInfos())
+        {
+            var plugin = pluginInfo.Plugin;
+            if (pluginInfo.Scope != PluginInstallScope.Global) continue;
+            if (!globalPluginIds.Contains(plugin.Id, StringComparer.OrdinalIgnoreCase)) continue;
+
+            AddPluginProvider(plugin, providers, registeredTools);
+            injectedPluginIds.Add(plugin.Id);
+        }
+
         // 合并该智能体已启用的插件 Provider
         var enabledIds = agent.EnabledPluginIds;
 
         foreach (var plugin in pluginLoader.GetActivePlugins())
         {
             if (!enabledIds.Contains(plugin.Id)) continue;
+            if (injectedPluginIds.Contains(plugin.Id)) continue;
 
-            var excluded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            foreach (var tool in plugin.Tools)
-            {
-                var toolName = tool.Name;
-
-                if (toolName.StartsWith("sys_", StringComparison.OrdinalIgnoreCase))
-                {
-                    logger.LogWarning(
-                        "工具名称冲突，已跳过：工具 '{ToolName}' 使用了系统保留前缀 'sys_'，来源：插件 [{PluginName}]({PluginId} v{Version})",
-                        toolName, plugin.Name, plugin.Id, plugin.Version);
-                    excluded.Add(toolName);
-                    continue;
-                }
-
-                if (registeredTools.TryGetValue(toolName, out var existingSource))
-                {
-                    logger.LogWarning(
-                        "工具名称冲突，已跳过：工具 '{ToolName}' 来自插件 [{PluginName}]({PluginId} v{Version}) 与已注册的 [{ExistingSource}] 重复",
-                        toolName, plugin.Name, plugin.Id, plugin.Version, existingSource);
-                    excluded.Add(toolName);
-                }
-                else
-                {
-                    registeredTools[toolName] = $"插件 {plugin.Name}({plugin.Id})";
-                }
-            }
-
-            providers.Add(excluded.Count > 0
-                ? new PluginContextProvider(plugin, excluded)
-                : new PluginContextProvider(plugin));
+            AddPluginProvider(plugin, providers, registeredTools);
         }
 
         // 合并该智能体已启用的 MCP Server Provider
@@ -427,5 +413,43 @@ public sealed class AIAgentFactory(
                 ? new McpContextProvider(mcpHost, excluded)
                 : new McpContextProvider(mcpHost));
         }
+    }
+
+    private void AddPluginProvider(
+        IPlugin plugin,
+        List<AIContextProvider> providers,
+        Dictionary<string, string> registeredTools)
+    {
+        var excluded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var tool in plugin.Tools)
+        {
+            var toolName = tool.Name;
+
+            if (toolName.StartsWith("sys_", StringComparison.OrdinalIgnoreCase))
+            {
+                logger.LogWarning(
+                    "工具名称冲突，已跳过：工具 '{ToolName}' 使用了系统保留前缀 'sys_'，来源：插件 [{PluginName}]({PluginId} v{Version})",
+                    toolName, plugin.Name, plugin.Id, plugin.Version);
+                excluded.Add(toolName);
+                continue;
+            }
+
+            if (registeredTools.TryGetValue(toolName, out var existingSource))
+            {
+                logger.LogWarning(
+                    "工具名称冲突，已跳过：工具 '{ToolName}' 来自插件 [{PluginName}]({PluginId} v{Version}) 与已注册的 [{ExistingSource}] 重复",
+                    toolName, plugin.Name, plugin.Id, plugin.Version, existingSource);
+                excluded.Add(toolName);
+            }
+            else
+            {
+                registeredTools[toolName] = $"插件 {plugin.Name}({plugin.Id})";
+            }
+        }
+
+        providers.Add(excluded.Count > 0
+            ? new PluginContextProvider(plugin, excluded)
+            : new PluginContextProvider(plugin));
     }
 }

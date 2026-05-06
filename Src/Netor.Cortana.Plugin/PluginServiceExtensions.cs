@@ -1,9 +1,7 @@
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.DependencyInjection;
-using Netor.Cortana.Plugin.BuiltIn.ApplicationLauncher;
 using Netor.Cortana.Plugin.BuiltIn.FileBrowser;
 using Netor.Cortana.Plugin.BuiltIn.PowerShell;
-using Netor.Cortana.Plugin.BuiltIn.WindowManagement;
 
 namespace Netor.Cortana.Plugin;
 
@@ -19,21 +17,17 @@ public static class PluginServiceExtensions
     {
         services.AddSingleton<PluginLoader>();
 
-        // 内置 Provider（后续 AOT 插件化后移除）
+        // 内置 Provider
         services.AddSingleton<AIContextProvider, PowerShellProvider>();
-        services.AddSingleton<AIContextProvider, WindowManagerProvider>();
         services.AddSingleton<AIContextProvider, FileBrowserProvider>();
         services.AddSingleton<AIContextProvider, FileOperationProvider>();
-        services.AddSingleton<AIContextProvider, ApplicationLauncherProvider>();
 
         // 辅助服务
         services.AddSingleton<PowerShellExecutor>();
         services.AddSingleton<PowerShellOutputBridge>();
         services.AddSingleton<SessionRegistry>();
-        services.AddSingleton<WindowManager>();
         services.AddSingleton<FileBrowser>();
         services.AddSingleton<FileOperator>();
-        services.AddSingleton<ApplicationLauncher>();
 
         return services;
     }

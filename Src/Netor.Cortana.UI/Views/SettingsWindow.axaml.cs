@@ -24,7 +24,7 @@ public partial class SettingsWindow : Window
             new ModelSettingsPage(),
             new AgentSettingsPage(),
             new McpServerSettingsPage(),
-            new ToolManagementPage(),
+            new PluginManagementPage(),
         ];
 
         Loaded += OnWindowLoaded;

@@ -17,7 +17,7 @@ public sealed class OfficeWordDocumentTools(
     ILogger<OfficeWordDocumentTools> logger)
 {
     /// <summary>创建空白 Word 文档或基于模板复制创建。</summary>
-    [Tool(Name = "office_word_create_document",
+    [Tool(Name = "word_create_document",
         Description = "创建空白 Word 文档或基于模板复制创建。output_path 必填；template_path 为空字符串时创建空白文档；title、author 为空字符串时不设置；overwrite 为 1 时允许覆盖已存在文件。")]
     public string CreateDocument(
         [Parameter(Description = "输出文件路径（.docx）")] string outputPath,
@@ -66,7 +66,7 @@ public sealed class OfficeWordDocumentTools(
     }
 
     /// <summary>读取 Word 文档结构摘要。</summary>
-    [Tool(Name = "office_word_get_outline",
+    [Tool(Name = "word_get_outline",
         Description = "读取 Word 文档结构摘要，返回段落列表（含索引、样式、文本预览）以及表格和图片数量。调用编辑工具前建议先获取大纲以确定目标索引。")]
     public string GetOutline(
         [Parameter(Description = "源文件路径（.docx）")] string sourcePath,
@@ -93,7 +93,7 @@ public sealed class OfficeWordDocumentTools(
     }
 
     /// <summary>将文档复制保存到新路径。</summary>
-    [Tool(Name = "office_word_save_as",
+    [Tool(Name = "word_save_as",
         Description = "将 Word 文档复制保存到新路径，不修改内容。source_path 和 output_path 不能相同。")]
     public string SaveAs(
         [Parameter(Description = "源文件路径（.docx）")] string sourcePath,

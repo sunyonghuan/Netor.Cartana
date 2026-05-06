@@ -67,24 +67,39 @@ public sealed class NativePluginWrapper : IPlugin
             return [];
 
         List<AITool> tools = new(toolInfos.Count);
+        HashSet<string> exposedNames = new(StringComparer.OrdinalIgnoreCase);
 
         foreach (var toolInfo in toolInfos)
         {
             if (string.IsNullOrWhiteSpace(toolInfo.Name))
                 continue;
 
-            var capturedName = toolInfo.Name;
+            var internalName = toolInfo.Name;
+            var exposedName = GetExposedToolName(toolInfo, exposedNames);
             var description = BuildToolDescription(toolInfo);
 
             var tool = AIFunctionFactory.Create(
-                method: (string argsJson) => InvokeToolAsync(capturedName, argsJson),
-                name: capturedName,
+                method: (string argsJson) => InvokeToolAsync(internalName, argsJson),
+                name: exposedName,
                 description: description);
 
             tools.Add(tool);
         }
 
         return tools.AsReadOnly();
+    }
+
+    private static string GetExposedToolName(NativeToolInfo toolInfo, HashSet<string> exposedNames)
+    {
+        var candidate = string.IsNullOrWhiteSpace(toolInfo.ShortName)
+            ? toolInfo.Name
+            : toolInfo.ShortName.Trim();
+
+        if (exposedNames.Add(candidate))
+            return candidate;
+
+        exposedNames.Add(toolInfo.Name);
+        return toolInfo.Name;
     }
 
     /// <summary>

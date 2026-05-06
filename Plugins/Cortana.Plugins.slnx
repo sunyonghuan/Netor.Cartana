@@ -29,11 +29,13 @@
     <File Path="docs/memory/构架规划/协议总览.md" />
   </Folder>
   <Folder Name="/Src/">
+    <Project Path="E:/Netor.me/Cortana/Plugins/Src/Cortana.Plugins.ApplicationLauncher/Cortana.Plugins.ApplicationLauncher.csproj" />
     <Project Path="E:/Netor.me/Cortana/Plugins/Src/Cortana.Plugins.Bt/Cortana.Plugins.Bt.csproj" />
     <Project Path="E:/Netor.me/Cortana/Plugins/Src/Cortana.Plugins.Memory/Cortana.Plugins.Memory.csproj" />
     <Project Path="E:/Netor.me/Cortana/Plugins/Src/Cortana.Plugins.Office/Cortana.Plugins.Office.csproj" />
     <Project Path="E:/Netor.me/Cortana/Plugins/Src/Cortana.Plugins.Reminder/Cortana.Plugins.Reminder.csproj" />
     <Project Path="E:/Netor.me/Cortana/Plugins/Src/Cortana.Plugins.ScriptRunner/Cortana.Plugins.ScriptRunner.csproj" />
+    <Project Path="E:/Netor.me/Cortana/Plugins/Src/Cortana.Plugins.WindowManagement/Cortana.Plugins.WindowManagement.csproj" />
     <Project Path="E:/Netor.me/Cortana/Plugins/Src/Cortana.Plugins.WsBridge/Cortana.Plugins.WsBridge.csproj" />
     <Project Path="E:/Netor.me/Cortana/Src/Plugins/Netor.Cortana.Plugin.Native.Debuger/Netor.Cortana.Plugin.Native.Debugger.csproj" />
   </Folder>

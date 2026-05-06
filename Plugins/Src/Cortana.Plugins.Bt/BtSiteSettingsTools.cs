@@ -12,7 +12,7 @@ public sealed class BtSiteSettingsTools(BtApiClient client)
     /// 设置网站到期时间。
     /// 传入 0000-00-00 表示永久不过期。
     /// </summary>
-    [Tool(Name = "bt_set_site_expire", Description = "设置网站到期时间。")]
+    [Tool(Name = "set_site_expire", Description = "设置网站到期时间。")]
     public async Task<string> SetSiteExpire(
         [Parameter(Description = "宝塔面板地址，例如 http://127.0.0.1:8888")] string panelUrl,
         [Parameter(Description = "宝塔 API 密钥 apiSk")] string apiSk,

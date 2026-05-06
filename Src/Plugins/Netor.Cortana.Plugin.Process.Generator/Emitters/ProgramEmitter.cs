@@ -79,6 +79,7 @@ internal static class ProgramEmitter
                 sb.AppendLine("            new()");
                 sb.AppendLine("            {");
                 sb.AppendLine($"                Name = {EscapeStringLiteral(method.FullToolName)},");
+                sb.AppendLine($"                ShortName = {EscapeStringLiteral(method.MethodSnakeName)},");
                 sb.AppendLine($"                Description = {EscapeStringLiteral(method.Description)},");
                 if (method.Parameters.Count > 0)
                 {

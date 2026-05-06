@@ -21,7 +21,7 @@
 		<!-- 顶部工具栏 -->
 		<Border DockPanel.Dock="Top" Background="#1e1e1e" Padding="8,6" BorderBrush="#252526" BorderThickness="0,0,0,1">
 			<Grid ColumnDefinitions="*,Auto">
-				<TextBlock Grid.Column="0" Text="工作台" Foreground="#cccccc" FontSize="12"
+				<TextBlock Grid.Column="0" Text="{Binding WorkspaceTitle}" Foreground="#cccccc" FontSize="12"
 				           FontWeight="SemiBold" VerticalAlignment="Center" />
 				<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2">
 					<Button Classes="titlebar-btn" ToolTip.Tip="打开文件夹" Click="OnOpenFolderClick">

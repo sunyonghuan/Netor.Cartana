@@ -10,6 +10,46 @@ $ProjectFile = Join-Path $SolutionDir 'Src\Netor.Cortana.UI\Netor.Cortana.UI.csp
 $NativeHostProjectFile = Join-Path $SolutionDir 'Src\Plugins\Netor.Cortana.NativeHost\Netor.Cortana.NativeHost.csproj'
 $OutputDir = Join-Path $SolutionDir 'Realases\Cortana'
 
+function Stop-DotNetBuildProcesses {
+    Get-Process -Name 'dotnet', 'MSBuild', 'VBCSCompiler' -ErrorAction SilentlyContinue |
+        Stop-Process -Force -ErrorAction SilentlyContinue
+}
+
+function Clear-NuGetHttpCache {
+    dotnet nuget locals http-cache --clear | Out-Host
+}
+
+function Invoke-DotNetPublishWithRetry {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ProjectPath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$OutputPath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Name
+    )
+
+    dotnet publish $ProjectPath `
+        -c Release `
+        -o $OutputPath `
+        --disable-build-servers
+
+    if ($LASTEXITCODE -eq 0) {
+        return
+    }
+
+    Write-Host "$Name publish failed, retrying after clearing build servers and NuGet HTTP cache..." -ForegroundColor Yellow
+    Stop-DotNetBuildProcesses
+    Clear-NuGetHttpCache
+
+    dotnet publish $ProjectPath `
+        -c Release `
+        -o $OutputPath `
+        --disable-build-servers
+}
+
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  Cortana UI Native AOT Publish" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
@@ -38,9 +78,7 @@ foreach ($ext in $cleanExts) {
 
 Write-Host "[1/3] Publishing UI (Release | win-x64 | AOT)..." -ForegroundColor Green
 
-dotnet publish $ProjectFile `
-    -c Release `
-    -o $OutputDir
+Invoke-DotNetPublishWithRetry -ProjectPath $ProjectFile -OutputPath $OutputDir -Name 'UI'
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "UI publish failed, exit code: $LASTEXITCODE" -ForegroundColor Red
@@ -49,9 +87,7 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host "[2/3] Publishing NativeHost (Release | win-x64 | AOT)..." -ForegroundColor Green
 
-dotnet publish $NativeHostProjectFile `
-    -c Release `
-    -o $OutputDir
+Invoke-DotNetPublishWithRetry -ProjectPath $NativeHostProjectFile -OutputPath $OutputDir -Name 'NativeHost'
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "NativeHost publish failed, exit code: $LASTEXITCODE" -ForegroundColor Red

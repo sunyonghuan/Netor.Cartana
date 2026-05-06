@@ -17,7 +17,7 @@ public sealed class OfficePptPresentationTools(
     ILogger<OfficePptPresentationTools> logger)
 {
     /// <summary>创建空白 PowerPoint 演示文稿或基于模板复制创建。</summary>
-    [Tool(Name = "office_ppt_create_presentation",
+    [Tool(Name = "ppt_create_presentation",
         Description = "创建空白 PowerPoint 演示文稿或基于模板复制创建。output_path 必填；template_path 为空字符串时创建空白演示文稿；title、author 为空字符串时不设置；overwrite 为 1 时允许覆盖已存在文件。")]
     public string CreatePresentation(
         [Parameter(Description = "输出文件路径（.pptx）")] string outputPath,
@@ -63,7 +63,7 @@ public sealed class OfficePptPresentationTools(
     }
 
     /// <summary>读取演示文稿中的幻灯片摘要列表。</summary>
-    [Tool(Name = "office_ppt_list_slides",
+    [Tool(Name = "ppt_list_slides",
         Description = "读取演示文稿中的幻灯片摘要列表，返回每张幻灯片的索引、版式、标题预览、正文预览和备注状态。")]
     public string ListSlides(
         [Parameter(Description = "源文件路径（.pptx）")] string sourcePath,
@@ -93,7 +93,7 @@ public sealed class OfficePptPresentationTools(
     }
 
     /// <summary>将演示文稿复制保存到新路径。</summary>
-    [Tool(Name = "office_ppt_save_as",
+    [Tool(Name = "ppt_save_as",
         Description = "将演示文稿复制保存到新路径，不修改内容。source_path 和 output_path 不能相同。")]
     public string SaveAs(
         [Parameter(Description = "源文件路径（.pptx）")] string sourcePath,

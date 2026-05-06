@@ -3,7 +3,7 @@
         x:Class="Netor.Cortana.UI.Views.SettingsWindow"
         x:CompileBindings="True"
         Title="设置"
-        Width="820" Height="680"
+        Width="880" Height="680"
         MinWidth="680" MinHeight="600"
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource BaseBrush}"
@@ -193,7 +193,7 @@
                         <ListBoxItem Classes="nav-item" Tag="tools">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <Image Source="/Assets/tools.png" Width="16" Height="16" />
-                                <TextBlock Text="工具管理" VerticalAlignment="Center" />
+                                <TextBlock Text="插件管理" VerticalAlignment="Center" />
                             </StackPanel>
                         </ListBoxItem>
                     </ListBox>

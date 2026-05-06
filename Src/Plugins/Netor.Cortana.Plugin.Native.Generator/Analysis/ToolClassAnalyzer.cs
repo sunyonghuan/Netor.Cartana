@@ -14,8 +14,10 @@ namespace Netor.Cortana.Plugin.Native.Generator.Analysis;
 /// </summary>
 internal static class ToolClassAnalyzer
 {
-    private const string ToolAttributeName = "Netor.Cortana.Plugin.ToolAttribute";
-    private const string ParameterAttributeName = "Netor.Cortana.Plugin.ParameterAttribute";
+    private const string ToolAttributeName = "Netor.Cortana.Plugin.Native.ToolAttribute";
+    private const string LegacyToolAttributeName = "Netor.Cortana.Plugin.ToolAttribute";
+    private const string ParameterAttributeName = "Netor.Cortana.Plugin.Native.ParameterAttribute";
+    private const string LegacyParameterAttributeName = "Netor.Cortana.Plugin.ParameterAttribute";
 
     /// <summary>
     /// 扫描编译上下文中所有标记了 [Tool] 的类，提取工具类和工具方法信息。
@@ -39,19 +41,14 @@ internal static class ToolClassAnalyzer
                 if (classSymbol == null)
                     continue;
 
-                var hasToolAttrOnClass = classSymbol.GetAttributes()
-                    .Any(a => a.AttributeClass?.ToDisplayString() == ToolAttributeName);
-
-                // 检查类中是否有任何方法标记了 [Tool]
+                var hasToolAttrOnClass = classSymbol.GetAttributes().Any(IsToolAttribute);
                 var hasToolMethods = classSymbol.GetMembers()
                     .OfType<IMethodSymbol>()
-                    .Any(m => m.GetAttributes()
-                        .Any(a => a.AttributeClass?.ToDisplayString() == ToolAttributeName));
+                    .Any(m => m.GetAttributes().Any(IsToolAttribute));
 
                 if (!hasToolAttrOnClass && !hasToolMethods)
                     continue;
 
-                // CNPG005: 含有 [Tool] 方法但类上未标记 [Tool]
                 if (!hasToolAttrOnClass && hasToolMethods)
                 {
                     reportDiagnostic(Diagnostic.Create(
@@ -70,16 +67,12 @@ internal static class ToolClassAnalyzer
         return result;
     }
 
-    /// <summary>
-    /// 分析单个 [Tool] 类，验证约束并提取工具方法。
-    /// </summary>
     private static ToolClassInfo? AnalyzeToolClass(
         INamedTypeSymbol classSymbol,
         ClassDeclarationSyntax classSyntax,
         string pluginId,
         Action<Diagnostic> reportDiagnostic)
     {
-        // CNPG005: 工具类必须是 public
         if (classSymbol.DeclaredAccessibility != Accessibility.Public)
         {
             reportDiagnostic(Diagnostic.Create(
@@ -93,9 +86,7 @@ internal static class ToolClassAnalyzer
 
         foreach (var member in classSymbol.GetMembers().OfType<IMethodSymbol>())
         {
-            var toolAttr = member.GetAttributes()
-                .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == ToolAttributeName);
-
+            var toolAttr = member.GetAttributes().FirstOrDefault(IsToolAttribute);
             if (toolAttr == null)
                 continue;
 
@@ -104,7 +95,6 @@ internal static class ToolClassAnalyzer
                 methods.Add(methodInfo);
         }
 
-        // CNPG005: [Tool] 类中没有任何 [Tool] 方法
         if (methods.Count == 0)
         {
             reportDiagnostic(Diagnostic.Create(
@@ -117,9 +107,6 @@ internal static class ToolClassAnalyzer
         return new ToolClassInfo(classSymbol, methods);
     }
 
-    /// <summary>
-    /// 分析单个 [Tool] 方法，生成工具名并提取参数信息。
-    /// </summary>
     private static ToolMethodInfo? AnalyzeMethod(
         IMethodSymbol methodSymbol,
         INamedTypeSymbol classSymbol,
@@ -127,7 +114,6 @@ internal static class ToolClassAnalyzer
         AttributeData toolAttr,
         Action<Diagnostic> reportDiagnostic)
     {
-        // CNPG006: 方法必须是 public
         if (methodSymbol.DeclaredAccessibility != Accessibility.Public)
         {
             reportDiagnostic(Diagnostic.Create(
@@ -138,7 +124,6 @@ internal static class ToolClassAnalyzer
             return null;
         }
 
-        // 解析 [Tool] 属性中的 Name 和 Description
         var namedArgs = toolAttr.NamedArguments.ToDictionary(kv => kv.Key, kv => kv.Value);
         string? customName = null;
         if (namedArgs.TryGetValue("Name", out var nameValue) && nameValue.Value is string n)
@@ -148,15 +133,13 @@ internal static class ToolClassAnalyzer
         if (namedArgs.TryGetValue("Description", out var descValue) && descValue.Value is string d)
             description = d;
 
-        // 生成 method snake name
         string methodSnakeName;
         if (!string.IsNullOrEmpty(customName))
         {
-            methodSnakeName = customName;
+            methodSnakeName = customName!;
         }
         else
         {
-            // CNPG007: 方法名已经是 snake_case（警告）
             if (TypeMapper.IsSnakeCase(methodSymbol.Name))
             {
                 reportDiagnostic(Diagnostic.Create(
@@ -168,10 +151,8 @@ internal static class ToolClassAnalyzer
             methodSnakeName = TypeMapper.ToSnakeCase(methodSymbol.Name);
         }
 
-        // 生成完整工具名（两段式：{pluginId}_{methodSnake}）
         var fullToolName = ToolNameGenerator.GenerateFullName(pluginId, methodSnakeName);
 
-        // CNPG008: 工具名无效
         if (!ToolNameGenerator.IsValidToolNamePart(methodSnakeName))
         {
             reportDiagnostic(Diagnostic.Create(
@@ -182,7 +163,6 @@ internal static class ToolClassAnalyzer
             return null;
         }
 
-        // 分析参数
         var parameters = new List<ToolParamInfo>();
         bool hasInvalidParam = false;
 
@@ -200,7 +180,6 @@ internal static class ToolClassAnalyzer
         if (hasInvalidParam)
             return null;
 
-        // 解析返回类型
         var (isAsync, asyncInnerType) = TypeMapper.UnwrapAsync(methodSymbol.ReturnType);
         bool isValueTask = false;
         if (isAsync && methodSymbol.ReturnType is INamedTypeSymbol namedReturnType)
@@ -223,16 +202,12 @@ internal static class ToolClassAnalyzer
             methodSymbol: methodSymbol);
     }
 
-    /// <summary>
-    /// 分析单个方法参数，提取 [ParameterAttribute] 信息并验证类型。
-    /// </summary>
     private static ToolParamInfo? AnalyzeParameter(
         IParameterSymbol paramSymbol,
         string className,
         string methodName,
         Action<Diagnostic> reportDiagnostic)
     {
-        // CNPG003: 不支持的参数类型
         var jsonType = TypeMapper.MapToJsonType(paramSymbol.Type);
         if (jsonType == null)
         {
@@ -245,9 +220,7 @@ internal static class ToolClassAnalyzer
             return null;
         }
 
-        // 提取 [ParameterAttribute]
-        var paramAttr = paramSymbol.GetAttributes()
-            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == ParameterAttributeName);
+        var paramAttr = paramSymbol.GetAttributes().FirstOrDefault(IsParameterAttribute);
 
         string paramName = paramSymbol.Name;
         string paramDescription = "";
@@ -267,11 +240,9 @@ internal static class ToolClassAnalyzer
                 required = r;
         }
 
-        // 可空引用类型默认非必填
         if (paramSymbol.NullableAnnotation == NullableAnnotation.Annotated)
             required = false;
 
-        // 可空值类型（Nullable<T>）默认非必填
         if (paramSymbol.Type is INamedTypeSymbol namedType
             && namedType.IsGenericType
             && namedType.ConstructedFrom.SpecialType == SpecialType.System_Nullable_T)
@@ -289,5 +260,17 @@ internal static class ToolClassAnalyzer
             jsonType: jsonType,
             typeSymbol: paramSymbol.Type,
             codeParamName: paramSymbol.Name);
+    }
+
+    private static bool IsToolAttribute(AttributeData attribute)
+    {
+        var name = attribute.AttributeClass?.ToDisplayString();
+        return name == ToolAttributeName || name == LegacyToolAttributeName;
+    }
+
+    private static bool IsParameterAttribute(AttributeData attribute)
+    {
+        var name = attribute.AttributeClass?.ToDisplayString();
+        return name == ParameterAttributeName || name == LegacyParameterAttributeName;
     }
 }

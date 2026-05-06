@@ -48,6 +48,7 @@ internal static class OllamaHttpResponseWriter
         response.StatusCode = statusCode;
         response.ContentType = string.IsNullOrWhiteSpace(contentType) ? "application/json; charset=utf-8" : contentType;
         response.ContentLength64 = body.Length;
+        var txt = UTF8Encoding.UTF8.GetString(body);
         SuppressServerHeader(response);
         await response.OutputStream.WriteAsync(body, cancellationToken);
     }

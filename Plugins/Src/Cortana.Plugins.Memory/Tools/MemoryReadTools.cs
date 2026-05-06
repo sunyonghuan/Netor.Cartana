@@ -1,5 +1,5 @@
 using Cortana.Plugins.Memory.ToolHandlers;
-using Netor.Cortana.Plugin;
+using Netor.Cortana.Plugin.Native;
 
 namespace Cortana.Plugins.Memory.Tools;
 

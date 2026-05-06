@@ -12,7 +12,7 @@ public sealed class BtSiteConfigTools(BtApiClient client)
     /// 读取或保存站点配置文件。
     /// get 返回文件内容，set 直接覆盖指定路径的文本内容。
     /// </summary>
-    [Tool(Name = "bt_get_or_set_site_config", Description = "读取或保存网站配置文件内容。")]
+    [Tool(Name = "get_or_set_site_config", Description = "读取或保存网站配置文件内容。")]
     public async Task<string> GetOrSetSiteConfig(
         [Parameter(Description = "宝塔面板地址，例如 http://127.0.0.1:8888")] string panelUrl,
         [Parameter(Description = "宝塔 API 密钥 apiSk")] string apiSk,

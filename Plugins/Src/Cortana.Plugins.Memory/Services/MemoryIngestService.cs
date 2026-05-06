@@ -5,7 +5,7 @@ using Cortana.Plugins.Memory.Storage;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-using Netor.Cortana.Plugin;
+using Netor.Cortana.Plugin.Native;
 
 using System.Net.WebSockets;
 using System.Text;

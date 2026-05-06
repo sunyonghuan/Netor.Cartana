@@ -17,7 +17,7 @@ public sealed class OfficeWordTableTools(
     ILogger<OfficeWordTableTools> logger)
 {
     /// <summary>在指定段落后插入简单表格。</summary>
-    [Tool(Name = "office_word_insert_table",
+    [Tool(Name = "word_insert_table",
         Description = "在指定段落后插入简单表格。headers 为 JSON 数组或逗号分隔的表头文本；cells 为 JSON 数组或逗号分隔的单元格内容，按行优先展开。")]
     public string InsertTable(
         [Parameter(Description = "源文件路径（.docx）")] string sourcePath,

@@ -46,6 +46,10 @@ public sealed record ToolInfoData
     [JsonPropertyName("name")]
     public string Name { get; init; } = string.Empty;
 
+    /// <summary>插件内短工具名，不包含插件 ID 前缀。</summary>
+    [JsonPropertyName("shortName")]
+    public string? ShortName { get; init; }
+
     /// <summary>工具描述，告诉 AI 这个工具做什么。</summary>
     [JsonPropertyName("description")]
     public string Description { get; init; } = string.Empty;

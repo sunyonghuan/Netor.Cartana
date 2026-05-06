@@ -17,7 +17,7 @@ public sealed class OfficePptSlideTools(
     ILogger<OfficePptSlideTools> logger)
 {
     /// <summary>在指定位置插入新幻灯片。</summary>
-    [Tool(Name = "office_ppt_add_slide",
+    [Tool(Name = "ppt_add_slide",
         Description = "在演示文稿中插入新幻灯片。insert_index 为 -1 或省略时追加到末尾；layout_name 为空字符串时使用默认版式；title、body 为空字符串时不填充对应占位符。")]
     public string AddSlide(
         [Parameter(Description = "源文件路径（.pptx）")] string sourcePath,
@@ -56,7 +56,7 @@ public sealed class OfficePptSlideTools(
     }
 
     /// <summary>删除指定索引的幻灯片。</summary>
-    [Tool(Name = "office_ppt_delete_slide",
+    [Tool(Name = "ppt_delete_slide",
         Description = "删除演示文稿中指定索引的幻灯片。使用前建议先调用 list_slides 确认目标索引。删除后索引自动重排。")]
     public string DeleteSlide(
         [Parameter(Description = "源文件路径（.pptx）")] string sourcePath,

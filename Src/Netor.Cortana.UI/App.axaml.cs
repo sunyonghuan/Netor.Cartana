@@ -53,7 +53,7 @@ public partial class App : Application
     /// <summary>
     /// 插件目录路径。
     /// </summary>
-    internal static string PluginDirectory => WorkspacePluginsDirectory;
+    internal static string PluginDirectory => UserPluginsDirectory;
 
     /// <summary>
     /// 工作区技能目录路径。
@@ -61,8 +61,9 @@ public partial class App : Application
     internal static string WorkspaceSkillsDirectory => Path.Combine(WorkspaceDirectory, ".cortana", "skills");
 
     /// <summary>
-    /// 工作区插件目录路径。
+    /// 工作区插件目录路径。已废弃，插件统一安装到用户全局插件目录。
     /// </summary>
+    [Obsolete("工作区插件目录已废弃，请使用 UserPluginsDirectory。")]
     internal static string WorkspacePluginsDirectory => Path.Combine(WorkspaceDirectory, ".cortana", "plugins");
 
     /// <summary>
@@ -86,8 +87,6 @@ public partial class App : Application
             Directory.CreateDirectory(cortanaPath);
         if (!Directory.Exists(WorkspaceSkillsDirectory))
             Directory.CreateDirectory(WorkspaceSkillsDirectory);
-        if (!Directory.Exists(WorkspacePluginsDirectory))
-            Directory.CreateDirectory(WorkspacePluginsDirectory);
     }
 
     public override void Initialize()
@@ -194,6 +193,7 @@ public partial class App : Application
             .AddTransient<SystemSettingsService>()
             .AddTransient<AgentSeedService>()
             .AddTransient<AgentService>()
+            .AddTransient<GlobalPluginService>()
             .AddTransient<AiProviderService>()
             .AddTransient<AiModelService>()
             .AddTransient<ChatMessageService>()
@@ -243,8 +243,6 @@ public partial class App : Application
             Directory.CreateDirectory(UserSkillsDirectory);
         if (!Directory.Exists(UserPluginsDirectory))
             Directory.CreateDirectory(UserPluginsDirectory);
-        if (!Directory.Exists(PluginDirectory))
-            Directory.CreateDirectory(PluginDirectory);
     }
 
     /// <summary>

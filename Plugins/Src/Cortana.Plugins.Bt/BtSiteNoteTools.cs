@@ -12,7 +12,7 @@ public sealed class BtSiteNoteTools(BtApiClient client)
     /// 修改网站备注。
     /// 该工具只更新备注文本，不影响站点其它配置。
     /// </summary>
-    [Tool(Name = "bt_set_site_note", Description = "修改网站备注。")]
+    [Tool(Name = "set_site_note", Description = "修改网站备注。")]
     public async Task<string> SetSiteNote(
         [Parameter(Description = "宝塔面板地址，例如 http://127.0.0.1:8888")] string panelUrl,
         [Parameter(Description = "宝塔 API 密钥 apiSk")] string apiSk,

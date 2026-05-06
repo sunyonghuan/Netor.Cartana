@@ -3,14 +3,26 @@ using System.Runtime.InteropServices;
 using System.Text;
 using ProcessDiag = System.Diagnostics.Process;
 
-namespace Netor.Cortana.Plugin.BuiltIn.WindowManagement;
+namespace Cortana.Plugins.WindowManagement;
 
 /// <summary>
-/// 窗口管理器 - 使用 Windows API 管理窗口
+/// Windows 窗口管理器，封装窗口枚举、查询和控制相关 Win32 API。
 /// </summary>
 public sealed class WindowManager
 {
-    // Windows API P/Invoke
+    private const int SW_MINIMIZE = 6;
+    private const int SW_MAXIMIZE = 3;
+    private const int SW_RESTORE = 9;
+    private const uint WM_CLOSE = 0x0010;
+
+    /// <summary>
+    /// EnumWindows 使用的窗口枚举回调委托。
+    /// </summary>
+    /// <param name="hWnd">当前枚举到的窗口句柄。</param>
+    /// <param name="lParam">调用方传入的附加参数。</param>
+    /// <returns>返回 <see langword="true" /> 继续枚举；返回 <see langword="false" /> 停止枚举。</returns>
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
     [DllImport("user32.dll")]
     private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
 
@@ -53,46 +65,43 @@ public sealed class WindowManager
     [DllImport("user32.dll")]
     private static extern bool SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
 
-    // ShowWindow 参数
-    private const int SW_MINIMIZE = 6;
-
-    private const int SW_MAXIMIZE = 3;
-    private const int SW_RESTORE = 9;
-    private const int SW_CLOSE = 0;
-    private const int WM_CLOSE = 0x0010;
-
     /// <summary>
-    /// 窗口枚举回调
+    /// Win32 RECT 结构，表示窗口边界。
     /// </summary>
-    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-
     [StructLayout(LayoutKind.Sequential)]
     private struct RECT
     {
+        /// <summary>左边界坐标。</summary>
         public int Left;
+        /// <summary>上边界坐标。</summary>
         public int Top;
+        /// <summary>右边界坐标。</summary>
         public int Right;
+        /// <summary>下边界坐标。</summary>
         public int Bottom;
     }
 
     /// <summary>
-    /// 列出所有窗口
+    /// 枚举系统中所有带标题的顶层窗口。
     /// </summary>
+    /// <returns>窗口信息列表。</returns>
     public List<WindowInfo> ListAllWindows()
     {
         var windows = new List<WindowInfo>();
 
-        EnumWindows((hWnd, lParam) =>
+        EnumWindows((hWnd, _) =>
         {
             try
             {
                 var windowInfo = GetWindowInfo(hWnd);
-                if (windowInfo != null)
+                if (windowInfo is not null)
                 {
                     windows.Add(windowInfo);
                 }
             }
-            catch { }
+            catch
+            {
+            }
 
             return true;
         }, IntPtr.Zero);
@@ -101,8 +110,9 @@ public sealed class WindowManager
     }
 
     /// <summary>
-    /// 获取活跃窗口
+    /// 获取当前前台活跃窗口的信息。
     /// </summary>
+    /// <returns>活跃窗口信息；获取失败时返回 <see langword="null" />。</returns>
     public WindowInfo? GetActiveWindow()
     {
         var hWnd = GetForegroundWindow();
@@ -110,8 +120,10 @@ public sealed class WindowManager
     }
 
     /// <summary>
-    /// 按标题获取窗口
+    /// 根据窗口标题查找窗口，支持不区分大小写的完整匹配和包含匹配。
     /// </summary>
+    /// <param name="title">窗口标题或标题片段。</param>
+    /// <returns>匹配到的第一个窗口；未匹配时返回 <see langword="null" />。</returns>
     public WindowInfo? GetWindowByTitle(string title)
     {
         var windows = ListAllWindows();
@@ -120,18 +132,21 @@ public sealed class WindowManager
             w.Title.Contains(title, StringComparison.OrdinalIgnoreCase));
     }
 
-    /// <summary>
-    /// 激活窗口
-    /// </summary>
+            /// <summary>
+            /// 激活指定窗口；如果窗口已最小化，会先恢复窗口。
+            /// </summary>
+            /// <param name="hWndOrTitle">窗口句柄十六进制字符串或窗口标题。</param>
+            /// <returns>是否成功发起激活操作。</returns>
     public bool ActivateWindow(string hWndOrTitle)
     {
         try
         {
-            IntPtr hWnd = GetHwndFromString(hWndOrTitle);
+            var hWnd = GetHwndFromString(hWndOrTitle);
             if (hWnd == IntPtr.Zero || !IsWindow(hWnd))
+            {
                 return false;
+            }
 
-            // 如果窗口处于最小化状态，先恢复再激活
             if (IsIconic(hWnd))
             {
                 ShowWindow(hWnd, SW_RESTORE);
@@ -146,41 +161,50 @@ public sealed class WindowManager
     }
 
     /// <summary>
-    /// 最小化窗口
+    /// 最小化指定窗口。
     /// </summary>
+    /// <param name="hWndOrTitle">窗口句柄十六进制字符串或窗口标题。</param>
+    /// <returns>是否成功发起最小化操作。</returns>
     public bool MinimizeWindow(string hWndOrTitle)
     {
         return ControlWindow(hWndOrTitle, SW_MINIMIZE);
     }
 
     /// <summary>
-    /// 最大化窗口
+    /// 最大化指定窗口。
     /// </summary>
+    /// <param name="hWndOrTitle">窗口句柄十六进制字符串或窗口标题。</param>
+    /// <returns>是否成功发起最大化操作。</returns>
     public bool MaximizeWindow(string hWndOrTitle)
     {
         return ControlWindow(hWndOrTitle, SW_MAXIMIZE);
     }
 
     /// <summary>
-    /// 恢复窗口
+    /// 将指定窗口恢复到普通大小。
     /// </summary>
+    /// <param name="hWndOrTitle">窗口句柄十六进制字符串或窗口标题。</param>
+    /// <returns>是否成功发起恢复操作。</returns>
     public bool RestoreWindow(string hWndOrTitle)
     {
         return ControlWindow(hWndOrTitle, SW_RESTORE);
     }
 
     /// <summary>
-    /// 关闭窗口
+    /// 向指定窗口发送关闭消息。
     /// </summary>
+    /// <param name="hWndOrTitle">窗口句柄十六进制字符串或窗口标题。</param>
+    /// <returns>是否成功发送关闭消息。</returns>
     public bool CloseWindow(string hWndOrTitle)
     {
         try
         {
-            IntPtr hWnd = GetHwndFromString(hWndOrTitle);
+            var hWnd = GetHwndFromString(hWndOrTitle);
             if (hWnd == IntPtr.Zero || !IsWindow(hWnd))
+            {
                 return false;
+            }
 
-            // 发送关闭消息（比 ShowWindow 更温和）
             SendMessage(hWnd, WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
             return true;
         }
@@ -191,15 +215,23 @@ public sealed class WindowManager
     }
 
     /// <summary>
-    /// 移动和调整窗口大小
+    /// 移动窗口并调整窗口大小。
     /// </summary>
+    /// <param name="hWndOrTitle">窗口句柄十六进制字符串或窗口标题。</param>
+    /// <param name="x">目标 X 坐标。</param>
+    /// <param name="y">目标 Y 坐标。</param>
+    /// <param name="width">目标宽度。</param>
+    /// <param name="height">目标高度。</param>
+    /// <returns>是否成功发起移动操作。</returns>
     public bool MoveWindowPosition(string hWndOrTitle, int x, int y, int width, int height)
     {
         try
         {
-            IntPtr hWnd = GetHwndFromString(hWndOrTitle);
+            var hWnd = GetHwndFromString(hWndOrTitle);
             if (hWnd == IntPtr.Zero || !IsWindow(hWnd))
+            {
                 return false;
+            }
 
             return MoveWindow(hWnd, x, y, width, height, true);
         }
@@ -210,40 +242,37 @@ public sealed class WindowManager
     }
 
     /// <summary>
-    /// 获取窗口信息
+    /// 根据窗口句柄读取窗口标题、进程、位置和状态信息。
     /// </summary>
+    /// <param name="hWnd">窗口句柄。</param>
+    /// <returns>窗口信息；窗口无效、无标题或读取失败时返回 <see langword="null" />。</returns>
     private WindowInfo? GetWindowInfo(IntPtr hWnd)
     {
         if (hWnd == IntPtr.Zero)
+        {
             return null;
+        }
 
         try
         {
-            // 获取标题
             var titleLength = GetWindowTextLength(hWnd);
             if (titleLength == 0)
+            {
                 return null;
+            }
 
             var titleBuilder = new StringBuilder(titleLength + 1);
             GetWindowText(hWnd, titleBuilder, titleLength + 1);
             var title = titleBuilder.ToString();
 
-            // 跳过空标题和系统窗口
             if (string.IsNullOrWhiteSpace(title))
+            {
                 return null;
+            }
 
-            // 获取位置大小
             GetWindowRect(hWnd, out var rect);
-
-            // 获取进程信息
             GetWindowThreadProcessId(hWnd, out var processId);
             var process = ProcessDiag.GetProcessById((int)processId);
-
-            // 获取状态
-            var isVisible = IsWindowVisible(hWnd);
-            var isMinimized = IsIconic(hWnd);
-            var isMaximized = IsZoomed(hWnd);
-            var isActive = hWnd == GetForegroundWindow();
 
             return new WindowInfo
             {
@@ -258,10 +287,10 @@ public sealed class WindowManager
                     Width = rect.Right - rect.Left,
                     Height = rect.Bottom - rect.Top
                 },
-                IsVisible = isVisible,
-                IsMinimized = isMinimized,
-                IsMaximized = isMaximized,
-                IsActive = isActive
+                IsVisible = IsWindowVisible(hWnd),
+                IsMinimized = IsIconic(hWnd),
+                IsMaximized = IsZoomed(hWnd),
+                IsActive = hWnd == GetForegroundWindow()
             };
         }
         catch
@@ -271,17 +300,21 @@ public sealed class WindowManager
     }
 
     /// <summary>
-    /// 控制窗口（最小化/最大化/恢复）
+    /// 通过 ShowWindow 控制窗口状态。
     /// </summary>
+    /// <param name="hWndOrTitle">窗口句柄十六进制字符串或窗口标题。</param>
+    /// <param name="command">ShowWindow 命令。</param>
+    /// <returns>是否成功发起控制操作。</returns>
     private bool ControlWindow(string hWndOrTitle, int command)
     {
         try
         {
-            IntPtr hWnd = GetHwndFromString(hWndOrTitle);
+            var hWnd = GetHwndFromString(hWndOrTitle);
             if (hWnd == IntPtr.Zero || !IsWindow(hWnd))
+            {
                 return false;
+            }
 
-            // ShowWindow 的返回值表示窗口之前是否可见，不代表操作是否成功
             ShowWindow(hWnd, command);
             return true;
         }
@@ -292,8 +325,10 @@ public sealed class WindowManager
     }
 
     /// <summary>
-    /// 从字符串获取 HWND
+    /// 将窗口句柄字符串或窗口标题解析为窗口句柄。
     /// </summary>
+    /// <param name="hWndOrTitle">窗口句柄十六进制字符串或窗口标题。</param>
+    /// <returns>窗口句柄；解析失败时返回 <see cref="IntPtr.Zero" />。</returns>
     private IntPtr GetHwndFromString(string hWndOrTitle)
     {
         if (hWndOrTitle.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
@@ -302,20 +337,20 @@ public sealed class WindowManager
         }
 
         var window = GetWindowByTitle(hWndOrTitle);
-        if (window == null)
-            return IntPtr.Zero;
-
-        return ParseHexHwnd(window.Hwnd);
+        return window is null ? IntPtr.Zero : ParseHexHwnd(window.Hwnd);
     }
 
     /// <summary>
-    /// 将十六进制字符串（可带 0x 前缀）解析为 IntPtr
+    /// 将十六进制窗口句柄字符串解析为 <see cref="IntPtr" />。
     /// </summary>
+    /// <param name="hex">可带 0x 前缀的十六进制句柄字符串。</param>
+    /// <returns>解析后的窗口句柄。</returns>
     private static IntPtr ParseHexHwnd(string hex)
     {
         var cleaned = hex.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
             ? hex[2..]
             : hex;
+
         return new IntPtr(Convert.ToInt64(cleaned, 16));
     }
 }

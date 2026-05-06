@@ -17,7 +17,7 @@ public sealed class OfficeWordParagraphTools(
     ILogger<OfficeWordParagraphTools> logger)
 {
     /// <summary>在指定段落前后插入新段落。</summary>
-    [Tool(Name = "office_word_insert_paragraph",
+    [Tool(Name = "word_insert_paragraph",
         Description = "在指定段落前后插入新段落。使用前请先调用 get_outline 获取段落索引。position 仅允许 before 或 after。")]
     public string InsertParagraph(
         [Parameter(Description = "源文件路径（.docx）")] string sourcePath,
@@ -51,7 +51,7 @@ public sealed class OfficeWordParagraphTools(
     }
 
     /// <summary>删除指定索引的段落。</summary>
-    [Tool(Name = "office_word_delete_paragraph",
+    [Tool(Name = "word_delete_paragraph",
         Description = "删除指定索引的段落。使用前请先调用 get_outline 确认目标段落。require_non_empty 为 1 时仅删除非空段落。")]
     public string DeleteParagraph(
         [Parameter(Description = "源文件路径（.docx）")] string sourcePath,
@@ -86,7 +86,7 @@ public sealed class OfficeWordParagraphTools(
     }
 
     /// <summary>按文本匹配执行替换。</summary>
-    [Tool(Name = "office_word_replace_text",
+    [Tool(Name = "word_replace_text",
         Description = "按文本匹配执行替换。V1 仅支持单个 Run 内的文本匹配。match_case 为 1 时区分大小写；replace_all 为 1 时替换全部匹配。")]
     public string ReplaceText(
         [Parameter(Description = "源文件路径（.docx）")] string sourcePath,

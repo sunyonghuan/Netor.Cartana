@@ -14,8 +14,6 @@
 //   5. 将后端响应转换为 Ollama 格式返回给客户端
 // =============================================================================
 
-using Microsoft.Extensions.DependencyInjection;
-
 using Netor.Cortana.Entitys.Proxy;
 
 using System.Net;

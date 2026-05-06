@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Linq;
 
 using Microsoft.CodeAnalysis;
@@ -16,7 +15,8 @@ namespace Netor.Cortana.Plugin.Native.Generator.Analysis;
 /// </summary>
 internal static class PluginClassAnalyzer
 {
-    private const string PluginAttributeName = "Netor.Cortana.Plugin.PluginAttribute";
+    private const string PluginAttributeName = "Netor.Cortana.Plugin.Native.PluginAttribute";
+    private const string LegacyPluginAttributeName = "Netor.Cortana.Plugin.PluginAttribute";
     private const string ServiceCollectionInterfaceName = "Microsoft.Extensions.DependencyInjection.IServiceCollection";
 
     /// <summary>
@@ -39,10 +39,7 @@ internal static class PluginClassAnalyzer
                 if (classSymbol == null)
                     continue;
 
-                // 检查是否有 [Plugin] 标记
-                var hasPluginAttr = classSymbol.GetAttributes()
-                    .Any(a => a.AttributeClass?.ToDisplayString() == PluginAttributeName);
-
+                var hasPluginAttr = classSymbol.GetAttributes().Any(IsPluginAttribute);
                 if (!hasPluginAttr)
                     continue;
 
@@ -53,7 +50,6 @@ internal static class PluginClassAnalyzer
         if (pluginClasses.Count == 0)
             return null;
 
-        // CNPG010: 多个插件入口类
         if (pluginClasses.Count > 1)
         {
             var names = string.Join(", ", pluginClasses.Select(p => p.Symbol.Name));
@@ -69,7 +65,6 @@ internal static class PluginClassAnalyzer
 
         var (pluginSyntax, pluginSymbol) = pluginClasses[0];
 
-        // CNPG011: 必须是 static partial class
         bool isStatic = pluginSyntax.Modifiers.Any(SyntaxKind.StaticKeyword);
         bool isPartial = pluginSyntax.Modifiers.Any(SyntaxKind.PartialKeyword);
 
@@ -82,7 +77,6 @@ internal static class PluginClassAnalyzer
             return null;
         }
 
-        // CNPG005: 必须是 public
         if (pluginSymbol.DeclaredAccessibility != Accessibility.Public)
         {
             reportDiagnostic(Diagnostic.Create(
@@ -92,7 +86,6 @@ internal static class PluginClassAnalyzer
             return null;
         }
 
-        // CNPG012: 必须包含 public static void Configure(IServiceCollection services) 方法
         var configureMethod = pluginSymbol.GetMembers("Configure")
             .OfType<IMethodSymbol>()
             .FirstOrDefault(m =>
@@ -111,10 +104,7 @@ internal static class PluginClassAnalyzer
             return null;
         }
 
-        // 提取 [Plugin] 属性
-        var attrData = pluginSymbol.GetAttributes()
-            .First(a => a.AttributeClass?.ToDisplayString() == PluginAttributeName);
-
+        var attrData = pluginSymbol.GetAttributes().First(IsPluginAttribute);
         var namedArgs = attrData.NamedArguments.ToDictionary(kv => kv.Key, kv => kv.Value);
 
         var id = GetNamedArgString(namedArgs, "Id");
@@ -132,7 +122,6 @@ internal static class PluginClassAnalyzer
                 .ToArray();
         }
 
-        // CNPG009: 缺少必填属性
         if (string.IsNullOrWhiteSpace(id))
         {
             reportDiagnostic(Diagnostic.Create(
@@ -151,7 +140,6 @@ internal static class PluginClassAnalyzer
             return null;
         }
 
-        // CNPG019: Plugin Id 格式校验
         if (!IsValidPluginId(id!))
         {
             reportDiagnostic(Diagnostic.Create(
@@ -164,9 +152,6 @@ internal static class PluginClassAnalyzer
         return new PluginClassInfo(pluginSymbol, id!, name!, version, description, tags, instructions);
     }
 
-    /// <summary>
-    /// 验证 Plugin Id 是否合法（仅允许小写字母、数字和下划线）。
-    /// </summary>
     private static bool IsValidPluginId(string id)
     {
         if (string.IsNullOrEmpty(id))
@@ -186,5 +171,11 @@ internal static class PluginClassAnalyzer
         if (args.TryGetValue(key, out var value) && value.Value is string s)
             return s;
         return null;
+    }
+
+    private static bool IsPluginAttribute(AttributeData attribute)
+    {
+        var name = attribute.AttributeClass?.ToDisplayString();
+        return name == PluginAttributeName || name == LegacyPluginAttributeName;
     }
 }

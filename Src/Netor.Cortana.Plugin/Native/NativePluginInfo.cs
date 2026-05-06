@@ -35,6 +35,9 @@ public sealed record NativeToolInfo
     [JsonPropertyName("name")]
     public string Name { get; init; } = string.Empty;
 
+    [JsonPropertyName("shortName")]
+    public string? ShortName { get; init; }
+
     [JsonPropertyName("description")]
     public string Description { get; init; } = string.Empty;
 

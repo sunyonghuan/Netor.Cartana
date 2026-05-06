@@ -87,7 +87,7 @@ internal sealed class WindowToolProvider(
 
         _tools.Add(AIFunctionFactory.Create(
             name: "sys_get_workspace_plugins_directory",
-            description: "Gets the plugins directory path for the current working environment.",
+            description: "Deprecated. Workspace plugin directories are no longer used. Use sys_get_user_plugins_directory for plugin installation.",
             method: GetWorkspacePluginsDirectory));
 
         _tools.Add(AIFunctionFactory.Create(
@@ -97,7 +97,7 @@ internal sealed class WindowToolProvider(
 
         _tools.Add(AIFunctionFactory.Create(
             name: "sys_get_user_plugins_directory",
-            description: "Gets the global plugins directory path. Plugins installed here are available in all working environments.",
+            description: "Gets the global plugins directory path. All plugins should be installed here and can then be enabled globally or bound to specific agents.",
             method: GetUserPluginsDirectory));
 
         // Working Directory Management
@@ -245,7 +245,8 @@ internal sealed class WindowToolProvider(
 
     private string GetWorkspaceSkillsDirectory() => appPaths.WorkspaceSkillsDirectory;
 
-    private string GetWorkspacePluginsDirectory() => appPaths.WorkspacePluginsDirectory;
+    private string GetWorkspacePluginsDirectory() =>
+        $"工作区插件目录已废弃。插件请统一安装到全局插件目录：{appPaths.UserPluginsDirectory}";
 
     private string GetUserSkillsDirectory() => appPaths.UserSkillsDirectory;
 

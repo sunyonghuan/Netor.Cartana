@@ -11,7 +11,7 @@ public sealed class BtSiteResourceQueryTools(BtApiClient client)
     /// <summary>
     /// 查询指定网站的域名列表。
     /// </summary>
-    [Tool(Name = "bt_get_site_domains", Description = "查询指定网站的域名列表。")]
+    [Tool(Name = "get_site_domains", Description = "查询指定网站的域名列表。")]
     public async Task<string> GetSiteDomains(
         [Parameter(Description = "宝塔面板地址，例如 http://127.0.0.1:8888")] string panelUrl,
         [Parameter(Description = "宝塔 API 密钥 apiSk")] string apiSk,
@@ -35,7 +35,7 @@ public sealed class BtSiteResourceQueryTools(BtApiClient client)
     /// <summary>
     /// 查询指定网站的备份列表。
     /// </summary>
-    [Tool(Name = "bt_get_site_backups", Description = "查询指定网站的备份列表。")]
+    [Tool(Name = "get_site_backups", Description = "查询指定网站的备份列表。")]
     public async Task<string> GetSiteBackups(
         [Parameter(Description = "宝塔面板地址，例如 http://127.0.0.1:8888")] string panelUrl,
         [Parameter(Description = "宝塔 API 密钥 apiSk")] string apiSk,

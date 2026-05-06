@@ -18,7 +18,10 @@ internal static class ToolNameGenerator
     /// </summary>
     public static string GenerateFullName(string pluginId, string methodSnake)
     {
-        return $"{pluginId}_{methodSnake}";
+        var prefix = pluginId + "_";
+        return methodSnake.StartsWith(prefix, StringComparison.Ordinal)
+            ? methodSnake
+            : $"{pluginId}_{methodSnake}";
     }
 
     /// <summary>

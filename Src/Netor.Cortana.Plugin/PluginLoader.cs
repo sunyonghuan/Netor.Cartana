@@ -15,6 +15,24 @@ using System.Text.Json;
 namespace Netor.Cortana.Plugin;
 
 /// <summary>
+/// 插件安装范围。
+/// </summary>
+public enum PluginInstallScope
+{
+    /// <summary>用户级全局插件目录。</summary>
+    Global
+}
+
+/// <summary>
+/// 已加载插件的运行信息。
+/// </summary>
+public sealed record LoadedPluginInfo(
+    IPlugin Plugin,
+    string DirectoryPath,
+    string DirectoryName,
+    PluginInstallScope Scope);
+
+/// <summary>
 /// 插件加载总调度器。
 /// 扫描插件目录，根据 plugin.json 中的 runtime 字段委托给对应通道的 Host 加载，
 /// 并通过 <see cref="FileSystemWatcher"/> 实现热插拔。
@@ -67,12 +85,6 @@ public sealed class PluginLoader : IDisposable
         _subscriber = subscriber;
         _appPaths = appPaths;
         _logger = loggerFactory.CreateLogger<PluginLoader>();
-
-        _subscriber.Subscribe<WorkspaceChangedArgs>(Events.OnWorkspaceChanged, async (_, _) =>
-        {
-            await ReloadAllPluginsAsync();
-            return false;
-        });
     }
 
     /// <summary>
@@ -110,6 +122,17 @@ public sealed class PluginLoader : IDisposable
             .Where(n => !string.IsNullOrEmpty(n))
             .Cast<string>()
             .Distinct()
+            .ToList();
+    }
+
+    /// <summary>
+    /// 获取当前已加载插件的目录和来源信息。
+    /// </summary>
+    public IReadOnlyList<LoadedPluginInfo> GetLoadedPluginInfos()
+    {
+        return _nativeHosts
+            .SelectMany(pair => pair.Value.Plugins.Select(plugin => CreateLoadedPluginInfo(plugin, pair.Key)))
+            .Concat(_processHosts.SelectMany(pair => pair.Value.Plugins.Select(plugin => CreateLoadedPluginInfo(plugin, pair.Key))))
             .ToList();
     }
 
@@ -567,8 +590,7 @@ public sealed class PluginLoader : IDisposable
     {
         var directories = new[]
         {
-            _appPaths.UserPluginsDirectory,
-            _appPaths.WorkspacePluginsDirectory
+            _appPaths.UserPluginsDirectory
         }
         .Where(static path => !string.IsNullOrWhiteSpace(path))
         .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -617,5 +639,11 @@ public sealed class PluginLoader : IDisposable
         {
             NotifyPluginsChanged();
         }
+    }
+
+    private LoadedPluginInfo CreateLoadedPluginInfo(IPlugin plugin, string pluginPath)
+    {
+        var directoryName = Path.GetFileName(pluginPath) ?? string.Empty;
+        return new LoadedPluginInfo(plugin, pluginPath, directoryName, PluginInstallScope.Global);
     }
 }

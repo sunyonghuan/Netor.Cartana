@@ -11,7 +11,7 @@ public sealed class BtSiteRuntimeTools(BtApiClient client)
     /// <summary>
     /// 查询防跨站、日志开关、密码访问与当前运行目录状态。
     /// </summary>
-    [Tool(Name = "bt_get_site_security_state", Description = "查询网站防跨站、日志、密码访问和运行目录状态。")]
+    [Tool(Name = "get_site_security_state", Description = "查询网站防跨站、日志、密码访问和运行目录状态。")]
     public async Task<string> GetSiteSecurityState(
         [Parameter(Description = "宝塔面板地址，例如 http://127.0.0.1:8888")] string panelUrl,
         [Parameter(Description = "宝塔 API 密钥 apiSk")] string apiSk,
@@ -36,7 +36,7 @@ public sealed class BtSiteRuntimeTools(BtApiClient client)
     /// <summary>
     /// 修改网站根目录。
     /// </summary>
-    [Tool(Name = "bt_set_site_path", Description = "修改网站根目录。")]
+    [Tool(Name = "set_site_path", Description = "修改网站根目录。")]
     public async Task<string> SetSitePath(
         [Parameter(Description = "宝塔面板地址，例如 http://127.0.0.1:8888")] string panelUrl,
         [Parameter(Description = "宝塔 API 密钥 apiSk")] string apiSk,
@@ -62,7 +62,7 @@ public sealed class BtSiteRuntimeTools(BtApiClient client)
     /// 设置网站运行目录。
     /// runPath 按网站根目录的相对路径传递，例如 /public。
     /// </summary>
-    [Tool(Name = "bt_set_site_run_path", Description = "设置网站运行目录。")]
+    [Tool(Name = "set_site_run_path", Description = "设置网站运行目录。")]
     public async Task<string> SetSiteRunPath(
         [Parameter(Description = "宝塔面板地址，例如 http://127.0.0.1:8888")] string panelUrl,
         [Parameter(Description = "宝塔 API 密钥 apiSk")] string apiSk,

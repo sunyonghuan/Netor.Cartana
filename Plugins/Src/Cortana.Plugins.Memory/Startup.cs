@@ -3,7 +3,7 @@ using Cortana.Plugins.Memory.Processing;
 using Cortana.Plugins.Memory.Services;
 using Cortana.Plugins.Memory.Storage;
 using Cortana.Plugins.Memory.ToolHandlers;
-using Netor.Cortana.Plugin;
+using Netor.Cortana.Plugin.Native;
 
 namespace Cortana.Plugins.Memory;
 
@@ -12,8 +12,8 @@ namespace Cortana.Plugins.Memory;
 /// </summary>
 [Plugin(
     Id = "memory_engine",
-    Name = "Memory Engine",
-    Version = "1.0.5",
+    Name = "增强记忆引擎",
+    Version = "1.0.9",
     Description = "订阅宿主内部对话事实流，为长期记忆构建做摄取与预处理。",
     Tags = ["memory", "ingest", "conversation-feed"],
     Instructions = "本插件自动在后台连接内部 conversation-feed，采集事实流用于长期记忆。")]

@@ -46,6 +46,7 @@ internal static class InfoJsonEmitter
             var method = allMethods[i];
             sb.AppendLine("        {");
             sb.AppendLine($"            \"name\": \"{EscapeJson(method.FullToolName)}\",");
+            sb.AppendLine($"            \"shortName\": \"{EscapeJson(method.MethodSnakeName)}\",");
             sb.AppendLine($"            \"description\": \"{EscapeJson(method.Description)}\",");
             sb.Append("            \"parameters\": [");
 

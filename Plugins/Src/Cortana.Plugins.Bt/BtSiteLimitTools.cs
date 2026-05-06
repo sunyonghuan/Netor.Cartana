@@ -12,7 +12,7 @@ public sealed class BtSiteLimitTools(BtApiClient client)
     /// 获取、设置或关闭流量限制。
     /// action 支持 get、set、close。
     /// </summary>
-    [Tool(Name = "bt_set_site_limit", Description = "获取、设置或关闭网站流量限制。")]
+    [Tool(Name = "set_site_limit", Description = "获取、设置或关闭网站流量限制。")]
     public async Task<string> SetSiteLimit(
         [Parameter(Description = "宝塔面板地址，例如 http://127.0.0.1:8888")] string panelUrl,
         [Parameter(Description = "宝塔 API 密钥 apiSk")] string apiSk,

@@ -8,7 +8,7 @@ namespace Cortana.Plugins.Bt;
 [Tool]
 public sealed class BtSystemTools(BtApiClient client)
 {
-    [Tool(Name = "bt_get_system_total", Description = "查询宝塔面板服务器系统总体状态。")]
+    [Tool(Name = "get_system_total", Description = "查询宝塔面板服务器系统总体状态。")]
     public async Task<string> GetSystemTotal(
         [Parameter(Description = "宝塔面板地址，例如 http://127.0.0.1:8888")] string panelUrl,
         [Parameter(Description = "宝塔 API 密钥 apiSk")] string apiSk)
@@ -16,7 +16,7 @@ public sealed class BtSystemTools(BtApiClient client)
         return await CallSimpleAsync(panelUrl, apiSk, "/system?action=GetSystemTotal", "已获取系统总体状态。");
     }
 
-    [Tool(Name = "bt_get_disk_info", Description = "查询宝塔面板服务器磁盘分区信息。")]
+    [Tool(Name = "get_disk_info", Description = "查询宝塔面板服务器磁盘分区信息。")]
     public async Task<string> GetDiskInfo(
         [Parameter(Description = "宝塔面板地址，例如 http://127.0.0.1:8888")] string panelUrl,
         [Parameter(Description = "宝塔 API 密钥 apiSk")] string apiSk)
@@ -24,7 +24,7 @@ public sealed class BtSystemTools(BtApiClient client)
         return await CallSimpleAsync(panelUrl, apiSk, "/system?action=GetDiskInfo", "已获取磁盘分区信息。");
     }
 
-    [Tool(Name = "bt_get_network_status", Description = "查询 CPU、内存、网络与负载状态。")]
+    [Tool(Name = "get_network_status", Description = "查询 CPU、内存、网络与负载状态。")]
     public async Task<string> GetNetworkStatus(
         [Parameter(Description = "宝塔面板地址，例如 http://127.0.0.1:8888")] string panelUrl,
         [Parameter(Description = "宝塔 API 密钥 apiSk")] string apiSk)

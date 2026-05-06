@@ -16,18 +16,64 @@ using Avalonia.VisualTree;
 
 namespace Netor.Cortana.UI.Controls;
 
-public partial class WorkspaceExplorer : UserControl
+/// <summary>
+/// 工作区文件浏览器控件，负责展示当前工作目录下的文件树，并提供打开、创建、刷新、拖放和右键菜单操作。
+/// </summary>
+public partial class WorkspaceExplorer : UserControl, INotifyPropertyChanged
 {
+    /// <summary>
+    /// 文件拖放目标的边框颜色。
+    /// </summary>
     private static readonly IBrush DragBorderBrush = SolidColorBrush.Parse("#007ACC");
+
+    /// <summary>
+    /// 文件拖放目标的背景颜色。
+    /// </summary>
     private static readonly IBrush DragBackgroundBrush = SolidColorBrush.Parse("#1a007ACC");
 
+    /// <summary>
+    /// 文件夹节点图标。
+    /// </summary>
     private static readonly Bitmap FolderIcon = new(AssetLoader.Open(new Uri("avares://Cortana/Assets/folder.png")));
+
+    /// <summary>
+    /// 文件节点图标。
+    /// </summary>
     private static readonly Bitmap FileIcon = new(AssetLoader.Open(new Uri("avares://Cortana/Assets/file.png")));
 
+    /// <summary>
+    /// 监听当前工作目录下文件和目录变化的文件系统监视器。
+    /// </summary>
     private FileSystemWatcher? _watcher;
+
+    /// <summary>
+    /// 当前工作目录的完整路径。
+    /// </summary>
     private string _workspaceDirectory = string.Empty;
+
+    /// <summary>
+    /// 顶部工具栏展示的工作区标题。
+    /// </summary>
+    private string _workspaceTitle = "工作台";
+
+    /// <summary>
+    /// 全局事件订阅器，用于监听工作目录变更事件。
+    /// </summary>
+    private readonly ISubscriber _subscriber;
+
+    /// <summary>
+    /// 右键复制操作暂存的文件或目录路径。
+    /// </summary>
     private readonly List<string> _clipboardPaths = [];
+
+    /// <summary>
+    /// 当前拖放悬停的树节点控件。
+    /// </summary>
     private TreeViewItem? _activeDropTargetItem;
+
+    /// <summary>
+    /// 标识当前拖放目标是否为文件树根区域。
+    /// </summary>
     private bool _isRootDropTarget;
 
     // WorkspaceChanged 事件已迁移到 EventHub（Events.OnWorkspaceChanged）
@@ -37,17 +83,42 @@ public partial class WorkspaceExplorer : UserControl
     /// </summary>
     public event Action<IReadOnlyList<string>>? AttachmentRequested;
 
+    /// <summary>
+    /// 初始化工作区文件浏览器控件，并注册拖放处理和工作目录变更事件订阅。
+    /// </summary>
     public WorkspaceExplorer()
     {
         InitializeComponent();
+        DataContext = this;
+        _subscriber = App.Services.GetRequiredService<ISubscriber>();
+        _subscriber.Subscribe<WorkspaceChangedArgs>(Events.OnWorkspaceChanged, (_, args) =>
+        {
+            Dispatcher.UIThread.Post(() => WorkspaceDirectory = args.Path);
+            return Task.FromResult(false);
+        });
         FileTree.AddHandler(DragDrop.DragEnterEvent, OnTreeDragEnter);
         FileTree.AddHandler(DragDrop.DragOverEvent, OnTreeDragOver);
         FileTree.AddHandler(DragDrop.DragLeaveEvent, OnTreeDragLeave);
         FileTree.AddHandler(DragDrop.DropEvent, OnTreeDrop);
     }
 
+    /// <summary>
+    /// 文件树根节点集合。
+    /// </summary>
     public ObservableCollection<FileTreeNode> TreeNodes { get; } = [];
 
+    /// <summary>
+    /// 顶部工具栏显示的当前工作目录名称。
+    /// </summary>
+    public string WorkspaceTitle
+    {
+        get => _workspaceTitle;
+        private set => SetField(ref _workspaceTitle, value);
+    }
+
+    /// <summary>
+    /// 当前工作目录。设置后会刷新文件树，并同步更新顶部标题。
+    /// </summary>
     public string WorkspaceDirectory
     {
         get => _workspaceDirectory;
@@ -58,8 +129,53 @@ public partial class WorkspaceExplorer : UserControl
             if (string.Equals(_workspaceDirectory, normalized, StringComparison.OrdinalIgnoreCase))
                 return;
             _workspaceDirectory = normalized;
+            UpdateWorkspaceTitle();
             LoadTree();
         }
+    }
+
+    /// <summary>
+    /// 根据当前工作目录路径更新工具栏标题。
+    /// </summary>
+    private void UpdateWorkspaceTitle()
+    {
+        WorkspaceTitle = string.IsNullOrWhiteSpace(_workspaceDirectory)
+            ? "工作台"
+            : Path.GetFileName(_workspaceDirectory) switch
+            {
+                { Length: > 0 } name => name,
+                _ => _workspaceDirectory
+            };
+    }
+
+            /// <summary>
+            /// 属性变更通知事件的内部存储，避免与 AvaloniaObject.PropertyChanged 冲突。
+            /// </summary>
+            private event PropertyChangedEventHandler? NotifyPropertyChanged;
+
+            /// <summary>
+            /// 属性变更通知事件，用于刷新 XAML 绑定。
+            /// </summary>
+            event PropertyChangedEventHandler? INotifyPropertyChanged.PropertyChanged
+            {
+                add => NotifyPropertyChanged += value;
+                remove => NotifyPropertyChanged -= value;
+            }
+
+            /// <summary>
+            /// 设置字段值并触发属性变更通知。
+            /// </summary>
+            /// <typeparam name="T">字段类型。</typeparam>
+            /// <param name="field">需要更新的字段引用。</param>
+            /// <param name="value">新的字段值。</param>
+            /// <param name="propertyName">发生变化的属性名称。</param>
+    private void SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
+    {
+        if (EqualityComparer<T>.Default.Equals(field, value))
+            return;
+
+        field = value;
+        NotifyPropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 
     // ──────── 文件树构建 ────────
