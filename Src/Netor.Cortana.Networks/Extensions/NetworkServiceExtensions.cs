@@ -38,6 +38,7 @@ public static class NetworkServiceExtensions
         services.AddSingleton<OllamaProxyOptionsReader>();
         services.AddSingleton<ProxyModelEndpoints>();
         services.AddSingleton<ProxyChatEndpoints>();
+        services.AddSingleton<DeepSeekReasoningReplayCache>();
         services.AddSingleton<OpenAiCompatibleRawProxy>();
         services.AddSingleton<OpenAiCompatibleEndpoints>();
         services.AddSingleton<ProxyRouteDispatcher>();

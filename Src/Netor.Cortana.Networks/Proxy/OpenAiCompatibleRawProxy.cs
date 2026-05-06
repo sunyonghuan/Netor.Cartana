@@ -40,7 +40,8 @@ public sealed class OpenAiCompatibleRawProxy(
     AiProviderService providerService,
     AiModelService modelService,
     SystemSettingsService settingsService,
-    ProxyUsageTracker usageTracker)
+    ProxyUsageTracker usageTracker,
+    DeepSeekReasoningReplayCache deepSeekReasoningCache)
 {
     /// <summary>
     /// 共享的 HTTP 客户端实例。
@@ -68,6 +69,7 @@ public sealed class OpenAiCompatibleRawProxy(
     public async Task<RawProxyResult> ForwardChatCompletionsAsync(
         Stream requestBody,
         Func<string, string> toInternalModelName,
+        string? clientKey,
         CancellationToken cancellationToken)
     {
         usageTracker.MarkRequestStarted();
@@ -101,6 +103,15 @@ public sealed class OpenAiCompatibleRawProxy(
             // Step 5: 替换请求体中的模型名为内部实际模型名
             root["model"] = model.Name;
 
+            var isDeepSeekProvider = DeepSeekReasoningRequestRewriter.IsDeepSeekProvider(provider);
+            var deepSeekCacheKey = string.Empty;
+            if (isDeepSeekProvider)
+            {
+                deepSeekCacheKey = deepSeekReasoningCache.BuildKey(provider, exposedModel, clientKey);
+                var replayReasoning = deepSeekReasoningCache.GetReplayText(deepSeekCacheKey);
+                DeepSeekReasoningRequestRewriter.RewriteRequest(root, replayReasoning);
+            }
+
             // Step 6: 构建上游请求 URL 并发送请求
             var upstreamUrl = BuildChatCompletionsUrl(provider.Url);
             using var request = new HttpRequestMessage(HttpMethod.Post, upstreamUrl);
@@ -113,6 +124,12 @@ public sealed class OpenAiCompatibleRawProxy(
             var contentType = response.Content.Headers.ContentType?.ToString() ?? "application/json; charset=utf-8";
 
             RecordUsageFromRawResponse(usageTracker, (int)response.StatusCode, contentType, bytes);
+            if (isDeepSeekProvider && response.IsSuccessStatusCode)
+            {
+                var reasoning = DeepSeekReasoningRequestRewriter.ExtractReasoningFromResponse(contentType, bytes);
+                deepSeekReasoningCache.Append(deepSeekCacheKey, reasoning);
+            }
+
             succeeded = response.IsSuccessStatusCode;
             if (!succeeded)
             {
@@ -348,24 +365,26 @@ public sealed class OpenAiCompatibleRawProxy(
             throw new InvalidOperationException("provider url cannot be empty");
         }
 
-        // 先全局压缩重复 v1 段，覆盖：
-        // https://host/v1/v1
-        // https://host/v1/v1/chat/completions
-        // https://host/v1/v1/v1/chat/completions
-        while (trimmed.Contains("/v1", StringComparison.OrdinalIgnoreCase))
-        {
-            trimmed = trimmed.Replace("/v1", "/", StringComparison.OrdinalIgnoreCase);
-        }
+        //// 先全局压缩重复 v1 段，覆盖：
+        //// https://host/v1/v1
+        //// https://host/v1/v1/chat/completions
+        //// https://host/v1/v1/v1/chat/completions
+        if (trimmed.Contains("/v1/v1", StringComparison.OrdinalIgnoreCase))
+            trimmed = trimmed.Replace("/v1/v1", "/v1", StringComparison.OrdinalIgnoreCase);
+        //while (trimmed.Contains("/v1", StringComparison.OrdinalIgnoreCase))
+        //{
+        //    trimmed = trimmed.Replace("/v1", "/", StringComparison.OrdinalIgnoreCase);
+        //}
 
-        if (trimmed.EndsWith("/chat/completions", StringComparison.OrdinalIgnoreCase))
-        {
-            return trimmed;
-        }
+        //if (trimmed.EndsWith("/chat/completions", StringComparison.OrdinalIgnoreCase))
+        //{
+        //    return trimmed;
+        //}
 
-        if (trimmed.EndsWith("/v1", StringComparison.OrdinalIgnoreCase))
-        {
-            return trimmed + "/chat/completions";
-        }
+        //if (trimmed.EndsWith("/v1", StringComparison.OrdinalIgnoreCase))
+        //{
+        //    return trimmed + "/chat/completions";
+        //}
 
         return trimmed + "/chat/completions";
     }

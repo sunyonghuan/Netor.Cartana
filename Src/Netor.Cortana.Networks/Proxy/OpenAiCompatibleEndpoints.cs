@@ -17,6 +17,7 @@ public sealed class OpenAiCompatibleEndpoints(OpenAiCompatibleRawProxy rawProxy)
             var result = await rawProxy.ForwardChatCompletionsAsync(
                 context.Request.InputStream,
                 ProxyModelNameMapper.ToInternalModelName,
+                ResolveClientKey(context),
                 cancellationToken);
 
             await OllamaHttpResponseWriter.WriteRawAsync(
@@ -30,5 +31,13 @@ public sealed class OpenAiCompatibleEndpoints(OpenAiCompatibleRawProxy rawProxy)
         {
             await OllamaHttpResponseWriter.WriteErrorAsync(context.Response, 500, ex.Message, cancellationToken);
         }
+    }
+
+    private static string? ResolveClientKey(HttpListenerContext context)
+    {
+        return context.Request.Headers["X-Cortana-Session-Id"]
+            ?? context.Request.Headers["X-Cortana-Conversation-Id"]
+            ?? context.Request.Headers["X-Request-Id"]
+            ?? context.Request.RemoteEndPoint?.ToString();
     }
 }
