@@ -33,7 +33,7 @@
 - SaveGeneratedAssetsAsync 方法签名调整：接收已入库的 assistant 消息 ID 列表以稳定资源归属（项目内已统一调整）。
 
 ## 升级与验证
-1. 更新代码并构建（Entitys → AI → AvaloniaUI）。
+1. 更新代码并构建（Entitys → AI → UI）。
 2. 在“模型设置”中：
    - 需要工具链的模型：确保勾选“函数调用”。
    - 强制要求 reasoning 的模型：可勾选“思考模式”；或保持关闭，依赖“自动捕获+必要时补回”的兼容策略（不会持久化）。
@@ -44,5 +44,5 @@
 - 历史与资源：Src/Netor.Cortana.AI/Providers/ChatHistoryDataProvider.cs
 - 回传与捕获：Src/Netor.Cortana.AI/Providers/TokenTrackingChatClient.cs
 - 工具配送 gating：Src/Netor.Cortana.AI/AIAgentFactory.cs
-- 模型设置 UI：Src/Netor.Cortana.AvaloniaUI/Views/Settings/ModelSettingsPage.axaml(+.cs)
+- 模型设置 UI：Src/Netor.Cortana.UI/Views/Settings/ModelSettingsPage.axaml(+.cs)
 

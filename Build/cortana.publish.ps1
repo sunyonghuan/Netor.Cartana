@@ -19,7 +19,7 @@ $BuildDir = $PSScriptRoot
 $SolutionDir = (Resolve-Path (Join-Path $BuildDir '..')).Path
 $ReleaseDir = Join-Path $SolutionDir 'Realases\Cortana'
 
-$CortanaProj = Join-Path $SolutionDir 'Src\Netor.Cortana.AvaloniaUI\Netor.Cortana.AvaloniaUI.csproj'
+$CortanaProj = Join-Path $SolutionDir 'Src\Netor.Cortana.UI\Netor.Cortana.UI.csproj'
 $NativeHostProj = Join-Path $SolutionDir 'Src\Plugins\Netor.Cortana.NativeHost\Netor.Cortana.NativeHost.csproj'
 $NativePluginProj = Join-Path $SolutionDir 'Plugins\Samples\NativeTestPlugin\NativeTestPlugin.csproj'
 

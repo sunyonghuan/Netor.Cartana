@@ -41,7 +41,7 @@
 
 **影响功能**: WebSocket 服务能够主动向上层广播客户端连接状态变化。
 
-### 3. Src/Netor.Cortana.AvaloniaUI/App.axaml.cs
+### 3. Src/Netor.Cortana.UI/App.axaml.cs
 
 **修改内容**:
 - 应用初始化阶段订阅全局 WebSocket 连接状态事件。
@@ -50,7 +50,7 @@
 
 **影响功能**: App 层统一协调主窗口与浮动气泡窗口的通知呈现逻辑。
 
-### 4. Src/Netor.Cortana.AvaloniaUI/Views/BubbleWindow.axaml.cs
+### 4. Src/Netor.Cortana.UI/Views/BubbleWindow.axaml.cs
 
 **修改内容**:
 - 新增 `ShowSystemNotification` 方法。

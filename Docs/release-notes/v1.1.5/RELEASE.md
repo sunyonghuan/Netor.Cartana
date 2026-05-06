@@ -78,7 +78,7 @@
 | 新增功能 | 3 |
 | 修复问题 | 5 |
 | 文档更新 | 2 |
-| 涉及模块 | AvaloniaUI、AI、Voice、Entitys |
+| 涉及模块 | UI、AI、Voice、Entitys |
 
 ---
 
@@ -89,15 +89,15 @@
 |:-----|:-----|
 | .NET SDK | 10.0 |
 | Avalonia | 12.0.1 |
-| FluentAvaloniaUI | 3.0.0-preview1 |
+| FluentUI | 3.0.0-preview1 |
 | Markdig | 1.1.2 |
 | Microsoft.Extensions.DI | 11.0.0-preview.3 |
 | Serilog | 4.3.2-dev |
 | Sherpa-ONNX | 本地集成 |
 
 ### 变更文件范围
-- `Src/Netor.Cortana.AvaloniaUI/Controls/MarkdownRenderer.cs` — Markdown 渲染引擎重构
-- `Src/Netor.Cortana.AvaloniaUI/Views/MainWindow.axaml.cs` — 新会话切换修复
+- `Src/Netor.Cortana.UI/Controls/MarkdownRenderer.cs` — Markdown 渲染引擎重构
+- `Src/Netor.Cortana.UI/Views/MainWindow.axaml.cs` — 新会话切换修复
 - `Src/Netor.Cortana.AI/AiChatService.cs` — 部分响应保存
 - `Src/Netor.Cortana.AI/Providers/ChatHistoryDataProvider.cs` — 新增 SavePartialResponseAsync
 - `Src/Netor.Cortana.Voice/TextToSpeechService.cs` — 欢迎语自定义集成

@@ -309,7 +309,7 @@ dotnet build .\Netor.Cortana.slnx
 运行当前主项目：
 
 ```powershell
-dotnet run --project .\Src\Netor.Cortana.AvaloniaUI\Netor.Cortana.AvaloniaUI.csproj
+dotnet run --project .\Src\Netor.Cortana.UI\Netor.Cortana.UI.csproj
 ```
 
 运行旧界面版本，仅用于兼容验证或历史参考：
@@ -323,11 +323,11 @@ dotnet run --project .\Src\Netor.Cortana\Netor.Cortana.csproj
 仓库当前使用多个专用发布脚本，输出目录统一位于 Realases。
 
 ```powershell
-# 发布当前主项目 AvaloniaUI
-.\avaloniaui.publish.ps1
+# 发布当前主项目 UI
+.\ui.publish.ps1
 
-# 仅从 Realases/AvaloniaUI 打包 zip 和 sha256
-.\avaloniaui.package.ps1
+# 仅从 Realases/Cortana 打包 zip 和 sha256
+.\ui.package.ps1
 
 # 仅创建 GitHub Release，消费现有 zip / sha256 / RELEASE.md
 .\github.release.ps1 -Tag v1.1.6-r2
@@ -345,12 +345,12 @@ dotnet run --project .\Src\Netor.Cortana\Netor.Cortana.csproj
 常见输出目录：
 
 - Realases/Cortana
-- Realases/AvaloniaUI
+- Realases/Cortana
 - Realases/Nupkgs
 
-推荐拆分流程：先运行 avaloniaui.publish.ps1 生成目录产物，再运行 avaloniaui.package.ps1 生成 zip 和 sha256，最后按需运行 github.release.ps1 发布到 GitHub。
+推荐拆分流程：先运行 ui.publish.ps1 生成目录产物，再运行 ui.package.ps1 生成 zip 和 sha256，最后按需运行 github.release.ps1 发布到 GitHub。
 
-完整说明见 [Docs/AvaloniaUI-编译打包发布流程.md](Docs/AvaloniaUI-编译打包发布流程.md)。
+完整说明见 [Docs/UI-编译打包发布流程.md](Docs/UI-编译打包发布流程.md)。
 
 ## 项目目录结构
 
@@ -360,11 +360,11 @@ Netor.Cortana/                          # Git 仓库根目录
     ├── Netor.Cortana.slnx              # 解决方案文件
     ├── publish.ps1                     # 旧主程序链路一键发布
     ├── cortana.publish.ps1             # 旧 WinForms 项目发布
-    ├── avaloniaui.publish.ps1          # 当前主项目 AvaloniaUI 发布
+    ├── ui.publish.ps1          # 当前主项目 UI 发布
     ├── plugin.publish.ps1              # 插件开发包 NuGet 发布
     │
     ├── Src/                            # 源代码
-    │   ├── Netor.Cortana.AvaloniaUI/   # 🏠 当前主项目 UI（Avalonia 12，Release 走 AOT）
+    │   ├── Netor.Cortana.UI/   # 🏠 当前主项目 UI（Avalonia 12，Release 走 AOT）
     │   ├── Netor.Cortana/              #    遗留 UI 项目（WinForms + WinFormedge）
     │   ├── Netor.Cortana.AI/           # 🤖 AI 编排、模型接入、Agent 能力
     │   ├── Netor.Cortana.Voice/        # 🎤 语音能力（KWS/STT/TTS）
@@ -393,10 +393,10 @@ Netor.Cortana/                          # Git 仓库根目录
 
 ## 📍 项目定位
 
-- **Netor.Cortana.AvaloniaUI** — 当前主项目，默认的开发、调试、发布和验收入口
+- **Netor.Cortana.UI** — 当前主项目，默认的开发、调试、发布和验收入口
 - **Netor.Cortana** — 旧 WinForms 宿主，保留在仓库中用于历史参考，不再维护
 - 插件体系以 **Native + Process + MCP** 为主；旧 Dotnet 通道已退场
-- 如果文档与实际不一致，以 AvaloniaUI 为准
+- 如果文档与实际不一致，以 Netor.Cortana.UI 为准
 
 ## 插件系统
 

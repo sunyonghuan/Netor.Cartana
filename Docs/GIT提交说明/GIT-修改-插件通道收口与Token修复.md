@@ -88,7 +88,7 @@
 
 ### 4. 工作区边界与工具说明收紧
 
-- `Src/Netor.Cortana.AvaloniaUI/Providers/WindowToolProvider.cs`
+- `Src/Netor.Cortana.UI/Providers/WindowToolProvider.cs`
 - `Src/Netor.Cortana.Plugin/BuiltIn/FileBrowser/FileBrowserProvider.cs`
 - `Src/Netor.Cortana.Plugin/BuiltIn/FileBrowser/FileOperationProvider.cs`
 
@@ -156,7 +156,7 @@ git add Samples/NativeTestPlugin/NativeTestPlugin.csproj
 git add Samples/ReminderPlugin/ReminderPlugin.csproj
 git add Samples/ReminderPlugin/.github/skills/plugin-development
 git add Src/Netor.Cortana.AI
-git add Src/Netor.Cortana.AvaloniaUI/Providers/WindowToolProvider.cs
+git add Src/Netor.Cortana.UI/Providers/WindowToolProvider.cs
 git add Src/Netor.Cortana.Plugin
 git add Src/Plugins
 

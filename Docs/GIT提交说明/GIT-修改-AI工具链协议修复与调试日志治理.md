@@ -45,8 +45,8 @@
 - `Src/Netor.Cortana.AI/Providers/TokenTrackingChatClient.cs`
 - `Src/Netor.Cortana.AI/Drivers/UserAgentOverrideHandler.cs`
 - `Src/Netor.Cortana.AI/AIAgentFactory.cs`
-- `Src/Netor.Cortana.AvaloniaUI/App.axaml.cs`
-- `Src/Netor.Cortana.AvaloniaUI/Views/Settings/SystemSettingsPage.axaml.cs`
+- `Src/Netor.Cortana.UI/App.axaml.cs`
+- `Src/Netor.Cortana.UI/Views/Settings/SystemSettingsPage.axaml.cs`
 - `Src/Netor.Cortana.Entitys/Services/SystemSettingsService.cs`
 
 **修改内容**:
@@ -70,7 +70,7 @@
 
 ### 3. 聊天历史显示与工具内部消息过滤
 
-- `Src/Netor.Cortana.AvaloniaUI/Views/Main/MainWindow.Sessions.cs`
+- `Src/Netor.Cortana.UI/Views/Main/MainWindow.Sessions.cs`
 - `Src/Netor.Cortana.Entitys/Services/ChatMessageService.cs`
 
 **修改内容**:
@@ -85,9 +85,9 @@
 
 ### 4. 日志目录、应用名称和 UI 调整
 
-- `Src/Netor.Cortana.AvaloniaUI/App.axaml.cs`
-- `Src/Netor.Cortana.AvaloniaUI/Views/Proxy/ProxyWindow.axaml`
-- `Src/Netor.Cortana.AvaloniaUI/Netor.Cortana.AvaloniaUI.csproj`
+- `Src/Netor.Cortana.UI/App.axaml.cs`
+- `Src/Netor.Cortana.UI/Views/Proxy/ProxyWindow.axaml`
+- `Src/Netor.Cortana.UI/Netor.Cortana.UI.csproj`
 
 **修改内容**:
 
@@ -189,7 +189,7 @@
 
 ```bash
 git add Src/Netor.Cortana.AI
-git add Src/Netor.Cortana.AvaloniaUI
+git add Src/Netor.Cortana.UI
 git add Src/Netor.Cortana.Entitys
 git add Plugins/Src/Cortana.Plugins.Bt
 git add Plugins/Src/Cortana.Plugins.GoogleSearch

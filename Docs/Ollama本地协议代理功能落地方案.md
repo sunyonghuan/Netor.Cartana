@@ -1,11 +1,11 @@
-﻿# Ollama 本地协议代理功能落地方案
+# Ollama 本地协议代理功能落地方案
 
 ## 1. 背景与目标
 
 当前主项目为：
 
 ```text
-Src\Netor.Cortana.AvaloniaUI
+Src\Netor.Cortana.UI
 ```
 
 目标是在不破坏现有架构、兼容 Native AOT 的前提下，将 Cortana 内部 AI 代理能力以 Ollama 本地协议形式暴露给其他软件使用。
@@ -58,7 +58,7 @@ Newtonsoft.Json
 ### 3.1 主项目
 
 ```text
-Src\Netor.Cortana.AvaloniaUI\Netor.Cortana.AvaloniaUI.csproj
+Src\Netor.Cortana.UI\Netor.Cortana.UI.csproj
 ```
 
 主项目特点：
@@ -140,7 +140,7 @@ Netor.Cortana.AI
 Netor.Cortana.Networks
   └─ HttpListener 服务、Ollama 协议路由、JSON 请求响应、NDJSON 流式输出
 
-Netor.Cortana.AvaloniaUI
+Netor.Cortana.UI
   └─ ProxyWindow 设置界面、状态显示、端口和厂商配置
 ```
 
@@ -149,9 +149,9 @@ Netor.Cortana.AvaloniaUI
 推荐依赖方向：
 
 ```text
-AvaloniaUI -> AI
-AvaloniaUI -> Networks
-AvaloniaUI -> Entitys
+UI -> AI
+UI -> Networks
+UI -> Entitys
 AI         -> Entitys
 Networks   -> Entitys
 ```
@@ -266,7 +266,7 @@ Src\Netor.Cortana.AI\Proxys\OllamaProxyService.cs
 其中 `OllamaProxyService.cs` 当前 namespace 为：
 
 ```csharp
-namespace Netor.Cortana.AvaloniaUI.Proxys;
+namespace Netor.Cortana.UI.Proxys;
 ```
 
 这个命名空间不合适，建议后续删除或重构迁移。
@@ -295,16 +295,16 @@ Src\Netor.Cortana.Networks\Proxy\OllamaHttpResponseWriter.cs
 
 ---
 
-### 5.4 AvaloniaUI 项目
+### 5.4 UI 项目
 
 项目里现有 UI 文件使用 `.axaml`，不是 `.xaml`。
 
 建议新增：
 
 ```text
-Src\Netor.Cortana.AvaloniaUI\Views\Proxy\ProxyWindow.axaml
-Src\Netor.Cortana.AvaloniaUI\Views\Proxy\ProxyWindow.axaml.cs
-Src\Netor.Cortana.AvaloniaUI\Views\Proxy\ProxyViewModel.cs
+Src\Netor.Cortana.UI\Views\Proxy\ProxyWindow.axaml
+Src\Netor.Cortana.UI\Views\Proxy\ProxyWindow.axaml.cs
+Src\Netor.Cortana.UI\Views\Proxy\ProxyViewModel.cs
 ```
 
 职责：
@@ -721,9 +721,9 @@ Proxy.Ollama.MaxConcurrentRequests = 2
 ### 10.1 文件
 
 ```text
-Src\Netor.Cortana.AvaloniaUI\Views\Proxy\ProxyWindow.axaml
-Src\Netor.Cortana.AvaloniaUI\Views\Proxy\ProxyWindow.axaml.cs
-Src\Netor.Cortana.AvaloniaUI\Views\Proxy\ProxyViewModel.cs
+Src\Netor.Cortana.UI\Views\Proxy\ProxyWindow.axaml
+Src\Netor.Cortana.UI\Views\Proxy\ProxyWindow.axaml.cs
+Src\Netor.Cortana.UI\Views\Proxy\ProxyViewModel.cs
 ```
 
 ### 10.2 界面元素
@@ -1189,7 +1189,7 @@ Model: cortana/default:latest
 1. HTTP 服务放在 `Netor.Cortana.Networks`。
 2. Proxy Agent 调用实现放在 `Netor.Cortana.AI`，并与主聊天会话隔离。
 3. 抽象接口放在 `Netor.Cortana.Entitys.Proxy`，接口语义必须明确为独立代理通道。
-4. 设置界面放在 `AvaloniaUI.Views.Proxy`。
+4. 设置界面放在 `UI.Views.Proxy`。
 5. 使用 `HttpListener`，不引入 ASP.NET Core。
 6. 使用 `System.Text.Json Source Generator`，确保 Native AOT 兼容。
 7. 默认监听 `localhost:11434`，不要默认开放局域网。

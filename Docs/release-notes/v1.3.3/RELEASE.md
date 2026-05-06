@@ -170,5 +170,5 @@ AI HTTP Handler 支持在 trace 开启时记录请求和响应原文。
 - HTTP trace：`Src/Netor.Cortana.AI/Drivers/UserAgentOverrideHandler.cs`
 - 历史重排：`Src/Netor.Cortana.AI/Providers/ChatHistoryDataProvider.cs`
 - 内容持久化：`Src/Netor.Cortana.AI/Extensions/ChatMessageExtensions.cs`
-- 历史显示：`Src/Netor.Cortana.AvaloniaUI/Views/Main/MainWindow.Sessions.cs`
+- 历史显示：`Src/Netor.Cortana.UI/Views/Main/MainWindow.Sessions.cs`
 - 设置项：`Src/Netor.Cortana.Entitys/Services/SystemSettingsService.cs`

@@ -1,12 +1,12 @@
 # 核心类文件说明
 
-> 状态：按当前仓库实现整理。默认主线以 Netor.Cortana.AvaloniaUI、Native 插件通道和 MCP 通道为准。
+> 状态：按当前仓库实现整理。默认主线以 Netor.Cortana.UI、Native 插件通道和 MCP 通道为准。
 
 ## 项目一览
 
 | 项目 | 目标框架 | 当前定位 |
 |------|---------|----------|
-| Netor.Cortana.AvaloniaUI | net10.0 | 当前主项目 UI，默认开发、调试和发布入口 |
+| Netor.Cortana.UI | net10.0 | 当前主项目 UI，默认开发、调试和发布入口 |
 | Netor.Cortana | net10.0-windows | 遗留 WinForms UI，保留兼容和历史参考 |
 | Netor.Cortana.AI | net10.0 | AI 编排、模型接入、Agent 组装 |
 | Netor.Cortana.Voice | net10.0 | KWS、STT、TTS 等语音能力 |
@@ -19,7 +19,7 @@
 
 ## 当前主入口
 
-### Netor.Cortana.AvaloniaUI
+### Netor.Cortana.UI
 
 | 文件 | 类型 | 说明 |
 |------|------|------|

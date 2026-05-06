@@ -35,7 +35,7 @@
 
 ### 2. 版本号升级与发布说明
 
-- `Src/Netor.Cortana.AvaloniaUI/Netor.Cortana.AvaloniaUI.csproj`
+- `Src/Netor.Cortana.UI/Netor.Cortana.UI.csproj`
 - `Docs/release-notes/v1.2.7/RELEASE.md`
 
 **修改内容**:
@@ -72,7 +72,7 @@
 ## Git 命令
 
 ```bash
-git add Src/Netor.Cortana.AvaloniaUI/Netor.Cortana.AvaloniaUI.csproj
+git add Src/Netor.Cortana.UI/Netor.Cortana.UI.csproj
 git add Src/Netor.Cortana.Plugin/BuiltIn/FileBrowser/FileOperator.cs
 git add Src/Netor.Cortana.Plugin/BuiltIn/FileBrowser/FileOperationProvider.cs
 git add Docs/GIT提交说明/GIT-修改-文件工具统一结构化与1.2.7发布.md

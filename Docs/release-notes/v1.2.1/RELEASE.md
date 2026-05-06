@@ -62,8 +62,8 @@
 - `Src/Netor.Cortana.Entitys/Entities/ChatSessionEntity.cs` — TotalTokenCount 注释修正
 
 ### UI 层
-- `Src/Netor.Cortana.AvaloniaUI/Views/Settings/SystemSettingsPage.axaml.cs` — 输入控件右对齐
-- `Src/Netor.Cortana.AvaloniaUI/Views/Settings/ToolManagementPage.axaml.cs` — 移除工具名称列表显示
+- `Src/Netor.Cortana.UI/Views/Settings/SystemSettingsPage.axaml.cs` — 输入控件右对齐
+- `Src/Netor.Cortana.UI/Views/Settings/ToolManagementPage.axaml.cs` — 移除工具名称列表显示
 
 ---
 

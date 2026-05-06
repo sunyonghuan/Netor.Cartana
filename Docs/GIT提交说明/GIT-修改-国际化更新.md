@@ -30,7 +30,7 @@
 
 ---
 
-### 2. `Src/Netor.Cortana.AvaloniaUI/Providers/AiConfigToolProvider.cs`
+### 2. `Src/Netor.Cortana.UI/Providers/AiConfigToolProvider.cs`
 
 **修改内容**:
 - 注释翻译：查询 → Query, 切换默认 → Set Default, 新增 → Add New, 智能体提示词 → Agent Instructions
@@ -47,7 +47,7 @@
 
 ---
 
-### 3. `Src/Netor.Cortana.AvaloniaUI/Providers/PluginManagementProvider.cs`
+### 3. `Src/Netor.Cortana.UI/Providers/PluginManagementProvider.cs`
 
 **修改内容**:
 - 使用指令 (`using`) 排序优化
@@ -61,7 +61,7 @@
 
 ---
 
-### 4. `Src/Netor.Cortana.AvaloniaUI/Providers/WindowToolProvider.cs`
+### 4. `Src/Netor.Cortana.UI/Providers/WindowToolProvider.cs`
 
 **修改内容**:
 - 窗口管理工具描述翻译：
@@ -123,9 +123,9 @@ git diff
 
 # 添加文件
 git add Src/Netor.Cortana.AI/Providers/FileMemoryProvider.cs
-git add Src/Netor.Cortana.AvaloniaUI/Providers/AiConfigToolProvider.cs
-git add Src/Netor.Cortana.AvaloniaUI/Providers/PluginManagementProvider.cs
-git add Src/Netor.Cortana.AvaloniaUI/Providers/WindowToolProvider.cs
+git add Src/Netor.Cortana.UI/Providers/AiConfigToolProvider.cs
+git add Src/Netor.Cortana.UI/Providers/PluginManagementProvider.cs
+git add Src/Netor.Cortana.UI/Providers/WindowToolProvider.cs
 
 # 提交
 git commit -m "feat(i18n): translate AI tool descriptions to English

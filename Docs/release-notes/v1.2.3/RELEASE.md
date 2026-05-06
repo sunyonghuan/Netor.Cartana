@@ -40,7 +40,7 @@
 - `Src/Netor.Cortana.Plugin/BuiltIn/PowerShell/ExecutionSession.cs` — 会话后台模式、优雅退出与强制清理
 - `Src/Netor.Cortana.Plugin/BuiltIn/PowerShell/SessionRegistry.cs` — 后台参数透传、空闲会话清理增强
 - `Src/Netor.Cortana.Plugin/BuiltIn/PowerShell/PowerShellProvider.cs` — AI 工具说明英文统一、后台参数暴露
-- `Src/Netor.Cortana.AvaloniaUI/Netor.Cortana.AvaloniaUI.csproj` — 版本号更新到 1.2.3
+- `Src/Netor.Cortana.UI/Netor.Cortana.UI.csproj` — 版本号更新到 1.2.3
 
 ---
 

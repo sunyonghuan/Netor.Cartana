@@ -25,10 +25,10 @@
 
 | 文件路径 | 大小 |
 |---------|------|
-| `Src/Netor.Cortana.AvaloniaUI/bin/Release/net10.0-windows/win-x64/native/Cortana.Avalonia.pdb` | 157.11 MB |
-| `Src/Netor.Cortana.AvaloniaUI/obj/Release/net10.0/win-x64/native/Cortana.obj` | 146.78 MB |
-| `Src/Netor.Cortana.AvaloniaUI/obj/Release/net10.0-windows/win-x64/native/Cortana.obj` | 140.14 MB |
-| `Src/Netor.Cortana.AvaloniaUI/obj/Release/net10.0-windows/win-x64/native/Cortana.Avalonia.obj` | 139.65 MB |
+| `Src/Netor.Cortana.UI/bin/Release/net10.0-windows/win-x64/native/Cortana.Avalonia.pdb` | 157.11 MB |
+| `Src/Netor.Cortana.UI/obj/Release/net10.0/win-x64/native/Cortana.obj` | 146.78 MB |
+| `Src/Netor.Cortana.UI/obj/Release/net10.0-windows/win-x64/native/Cortana.obj` | 140.14 MB |
+| `Src/Netor.Cortana.UI/obj/Release/net10.0-windows/win-x64/native/Cortana.Avalonia.obj` | 139.65 MB |
 
 ---
 

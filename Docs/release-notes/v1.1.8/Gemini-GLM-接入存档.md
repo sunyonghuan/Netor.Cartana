@@ -2,7 +2,7 @@
 
 ## 概要
 
-- 当前主项目：`Src/Netor.Cortana.AvaloniaUI`
+- 当前主项目：`Src/Netor.Cortana.UI`
 - 当前 AI 接入层：`Src/Netor.Cortana.AI`
 - 存档目的：记录 Gemini 与 GLM 第一批接入的代码状态、验证边界与后续联调方式。
 - 当前结论：代码已接入并构建通过，但因缺少有效 API Key，尚未完成真实模型拉取与对话联调。
@@ -57,7 +57,7 @@
 已通过以下构建验证：
 
 ```powershell
-dotnet build Src/Netor.Cortana.AvaloniaUI/Netor.Cortana.AvaloniaUI.csproj -v minimal
+dotnet build Src/Netor.Cortana.UI/Netor.Cortana.UI.csproj -v minimal
 ```
 
 结论：构建成功。
@@ -157,7 +157,7 @@ dotnet build Src/Netor.Cortana.AvaloniaUI/Netor.Cortana.AvaloniaUI.csproj -v min
 本次工作范围仅针对：
 
 - `Src/Netor.Cortana.AI`
-- `Src/Netor.Cortana.AvaloniaUI`
+- `Src/Netor.Cortana.UI`
 
 旧项目 `Src/Netor.Cortana` 不作为本轮主要交付目标。
 

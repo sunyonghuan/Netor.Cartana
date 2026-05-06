@@ -7,7 +7,7 @@
   </Folder>
   <Folder Name="/Src/">
     <Project Path="Src/Netor.Cortana.AI/Netor.Cortana.AI.csproj" Id="ed55708c-48f3-48a0-912b-5a62e5c0f4fb" />
-    <Project Path="Src/Netor.Cortana.AvaloniaUI/Netor.Cortana.AvaloniaUI.csproj" />
+    <Project Path="Src/Netor.Cortana.UI/Netor.Cortana.UI.csproj" />
     <Project Path="Src/Netor.Cortana.Entitys/Netor.Cortana.Entitys.csproj" />
     <Project Path="Src/Netor.Cortana.Networks/Netor.Cortana.Networks.csproj" Id="00688320-d548-47f6-aea5-f9eebdc2762c" />
     <Project Path="Src/Netor.Cortana.Voice/Netor.Cortana.Voice.csproj" Id="d9878a80-5e4e-467c-9eda-06bfff897b58" />

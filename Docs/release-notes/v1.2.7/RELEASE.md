@@ -48,7 +48,7 @@
 
 ### 修改
 
-- `Src/Netor.Cortana.AvaloniaUI/Netor.Cortana.AvaloniaUI.csproj` — 版本号升级到 1.2.7
+- `Src/Netor.Cortana.UI/Netor.Cortana.UI.csproj` — 版本号升级到 1.2.7
 - `Src/Netor.Cortana.Plugin/BuiltIn/FileBrowser/FileOperationProvider.cs` — 文件工具统一结构化返回
 - `Src/Netor.Cortana.Plugin/BuiltIn/FileBrowser/FileOperator.cs` — 大文件写入与批量写入改为结构化结果
 

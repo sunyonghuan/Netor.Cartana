@@ -1,4 +1,4 @@
-﻿# Cortana v1.3.1 Release Notes
+# Cortana v1.3.1 Release Notes
 
 发布日期：2026-04-30
 
@@ -232,7 +232,7 @@ dotnet build Src\Netor.Cortana.Networks\Netor.Cortana.Networks.csproj `
 结果：0 error，0 IL2xxx / IL3xxx warning
 
 ```powershell
-dotnet build Src\Netor.Cortana.AvaloniaUI\Netor.Cortana.AvaloniaUI.csproj --no-restore
+dotnet build Src\Netor.Cortana.UI\Netor.Cortana.UI.csproj --no-restore
 ```
 
 结果：0 error

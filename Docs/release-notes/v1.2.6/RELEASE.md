@@ -71,8 +71,8 @@
 - `Src/Netor.Cortana.Entitys/Services/ChatMessageService.cs` — 读写 `ContentsJson` 列，老库缺列兼容
 - `Src/Netor.Cortana.Entitys/CortanaDbContext.cs` — `CREATE TABLE` 与 `EnsureMigrations` 同步新增 `ContentsJson` 列
 - `Src/Netor.Cortana.Entitys/Services/SystemSettingsService.cs` — 首次播种 `Memory.ModelId`
-- `Src/Netor.Cortana.AvaloniaUI/App.axaml.cs` — 启动迁移时 `EnsureSetting("Memory.ModelId", …)`
-- `Src/Netor.Cortana.AvaloniaUI/Netor.Cortana.AvaloniaUI.csproj` — 版本号升级至 1.2.6
+- `Src/Netor.Cortana.UI/App.axaml.cs` — 启动迁移时 `EnsureSetting("Memory.ModelId", …)`
+- `Src/Netor.Cortana.UI/Netor.Cortana.UI.csproj` — 版本号升级至 1.2.6
 
 ---
 

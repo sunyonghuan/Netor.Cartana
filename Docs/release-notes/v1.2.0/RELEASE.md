@@ -118,10 +118,10 @@ ALTER TABLE Agents ADD COLUMN DefaultModelId TEXT NOT NULL DEFAULT ''
 - `Src/Netor.Cortana.AI/AiChatService.cs` — mentions 调度逻辑
 
 ### UI 层
-- `Src/Netor.Cortana.AvaloniaUI/Views/MainWindow.axaml` — AgentPopup + 输入提示更新
-- `Src/Netor.Cortana.AvaloniaUI/Views/MainWindow.axaml.cs` — @ 检测/键盘导航/mentions 收集
-- `Src/Netor.Cortana.AvaloniaUI/Views/Settings/AgentSettingsPage.axaml` — 厂商/模型 ComboBox
-- `Src/Netor.Cortana.AvaloniaUI/Views/Settings/AgentSettingsPage.axaml.cs` — 联动逻辑
+- `Src/Netor.Cortana.UI/Views/MainWindow.axaml` — AgentPopup + 输入提示更新
+- `Src/Netor.Cortana.UI/Views/MainWindow.axaml.cs` — @ 检测/键盘导航/mentions 收集
+- `Src/Netor.Cortana.UI/Views/Settings/AgentSettingsPage.axaml` — 厂商/模型 ComboBox
+- `Src/Netor.Cortana.UI/Views/Settings/AgentSettingsPage.axaml.cs` — 联动逻辑
 
 ---
 
