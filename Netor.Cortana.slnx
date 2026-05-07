@@ -12,6 +12,14 @@
     <Project Path="Src/Netor.Cortana.Networks/Netor.Cortana.Networks.csproj" Id="00688320-d548-47f6-aea5-f9eebdc2762c" />
     <Project Path="Src/Netor.Cortana.Voice/Netor.Cortana.Voice.csproj" Id="d9878a80-5e4e-467c-9eda-06bfff897b58" />
   </Folder>
+  <Folder Name="/Src/Platform/">
+    <Project Path="Src/Netor.Cortana.Platform/Netor.Cortana.Platform.Api/Netor.Cortana.Platform.Api.csproj" />
+    <Project Path="Src/Netor.Cortana.Platform/Netor.Cortana.Platform.Web/Netor.Cortana.Platform.Web.csproj" />
+    <Project Path="Src/Netor.Cortana.Platform/Netor.Cortana.Platform.Admin/Netor.Cortana.Platform.Admin.csproj" />
+    <Project Path="Src/Netor.Cortana.Platform/Netor.Cortana.Platform.Services/Netor.Cortana.Platform.Services.csproj" />
+    <Project Path="Src/Netor.Cortana.Platform/Netor.Cortana.Platform.Entitys/Netor.Cortana.Platform.Entitys.csproj" />
+    <Project Path="Src/Netor.Cortana.Platform/Netor.Cortana.Platform.Core/Netor.Cortana.Platform.Core.csproj" />
+  </Folder>
   <Folder Name="/Src/Plugins/">
     <Project Path="Src/Netor.Cortana.Plugin/Netor.Cortana.Plugin.csproj" Id="ff1f0d68-6e21-4305-bf12-392e7000d906" />
     <Project Path="Src/Plugins/Netor.Cortana.NativeHost/Netor.Cortana.NativeHost.csproj" />

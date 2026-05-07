@@ -1,0 +1,71 @@
+@model Netor.Cortana.Platform.Admin.Models.Subscriptions.DownloadRecordIndexViewModel
+@{
+    ViewData["Title"] = "下载记录";
+}
+
+<section class="admin-card">
+    <div class="admin-card-header">
+        <div>
+            <h2 class="admin-card-title">下载记录</h2>
+            <div class="text-secondary">用户下载资源包的访问明细</div>
+        </div>
+        <a class="layui-btn layui-btn-primary layui-btn-sm" asp-action="Index">返回订阅</a>
+    </div>
+    <div class="admin-card-body border-bottom">
+        <form method="get" class="admin-filter-form admin-filter-form-compact layui-form">
+            <div>
+                <label class="form-label" for="keyword">关键词</label>
+                <input id="keyword" class="form-control layui-input" name="keyword" value="@Model.Keyword" placeholder="用户 / 资源 / 版本 / IP" />
+            </div>
+            <div class="admin-filter-actions">
+                <button class="layui-btn layui-btn-normal" type="submit">筛选</button>
+                <a class="layui-btn layui-btn-primary" asp-action="Downloads">重置</a>
+            </div>
+        </form>
+    </div>
+    <div class="admin-card-body p-0">
+        <div class="table-responsive">
+            <table class="table admin-table layui-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>用户</th>
+                        <th>资源</th>
+                        <th>版本</th>
+                        <th>IP</th>
+                        <th>客户端</th>
+                        <th>记录时间</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.Items.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="6" class="text-center text-secondary py-5">暂无下载记录。</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var item in Model.Items)
+                        {
+                            <tr>
+                                <td>@item.AccountName</td>
+                                <td><strong>@item.AssetName</strong></td>
+                                <td>@item.VersionName</td>
+                                <td>@(item.IpAddress ?? "-")</td>
+                                <td><span class="text-secondary">@(string.IsNullOrWhiteSpace(item.UserAgent) ? "-" : item.UserAgent)</span></td>
+                                <td>@item.TimeStamp</td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="admin-card-body admin-pager">
+        <div class="text-secondary">共 @Model.TotalCount 条，每页 @Model.PageSize 条</div>
+        <div class="btn-group">
+            <a class="layui-btn layui-btn-primary @(Model.HasPreviousPage ? string.Empty : "layui-btn-disabled")" asp-action="Downloads" asp-route-keyword="@Model.Keyword" asp-route-page="@(Model.Page - 1)">上一页</a>
+            <a class="layui-btn layui-btn-primary @(Model.HasNextPage ? string.Empty : "layui-btn-disabled")" asp-action="Downloads" asp-route-keyword="@Model.Keyword" asp-route-page="@(Model.Page + 1)">下一页</a>
+        </div>
+    </div>
+</section>

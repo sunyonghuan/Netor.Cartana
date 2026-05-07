@@ -1,0 +1,70 @@
+@model Netor.Cortana.Platform.Admin.Models.Accounts.AccountEditViewModel
+@{
+    ViewData["Title"] = "编辑用户";
+}
+
+<section class="admin-card admin-form-card">
+    <div class="admin-card-header">
+        <div>
+            <h2 class="admin-card-title">编辑用户资料</h2>
+            <div class="text-secondary">@Model.LoginUserName</div>
+        </div>
+        <a class="layui-btn layui-btn-primary layui-btn-sm" asp-action="Details" asp-route-id="@Model.Id">返回详情</a>
+    </div>
+    <div class="admin-card-body">
+        <form method="post" class="admin-edit-form layui-form">
+            @Html.AntiForgeryToken()
+            <input asp-for="Id" type="hidden" />
+            <input asp-for="LoginUserName" type="hidden" />
+            <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label asp-for="LoginUserName" class="form-label"></label>
+                    <input asp-for="LoginUserName" class="form-control layui-input" disabled />
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="NickName" class="form-label"></label>
+                    <input asp-for="NickName" class="form-control layui-input" />
+                    <span asp-validation-for="NickName" class="text-danger"></span>
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="RealName" class="form-label"></label>
+                    <input asp-for="RealName" class="form-control layui-input" />
+                    <span asp-validation-for="RealName" class="text-danger"></span>
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="Phone" class="form-label"></label>
+                    <input asp-for="Phone" class="form-control layui-input" />
+                    <span asp-validation-for="Phone" class="text-danger"></span>
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="Email" class="form-label"></label>
+                    <input asp-for="Email" class="form-control layui-input" />
+                    <span asp-validation-for="Email" class="text-danger"></span>
+                </div>
+                <div class="col-md-6 d-flex align-items-end gap-4">
+                    <label class="admin-switch mb-2">
+                        <input asp-for="PhoneConfirmed" />
+                        <span></span>
+                        <strong>手机已验证</strong>
+                    </label>
+                    <label class="admin-switch mb-2">
+                        <input asp-for="EmailConfirmed" />
+                        <span></span>
+                        <strong>邮箱已验证</strong>
+                    </label>
+                </div>
+            </div>
+
+            <div class="admin-form-actions">
+                <button class="layui-btn layui-btn-normal" type="submit">保存资料</button>
+                <a class="layui-btn layui-btn-primary" asp-action="Details" asp-route-id="@Model.Id">取消</a>
+            </div>
+        </form>
+    </div>
+</section>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

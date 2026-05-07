@@ -1,0 +1,83 @@
+@model Netor.Cortana.Platform.Admin.Models.Settings.SettingsEditViewModel
+@using Netor.Database.Abstractions
+@using Netor.Database.Abstractions.Enums
+@{
+    ViewData["Title"] = Model.IsCreate ? "新增系统设置" : "编辑系统设置";
+}
+
+<section class="admin-card admin-form-card">
+    <div class="admin-card-header">
+        <div>
+            <h2 class="admin-card-title">@(Model.IsCreate ? "新增系统设置" : "编辑系统设置")</h2>
+            <small class="text-secondary">配置项会按分组展示在系统设置页，保护项只能编辑元数据，不能在列表中直接改值。</small>
+        </div>
+        <a class="layui-btn layui-btn-primary layui-btn-sm" asp-action="Index" asp-route-group="@Model.Group">返回设置</a>
+    </div>
+    <div class="admin-card-body">
+        <form asp-action="@(Model.IsCreate ? "Create" : "Edit")" method="post" class="admin-edit-form layui-form">
+            @Html.AntiForgeryToken()
+            <input asp-for="Id" type="hidden" />
+            <input asp-for="IsCreate" type="hidden" />
+            <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label asp-for="Key" class="form-label"></label>
+                    <input asp-for="Key" class="form-control layui-input" placeholder="例如 platform.name" />
+                    <span asp-validation-for="Key" class="text-danger"></span>
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="Name" class="form-label"></label>
+                    <input asp-for="Name" class="form-control layui-input" placeholder="例如 平台名称" />
+                    <span asp-validation-for="Name" class="text-danger"></span>
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="Group" class="form-label"></label>
+                    <input asp-for="Group" class="form-control layui-input" list="settingGroups" placeholder="例如 平台设置" />
+                    <datalist id="settingGroups">
+                        <option value="平台设置"></option>
+                        <option value="安全设置"></option>
+                        <option value="资源设置"></option>
+                        <option value="下载设置"></option>
+                        <option value="订阅设置"></option>
+                        <option value="财务设置"></option>
+                        <option value="通知设置"></option>
+                        <option value="运维设置"></option>
+                    </datalist>
+                    <span asp-validation-for="Group" class="text-danger"></span>
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="Type" class="form-label"></label>
+                    <select asp-for="Type" class="form-select layui-select" asp-items="Html.GetEnumSelectList<NetorDataType>()"></select>
+                    <span asp-validation-for="Type" class="text-danger"></span>
+                </div>
+                <div class="col-12">
+                    <label asp-for="Display" class="form-label"></label>
+                    <input asp-for="Display" class="form-control layui-input" placeholder="说明这个配置影响哪些业务" />
+                    <span asp-validation-for="Display" class="text-danger"></span>
+                </div>
+                <div class="col-12">
+                    <label asp-for="Value" class="form-label"></label>
+                    <textarea asp-for="Value" class="form-control layui-textarea" rows="4" placeholder="设置值"></textarea>
+                    <span asp-validation-for="Value" class="text-danger"></span>
+                </div>
+                <div class="col-12">
+                    <label class="admin-switch">
+                        <input asp-for="IsProtection" />
+                        <span></span>
+                        保护设置，禁止在列表中直接修改或删除
+                    </label>
+                </div>
+            </div>
+
+            <div class="admin-form-actions">
+                <button class="layui-btn layui-btn-normal" type="submit">保存设置</button>
+                <a class="layui-btn layui-btn-primary" asp-action="Index" asp-route-group="@Model.Group">取消</a>
+            </div>
+        </form>
+    </div>
+</section>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

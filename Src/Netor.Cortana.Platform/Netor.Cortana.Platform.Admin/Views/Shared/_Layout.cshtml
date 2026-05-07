@@ -1,0 +1,66 @@
+﻿@{
+    var title = ViewData["Title"] as string ?? "控制台";
+}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@title - Cortana 运营后台</title>
+    <link rel="stylesheet" href="~/lib/layui/css/layui.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body class="layui-layout-body admin-page">
+    <div class="layui-layout layui-layout-admin admin-layout">
+        <div class="layui-header admin-header">
+            <div class="layui-logo admin-logo">
+                <a asp-controller="Home" asp-action="Index">Cortana 运营后台</a>
+            </div>
+            <ul class="layui-nav layui-layout-left admin-header-nav">
+                <li class="layui-nav-item">
+                    <a href="javascript:;" data-admin-toggle="sidebar" aria-label="展开或收起菜单">
+                        <i class="layui-icon layui-icon-shrink-right"></i>
+                    </a>
+                </li>
+                <li class="layui-nav-item admin-breadcrumb-item">
+                    @await Html.PartialAsync("_ContentHeader", new[] { "Cortana 运营后台", title })
+                </li>
+            </ul>
+            <ul class="layui-nav layui-layout-right admin-header-nav">
+                <li class="layui-nav-item">
+                    <a href="javascript:;">
+                        <i class="layui-icon layui-icon-username"></i>
+                        @(User.Identity?.Name ?? "admin")
+                    </a>
+                </li>
+                <li class="layui-nav-item">
+                    <form asp-controller="Auth" asp-action="Logout" method="post" class="admin-logout-form">
+                        @Html.AntiForgeryToken()
+                        <button type="submit">
+                            <i class="layui-icon layui-icon-logout"></i>
+                            退出
+                        </button>
+                    </form>
+                </li>
+            </ul>
+        </div>
+
+        <div class="layui-side layui-bg-black admin-side" id="adminSidebar">
+            <div class="layui-side-scroll">
+                @await Html.PartialAsync("_NavPartial")
+            </div>
+        </div>
+
+        <div class="layui-body admin-body">
+            <main class="admin-content" role="main">
+                @RenderBody()
+            </main>
+        </div>
+    </div>
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/layui/layui.js" asp-append-version="true"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

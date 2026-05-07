@@ -1,0 +1,34 @@
+@model Netor.Cortana.Platform.Admin.Models.Accounts.AccountStatusViewModel
+@{
+    ViewData["Title"] = "更改用户状态";
+}
+
+<section class="admin-card admin-form-card">
+    <div class="admin-card-header">
+        <div>
+            <h2 class="admin-card-title">更改用户状态</h2>
+            <div class="text-secondary">@Model.LoginUserName</div>
+        </div>
+        <a class="layui-btn layui-btn-primary layui-btn-sm" asp-action="Details" asp-route-id="@Model.Id">返回详情</a>
+    </div>
+    <div class="admin-card-body">
+        <form method="post" class="admin-edit-form layui-form">
+            @Html.AntiForgeryToken()
+            <input asp-for="Id" type="hidden" />
+            <input asp-for="LoginUserName" type="hidden" />
+            <div class="mb-3">
+                <label asp-for="Status" class="form-label"></label>
+                <select asp-for="Status" class="form-select layui-select">
+                    <option value="0">正常</option>
+                    <option value="1">禁用</option>
+                    <option value="2">冻结</option>
+                </select>
+            </div>
+            <div class="layui-elem-quote layui-quote-nm">禁用或冻结后，前台业务应拒绝该用户继续登录或消费。</div>
+            <div class="admin-form-actions">
+                <button class="layui-btn layui-btn-warm" type="submit">保存状态</button>
+                <a class="layui-btn layui-btn-primary" asp-action="Details" asp-route-id="@Model.Id">取消</a>
+            </div>
+        </form>
+    </div>
+</section>

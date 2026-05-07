@@ -1,0 +1,167 @@
+@model Netor.Cortana.Platform.Admin.Models.Accounts.AccountIndexViewModel
+@{
+    ViewData["Title"] = "用户账户";
+}
+
+<section class="metric-grid mb-4">
+    <article class="admin-card metric-card">
+        <div class="metric-icon">☷</div>
+        <strong>@Model.TotalCount</strong>
+        <span>用户总数</span>
+        <p>当前筛选范围个人用户</p>
+    </article>
+    <article class="admin-card metric-card">
+        <div class="metric-icon">●</div>
+        <strong>@Model.EnabledCount</strong>
+        <span>正常账户</span>
+        <p>状态为正常的用户</p>
+    </article>
+    <article class="admin-card metric-card">
+        <div class="metric-icon">◈</div>
+        <strong>@Model.SubscriptionCount</strong>
+        <span>订阅权益</span>
+        <p>用户当前订阅记录</p>
+    </article>
+    <article class="admin-card metric-card">
+        <div class="metric-icon">￥</div>
+        <strong>@Model.WalletTotal.ToString("0.00")</strong>
+        <span>钱包余额</span>
+        <p>平台用户钱包合计</p>
+    </article>
+</section>
+
+<section class="admin-card">
+    <div class="admin-card-header">
+        <h2 class="admin-card-title">用户列表</h2>
+        <span class="text-secondary">第 @Model.Page / @Model.TotalPages 页</span>
+    </div>
+    <div class="admin-card-body border-bottom">
+        <form method="get" class="admin-filter-form admin-filter-form-compact layui-form">
+            <div>
+                <label class="form-label" for="keyword">关键词</label>
+                <input id="keyword" class="form-control layui-input" name="keyword" value="@Model.Keyword" placeholder="账号 / 手机 / 邮箱 / 昵称" />
+            </div>
+            <div>
+                <label class="form-label" for="status">账户状态</label>
+                <select id="status" class="form-select layui-select" name="status">
+                    <option value="">全部状态</option>
+                    @foreach (var option in GetStatusOptions())
+                    {
+                        <option value="@option.Value" selected="@(Model.Status == option.Value)">@option.Text</option>
+                    }
+                </select>
+            </div>
+            <div class="admin-filter-actions">
+                <button class="layui-btn layui-btn-normal" type="submit">筛选</button>
+                <a class="layui-btn layui-btn-primary" asp-action="Index">重置</a>
+            </div>
+        </form>
+    </div>
+    <form id="accountBatchForm" asp-action="BatchStatus" method="post" class="admin-batchbar">
+        @Html.AntiForgeryToken()
+        <strong>批量状态</strong>
+        <div class="admin-batchbar-fields">
+            <select class="form-select layui-select" name="status" aria-label="批量用户状态">
+                @foreach (var option in GetStatusOptions())
+                {
+                    <option value="@option.Value">批量设为 @option.Text</option>
+                }
+            </select>
+            <button class="layui-btn layui-btn-normal" type="submit">应用</button>
+        </div>
+    </form>
+    <div class="admin-card-body p-0">
+        <div class="table-responsive">
+            <table class="table admin-table layui-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="admin-check-cell"><input class="form-check-input" type="checkbox" data-check-all="accounts" aria-label="全选用户" /></th>
+                        <th>用户</th>
+                        <th>联系方式</th>
+                        <th>状态</th>
+                        <th>钱包</th>
+                        <th>订阅</th>
+                        <th>订单</th>
+                        <th>登录</th>
+                        <th class="text-end">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.Items.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="9" class="text-center text-secondary py-5">暂无用户记录。</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var item in Model.Items)
+                        {
+                            <tr>
+                                <td class="admin-check-cell"><input class="form-check-input" form="accountBatchForm" type="checkbox" name="ids" value="@item.Id" data-check-item="accounts" aria-label="选择用户 @item.LoginUserName" /></td>
+                                <td>
+                                    <strong>@item.LoginUserName</strong>
+                                    <small class="d-block text-secondary">编号 @item.No · @item.NickName</small>
+                                </td>
+                                <td>
+                                    <span>@item.Phone</span>
+                                    <small class="d-block text-secondary">@item.Email</small>
+                                </td>
+                                <td><span class="admin-badge @GetStatusBadgeClass(item.Status)">@GetStatusName(item.Status)</span></td>
+                                <td>@item.WalletBalance.ToString("0.00")</td>
+                                <td>@item.SubscriptionCount</td>
+                                <td>@item.OrderCount</td>
+                                <td>
+                                    <span>@item.LoginTimes 次</span>
+                                    <small class="d-block text-secondary">@FormatDate(item.LastLoginTime)</small>
+                                </td>
+                                <td class="text-end">
+                                    <div class="layui-btn-group admin-row-actions">
+                                        <a class="layui-btn layui-btn-primary layui-btn-sm" asp-action="Details" asp-route-id="@item.Id">详情</a>
+                                        <a class="layui-btn layui-btn-sm" asp-action="Edit" asp-route-id="@item.Id">编辑</a>
+                                        <a class="layui-btn layui-btn-normal layui-btn-sm" asp-action="Recharge" asp-route-id="@item.Id">充值</a>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="admin-card-body admin-pager">
+        <div class="text-secondary">共 @Model.TotalCount 条，每页 @Model.PageSize 条</div>
+        <div class="layui-btn-group">
+            <a class="layui-btn layui-btn-primary @(Model.HasPreviousPage ? string.Empty : "layui-btn-disabled")" asp-action="Index" asp-route-keyword="@Model.Keyword" asp-route-status="@Model.Status" asp-route-page="@(Model.Page - 1)">上一页</a>
+            <a class="layui-btn layui-btn-primary @(Model.HasNextPage ? string.Empty : "layui-btn-disabled")" asp-action="Index" asp-route-keyword="@Model.Keyword" asp-route-status="@Model.Status" asp-route-page="@(Model.Page + 1)">下一页</a>
+        </div>
+    </div>
+</section>
+
+@functions {
+    private static IEnumerable<(byte Value, string Text)> GetStatusOptions()
+    {
+        return [(0, "正常"), (1, "禁用"), (2, "冻结")];
+    }
+
+    private static string GetStatusName(byte status) => status switch
+    {
+        0 => "正常",
+        1 => "禁用",
+        2 => "冻结",
+        _ => $"状态 {status}"
+    };
+
+    private static string GetStatusBadgeClass(byte status) => status switch
+    {
+        0 => "admin-badge-success",
+        1 => "admin-badge-muted",
+        2 => "admin-badge-danger",
+        _ => "admin-badge-warning"
+    };
+
+    private static string FormatDate(DateTime value)
+    {
+        return value == default ? "-" : value.ToString("yyyy-MM-dd HH:mm");
+    }
+}

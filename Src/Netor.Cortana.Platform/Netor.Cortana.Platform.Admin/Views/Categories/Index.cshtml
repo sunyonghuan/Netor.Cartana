@@ -1,0 +1,132 @@
+@model Netor.Cortana.Platform.Admin.Models.Categories.CategoryIndexViewModel
+@{
+    ViewData["Title"] = "分类管理";
+}
+
+<section class="metric-grid admin-stat-grid">
+    <article class="admin-card metric-card admin-stat-card">
+        <div class="metric-icon">◎</div>
+        <strong>@Model.TotalCount</strong>
+        <span>分类总数</span>
+        <p>平台资源归档维度</p>
+    </article>
+    <article class="admin-card metric-card admin-stat-card">
+        <div class="metric-icon">●</div>
+        <strong>@Model.VisibleCount</strong>
+        <span>显示分类</span>
+        <p>前台市场可见分类</p>
+    </article>
+    <article class="admin-card metric-card admin-stat-card">
+        <div class="metric-icon">◌</div>
+        <strong>@Model.HiddenCount</strong>
+        <span>隐藏分类</span>
+        <p>暂不展示的分类</p>
+    </article>
+    <article class="admin-card metric-card admin-stat-card">
+        <div class="metric-icon">▣</div>
+        <strong>@Model.Items.Sum(x => x.AssetCount)</strong>
+        <span>关联资源</span>
+        <p>当前筛选范围资源数</p>
+    </article>
+</section>
+
+@if (TempData["CategoryError"] is string error)
+{
+    <div class="alert alert-warning">@error</div>
+}
+
+<section class="admin-card">
+    <div class="admin-card-header">
+        <h2 class="admin-card-title">分类列表</h2>
+        <a class="layui-btn layui-btn-normal layui-btn-sm" asp-action="Create">新增分类</a>
+    </div>
+    <div class="admin-card-body border-bottom">
+        <form method="get" class="admin-filter-form admin-filter-form-compact layui-form">
+            <div>
+                <label class="form-label" for="keyword">关键词</label>
+                <input id="keyword" class="form-control layui-input" name="keyword" value="@Model.Keyword" placeholder="名称 / 标识" />
+            </div>
+            <div>
+                <label class="form-label" for="visible">显示状态</label>
+                <select id="visible" class="form-select layui-select" name="visible">
+                    <option value="">全部</option>
+                    <option value="true" selected="@(Model.Visible == true)">显示</option>
+                    <option value="false" selected="@(Model.Visible == false)">隐藏</option>
+                </select>
+            </div>
+            <div class="admin-filter-actions">
+                <button class="layui-btn layui-btn-normal" type="submit">筛选</button>
+                <a class="layui-btn layui-btn-primary" asp-action="Index">重置</a>
+            </div>
+        </form>
+    </div>
+    <form id="categoryBatchForm" asp-action="Batch" method="post" class="admin-batchbar layui-form" onsubmit="return this.operation.value !== 'delete' || confirm('确定批量删除选中的空分类吗？存在资源的分类会自动跳过。');">
+        @Html.AntiForgeryToken()
+        <strong>批量操作</strong>
+        <div class="admin-batchbar-fields">
+            <select class="form-select layui-select" name="operation" aria-label="批量操作">
+                <option value="show">批量显示</option>
+                <option value="hide">批量隐藏</option>
+                <option value="delete">批量删除</option>
+            </select>
+            <button class="layui-btn layui-btn-normal" type="submit">应用</button>
+        </div>
+    </form>
+    <div class="admin-card-body p-0">
+        <div class="table-responsive">
+            <table class="table admin-table layui-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="admin-check-cell"><input class="form-check-input" type="checkbox" data-check-all="categories" aria-label="全选分类" /></th>
+                        <th>分类</th>
+                        <th>标识</th>
+                        <th>排序</th>
+                        <th>资源数</th>
+                        <th>状态</th>
+                        <th class="text-end">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.Items.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="7" class="text-center text-secondary py-5">暂无匹配分类，请调整筛选条件。</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var item in Model.Items)
+                        {
+                            <tr>
+                                <td class="admin-check-cell"><input class="form-check-input" form="categoryBatchForm" type="checkbox" name="ids" value="@item.Id" data-check-item="categories" aria-label="选择 @item.Name" /></td>
+                                <td>
+                                    <strong>@item.Name</strong>
+                                    <small class="d-block text-secondary">@(string.IsNullOrWhiteSpace(item.Description) ? "暂无描述" : item.Description)</small>
+                                </td>
+                                <td><code>@item.Slug</code></td>
+                                <td>@item.SortOrder</td>
+                                <td>@item.AssetCount</td>
+                                <td>
+                                    <span class="admin-badge @(item.IsVisible ? "admin-badge-success" : "admin-badge-muted")">@(item.IsVisible ? "显示" : "隐藏")</span>
+                                </td>
+                                <td class="text-end">
+                                    <div class="layui-btn-group admin-row-actions">
+                                        <a class="layui-btn layui-btn-primary layui-btn-sm" asp-action="Edit" asp-route-id="@item.Id">编辑</a>
+                                        <form asp-action="ToggleVisible" asp-route-id="@item.Id" method="post">
+                                            @Html.AntiForgeryToken()
+                                            <button class="layui-btn layui-btn-sm" type="submit">@(item.IsVisible ? "隐藏" : "显示")</button>
+                                        </form>
+                                        <form asp-action="Delete" asp-route-id="@item.Id" method="post" onsubmit="return confirm('确定删除该分类吗？');">
+                                            @Html.AntiForgeryToken()
+                                            <button class="layui-btn layui-btn-danger layui-btn-sm" type="submit" disabled="@(item.AssetCount > 0)">删除</button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>

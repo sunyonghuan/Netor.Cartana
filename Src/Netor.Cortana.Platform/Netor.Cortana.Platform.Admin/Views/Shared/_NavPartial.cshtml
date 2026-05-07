@@ -1,0 +1,50 @@
+@{
+    var controller = ViewContext.RouteData.Values["controller"]?.ToString();
+
+    string Active(string? value) => string.Equals(controller, value, StringComparison.OrdinalIgnoreCase) ? "layui-this" : string.Empty;
+}
+
+<ul class="layui-nav layui-nav-tree layui-nav-side admin-nav" lay-filter="admin-nav">
+    <li class="layui-nav-item @Active("Home")">
+        <a asp-controller="Home" asp-action="Index">
+            <i class="layui-icon layui-icon-home"></i>
+            <cite>控制台</cite>
+        </a>
+    </li>
+    <li class="layui-nav-item @Active("Assets")">
+        <a asp-controller="Assets" asp-action="Index">
+            <i class="layui-icon layui-icon-template-1"></i>
+            <cite>资源管理</cite>
+        </a>
+    </li>
+    <li class="layui-nav-item @Active("Categories")">
+        <a asp-controller="Categories" asp-action="Index">
+            <i class="layui-icon layui-icon-tabs"></i>
+            <cite>分类管理</cite>
+        </a>
+    </li>
+    <li class="layui-nav-item @Active("Subscriptions")">
+        <a asp-controller="Subscriptions" asp-action="Index">
+            <i class="layui-icon layui-icon-survey"></i>
+            <cite>订阅管理</cite>
+        </a>
+    </li>
+    <li class="layui-nav-item @Active("Orders")">
+        <a asp-controller="Orders" asp-action="Index">
+            <i class="layui-icon layui-icon-rmb"></i>
+            <cite>订单交易</cite>
+        </a>
+    </li>
+    <li class="layui-nav-item @Active("Accounts")">
+        <a asp-controller="Accounts" asp-action="Index">
+            <i class="layui-icon layui-icon-user"></i>
+            <cite>用户账户</cite>
+        </a>
+    </li>
+    <li class="layui-nav-item @Active("Settings")">
+        <a asp-controller="Settings" asp-action="Index">
+            <i class="layui-icon layui-icon-set"></i>
+            <cite>系统设置</cite>
+        </a>
+    </li>
+</ul>

@@ -1,0 +1,44 @@
+@model Netor.Cortana.Platform.Admin.Models.Accounts.AccountRechargeViewModel
+@{
+    ViewData["Title"] = "钱包充值";
+}
+
+<section class="admin-card admin-form-card">
+    <div class="admin-card-header">
+        <div>
+            <h2 class="admin-card-title">钱包充值</h2>
+            <div class="text-secondary">@Model.LoginUserName</div>
+        </div>
+        <a class="layui-btn layui-btn-primary layui-btn-sm" asp-action="Details" asp-route-id="@Model.Id">返回详情</a>
+    </div>
+    <div class="admin-card-body">
+        <div class="metric-grid mb-4">
+            <article class="admin-card metric-card">
+                <div class="metric-icon">￥</div>
+                <strong>@Model.CurrentBalance.ToString("0.00")</strong>
+                <span>当前余额</span>
+                <p>用户所有钱包余额合计</p>
+            </article>
+        </div>
+        <form method="post" class="admin-edit-form layui-form">
+            @Html.AntiForgeryToken()
+            <input asp-for="Id" type="hidden" />
+            <input asp-for="LoginUserName" type="hidden" />
+            <input asp-for="CurrentBalance" type="hidden" />
+            <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+            <div class="mb-3">
+                <label asp-for="Amount" class="form-label"></label>
+                <input asp-for="Amount" class="form-control layui-input" type="number" min="0.01" step="0.01" placeholder="例如：100.00" />
+                <span asp-validation-for="Amount" class="text-danger"></span>
+            </div>
+            <div class="admin-form-actions">
+                <button class="layui-btn layui-btn-normal" type="submit">确认充值</button>
+                <a class="layui-btn layui-btn-primary" asp-action="Details" asp-route-id="@Model.Id">取消</a>
+            </div>
+        </form>
+    </div>
+</section>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

@@ -1,0 +1,205 @@
+@model Netor.Cortana.Platform.Admin.Models.Settings.SettingsIndexViewModel
+@using Netor.Database.Abstractions
+@using Netor.Database.Abstractions.Enums
+@{
+    ViewData["Title"] = "系统设置";
+}
+
+<section class="metric-grid mb-4">
+    <article class="admin-card metric-card">
+        <div class="metric-icon">⚙</div>
+        <strong>@Model.TotalCount</strong>
+        <span>设置总数</span>
+        <p>平台全部配置项</p>
+    </article>
+    <article class="admin-card metric-card">
+        <div class="metric-icon">◉</div>
+        <strong>@Model.Groups.Count</strong>
+        <span>设置分组</span>
+        <p>按业务场景归档</p>
+    </article>
+    <article class="admin-card metric-card">
+        <div class="metric-icon">✓</div>
+        <strong>@Model.BooleanCount</strong>
+        <span>开关配置</span>
+        <p>支持快速启停能力</p>
+    </article>
+    <article class="admin-card metric-card">
+        <div class="metric-icon">◇</div>
+        <strong>@Model.EditableCount</strong>
+        <span>可编辑项</span>
+        <p>后台可直接保存</p>
+    </article>
+</section>
+
+@if (TempData["AdminToast"] is string toast)
+{
+    <div class="alert alert-success">@toast</div>
+}
+@if (TempData["SettingError"] is string error)
+{
+    <div class="alert alert-warning">@error</div>
+}
+
+<section class="settings-layout">
+    <aside class="admin-card settings-groups">
+        <div class="admin-card-header">
+            <h2 class="admin-card-title">设置分组</h2>
+        </div>
+        <div class="settings-group-list">
+            <a class="settings-group-item @(string.IsNullOrWhiteSpace(Model.Group) ? "active" : string.Empty)" asp-action="Index" asp-route-keyword="@Model.Keyword">
+                <span>全部设置</span>
+                <strong>@Model.TotalCount</strong>
+            </a>
+            @foreach (var group in Model.Groups)
+            {
+                <a class="settings-group-item @(string.Equals(Model.Group, group.Name, StringComparison.OrdinalIgnoreCase) ? "active" : string.Empty)" asp-action="Index" asp-route-keyword="@Model.Keyword" asp-route-group="@group.Name">
+                    <span>@group.Name</span>
+                    <strong>@group.Count</strong>
+                    <small>@group.BooleanCount 个开关 · @group.ProtectedCount 个保护项</small>
+                </a>
+            }
+        </div>
+    </aside>
+
+    <section class="admin-card settings-panel">
+        <div class="admin-card-header">
+            <div>
+                <h2 class="admin-card-title">配置项</h2>
+                <small class="text-secondary">参考客户端系统设置：分组展示、类型化编辑、批量保存、单项重置。</small>
+            </div>
+            <a class="layui-btn layui-btn-normal layui-btn-sm" asp-action="Create">新增设置</a>
+        </div>
+        <div class="admin-card-body border-bottom">
+            <form method="get" class="admin-filter-form admin-filter-form-compact layui-form">
+                <div>
+                    <label class="form-label" for="keyword">关键词</label>
+                    <input id="keyword" class="form-control layui-input" name="keyword" value="@Model.Keyword" placeholder="设置键 / 名称 / 说明 / 值" />
+                </div>
+                <div>
+                    <label class="form-label" for="group">分组</label>
+                    <select id="group" class="form-select layui-select" name="group">
+                        <option value="">全部分组</option>
+                        @foreach (var group in Model.Groups)
+                        {
+                            <option value="@group.Name" selected="@(Model.Group == group.Name)">@group.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="admin-filter-actions">
+                    <button class="layui-btn layui-btn-normal" type="submit">筛选</button>
+                    <a class="layui-btn layui-btn-primary" asp-action="Index">重置</a>
+                </div>
+            </form>
+        </div>
+
+        <form id="settingsBatchForm" asp-action="Save" method="post">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="Keyword" value="@Model.Keyword" />
+            <input type="hidden" name="Group" value="@Model.Group" />
+        </form>
+        <div class="settings-list">
+            @if (Model.Items.Count == 0)
+            {
+                <div class="text-center text-secondary py-5">暂无匹配配置项。</div>
+            }
+            else
+            {
+                @for (var i = 0; i < Model.Items.Count; i++)
+                {
+                    var item = Model.Items[i];
+                    <article class="settings-row">
+                        <input form="settingsBatchForm" type="hidden" name="Items[@i].Id" value="@item.Id" />
+                        <div class="settings-row-main">
+                            <div class="settings-row-title">
+                                <strong>@item.Name</strong>
+                                <span class="admin-badge @GetTypeBadgeClass(item.Type)">@GetTypeName(item.Type)</span>
+                                @if (item.IsProtection)
+                                {
+                                    <span class="admin-badge admin-badge-warning">保护</span>
+                                }
+                            </div>
+                            <code>@item.Key</code>
+                            <p>@(string.IsNullOrWhiteSpace(item.Display) ? "暂无说明" : item.Display)</p>
+                        </div>
+                        <div class="settings-editor">
+                            @if (item.IsProtection)
+                            {
+                                <input class="form-control layui-input" value="@MaskValue(item)" disabled />
+                                <input form="settingsBatchForm" type="hidden" name="Items[@i].Value" value="@item.Value" />
+                            }
+                            else if (item.Type == NetorDataType.Boolean)
+                            {
+                                <select form="settingsBatchForm" class="form-select layui-select" name="Items[@i].Value">
+                                    <option value="true" selected="@(IsTrue(item.Value))">开启</option>
+                                    <option value="false" selected="@(!IsTrue(item.Value))">关闭</option>
+                                </select>
+                            }
+                            else if (IsNumberType(item.Type))
+                            {
+                                <input form="settingsBatchForm" class="form-control layui-input" type="number" step="1" name="Items[@i].Value" value="@item.Value" />
+                            }
+                            else
+                            {
+                                <textarea form="settingsBatchForm" class="form-control layui-textarea" rows="2" name="Items[@i].Value">@item.Value</textarea>
+                            }
+                        </div>
+                        <div class="layui-btn-group admin-row-actions settings-actions">
+                            <a class="layui-btn layui-btn-primary layui-btn-sm" asp-action="Edit" asp-route-id="@item.Id">编辑</a>
+                            <form asp-action="Reset" asp-route-id="@item.Id" method="post">
+                                @Html.AntiForgeryToken()
+                                <button class="layui-btn layui-btn-sm" type="submit">重置</button>
+                            </form>
+                            <form asp-action="Delete" asp-route-id="@item.Id" method="post" onsubmit="return confirm('确定删除该设置吗？');">
+                                @Html.AntiForgeryToken()
+                                <button class="layui-btn layui-btn-danger layui-btn-sm" type="submit" disabled="@item.IsProtection">删除</button>
+                            </form>
+                        </div>
+                    </article>
+                }
+            }
+        </div>
+        <div class="admin-card-body settings-savebar">
+            <span class="text-secondary">当前显示 @Model.Items.Count 个配置项。</span>
+            <button form="settingsBatchForm" class="layui-btn layui-btn-normal" type="submit" disabled="@(Model.Items.Count == 0)">批量保存</button>
+        </div>
+    </section>
+</section>
+
+@functions {
+    private static bool IsTrue(string value)
+    {
+        return bool.TryParse(value, out var result) && result;
+    }
+
+    private static bool IsNumberType(NetorDataType type)
+    {
+        return type.ToString().Contains("Number", StringComparison.OrdinalIgnoreCase)
+            || type.ToString().Contains("Int", StringComparison.OrdinalIgnoreCase)
+            || type.ToString().Contains("Decimal", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetTypeName(NetorDataType type)
+    {
+        return type switch
+        {
+            NetorDataType.Text => "文本",
+            NetorDataType.Boolean => "开关",
+            _ => type.ToString()
+        };
+    }
+
+    private static string GetTypeBadgeClass(NetorDataType type)
+    {
+        return type == NetorDataType.Boolean ? "admin-badge-success" : "admin-badge-muted";
+    }
+
+    private static string MaskValue(Netor.Cortana.Platform.Admin.Models.Settings.SettingListItem item)
+    {
+        return item.Key.Contains("secret", StringComparison.OrdinalIgnoreCase)
+            || item.Key.Contains("token", StringComparison.OrdinalIgnoreCase)
+            || item.Key.Contains("key", StringComparison.OrdinalIgnoreCase)
+            ? "••••••"
+            : item.Value;
+    }
+}

@@ -1,0 +1,139 @@
+@model Netor.Cortana.Platform.Admin.Models.Orders.TransactionIndexViewModel
+@{
+    ViewData["Title"] = "交易流水";
+}
+
+<section class="admin-card">
+    <div class="admin-card-header">
+        <div>
+            <h2 class="admin-card-title">交易流水</h2>
+            <div class="text-secondary">支付记录、三方单号和实际入账金额</div>
+        </div>
+        <a class="layui-btn layui-btn-primary layui-btn-sm" asp-action="Index">返回订单</a>
+    </div>
+    <div class="admin-card-body border-bottom">
+        <form method="get" class="admin-filter-form admin-filter-form-compact layui-form">
+            <div>
+                <label class="form-label" for="keyword">关键词</label>
+                <input id="keyword" class="form-control layui-input" name="keyword" value="@Model.Keyword" placeholder="流水号 / 订单号 / 三方单号 / 用户" />
+            </div>
+            <div>
+                <label class="form-label" for="payStatus">支付状态</label>
+                <select id="payStatus" class="form-select layui-select" name="payStatus">
+                    <option value="">全部状态</option>
+                    @foreach (var option in GetPayStatusOptions())
+                    {
+                        <option value="@option.Value" selected="@(Model.PayStatus == option.Value)">@option.Text</option>
+                    }
+                </select>
+            </div>
+            <div class="admin-filter-actions">
+                <button class="layui-btn layui-btn-normal" type="submit">筛选</button>
+                <a class="layui-btn layui-btn-primary" asp-action="Transactions">重置</a>
+            </div>
+        </form>
+    </div>
+    <form id="transactionBatchForm" asp-action="BatchTransactions" method="post" class="admin-batchbar">
+        @Html.AntiForgeryToken()
+        <strong>批量操作</strong>
+        <div class="admin-batchbar-fields">
+            <select class="form-select layui-select" name="payStatus" aria-label="批量支付状态">
+                @foreach (var option in GetPayStatusOptions())
+                {
+                    <option value="@option.Value">批量设为 @option.Text</option>
+                }
+            </select>
+            <button class="layui-btn layui-btn-normal" type="submit">应用</button>
+        </div>
+    </form>
+    <div class="admin-card-body p-0">
+        <div class="table-responsive">
+            <table class="table admin-table layui-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="admin-check-cell"><input class="form-check-input" type="checkbox" data-check-all="transactions" aria-label="全选交易流水" /></th>
+                        <th>流水</th>
+                        <th>订单号</th>
+                        <th>三方单号</th>
+                        <th>用户</th>
+                        <th>金额</th>
+                        <th>支付</th>
+                        <th>方式</th>
+                        <th>支付时间</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.Items.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="9" class="text-center text-secondary py-5">暂无交易流水。</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var item in Model.Items)
+                        {
+                            <tr>
+                                <td class="admin-check-cell"><input class="form-check-input" form="transactionBatchForm" type="checkbox" name="ids" value="@item.Id" data-check-item="transactions" aria-label="选择流水 @item.No" /></td>
+                                <td>
+                                    <strong>@item.No</strong>
+                                    <small class="d-block text-secondary">@item.Title</small>
+                                </td>
+                                <td>@item.OrderNo</td>
+                                <td>@item.ThirdNo</td>
+                                <td>@item.AccountName</td>
+                                <td>
+                                    <strong>@item.RealMoney.ToString("0.00")</strong>
+                                    <small class="d-block text-secondary">订单 @item.Money.ToString("0.00")</small>
+                                </td>
+                                <td><span class="admin-badge @GetPayBadgeClass(item.PayStatus)">@GetPayStatusName(item.PayStatus)</span></td>
+                                <td>@GetPayMethodName(item.PayMethod)</td>
+                                <td>@(item.PayTime?.ToString("yyyy-MM-dd HH:mm") ?? "-")</td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="admin-card-body admin-pager">
+        <div class="text-secondary">共 @Model.TotalCount 条，每页 @Model.PageSize 条</div>
+        <div class="btn-group">
+            <a class="layui-btn layui-btn-primary @(Model.HasPreviousPage ? string.Empty : "layui-btn-disabled")" asp-action="Transactions" asp-route-keyword="@Model.Keyword" asp-route-payStatus="@Model.PayStatus" asp-route-page="@(Model.Page - 1)">上一页</a>
+            <a class="layui-btn layui-btn-primary @(Model.HasNextPage ? string.Empty : "layui-btn-disabled")" asp-action="Transactions" asp-route-keyword="@Model.Keyword" asp-route-payStatus="@Model.PayStatus" asp-route-page="@(Model.Page + 1)">下一页</a>
+        </div>
+    </div>
+</section>
+
+@functions {
+    private static IEnumerable<(byte Value, string Text)> GetPayStatusOptions()
+    {
+        return [(1, "待支付"), (2, "已支付"), (3, "已取消"), (4, "支付失败")];
+    }
+
+    private static string GetPayStatusName(byte status) => status switch
+    {
+        1 => "待支付",
+        2 => "已支付",
+        3 => "已取消",
+        4 => "支付失败",
+        _ => $"状态 {status}"
+    };
+
+    private static string GetPayMethodName(byte method) => method switch
+    {
+        1 => "余额",
+        2 => "微信",
+        3 => "支付宝",
+        4 => "银行卡",
+        _ => method == 0 ? "未指定" : $"方式 {method}"
+    };
+
+    private static string GetPayBadgeClass(byte status) => status switch
+    {
+        2 => "admin-badge-success",
+        3 => "admin-badge-muted",
+        4 => "admin-badge-danger",
+        _ => "admin-badge-warning"
+    };
+}

@@ -1,0 +1,60 @@
+﻿@model Netor.Cortana.Platform.Admin.Models.Dashboard.DashboardViewModel
+@{
+    ViewData["Title"] = "控制台";
+}
+
+<section class="metric-grid mb-4">
+    @foreach (var metric in Model.Metrics)
+    {
+        <article class="admin-card metric-card">
+            <div class="metric-icon" style="background:@metric.Color">@metric.Icon</div>
+            <strong>@metric.Value</strong>
+            <span>@metric.Title</span>
+            <p class="mb-0 mt-2 text-secondary">@metric.Description</p>
+        </article>
+    }
+</section>
+
+<section class="admin-card mb-4">
+    <div class="admin-card-header">
+        <h2 class="admin-card-title">常用管理入口</h2>
+        <span class="text-secondary">复用 MVC 控制器和通用布局逐步补齐</span>
+    </div>
+    <div class="admin-card-body">
+        <div class="quick-grid">
+            @foreach (var link in Model.QuickLinks)
+            {
+                <a class="admin-card quick-link layui-card" asp-controller="@link.Controller" asp-action="@link.Action">
+                    <h3 class="h5">@link.Icon @link.Title</h3>
+                    <small>@link.Description</small>
+                </a>
+            }
+        </div>
+    </div>
+</section>
+
+<section class="admin-card">
+    <div class="admin-card-header">
+        <h2 class="admin-card-title">第一阶段后台范围</h2>
+    </div>
+    <div class="admin-card-body">
+        <div class="row g-3">
+            <div class="col-md-6">
+                <h3 class="h5">可直接复用</h3>
+                <ul class="mb-0">
+                    <li>后台通用布局、菜单、顶部栏。</li>
+                    <li>MVC Controller + Razor View 页面组织方式。</li>
+                    <li>Netor 账号、管理员、角色、订单、交易、钱包实体模型。</li>
+                </ul>
+            </div>
+            <div class="col-md-6">
+                <h3 class="h5">下一步补齐</h3>
+                <ul class="mb-0">
+                    <li>资源、分类、版本、定价方案 CRUD。</li>
+                    <li>订阅、下载记录、订单交易列表。</li>
+                    <li>管理员登录和权限菜单。</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</section>

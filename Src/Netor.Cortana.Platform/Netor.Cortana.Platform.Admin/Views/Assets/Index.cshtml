@@ -1,0 +1,226 @@
+@model Netor.Cortana.Platform.Admin.Models.Assets.AssetIndexViewModel
+@using Netor.Cortana.Platform.Entitys.Enums
+@{
+    ViewData["Title"] = "资源管理";
+}
+
+<section class="metric-grid mb-4">
+    <article class="admin-card metric-card">
+        <div class="metric-icon">▣</div>
+        <strong>@Model.TotalCount</strong>
+        <span>资源总数</span>
+        <p class="mb-0 mt-2 text-secondary">插件、技能、智能体和解决方案</p>
+    </article>
+    <article class="admin-card metric-card">
+        <div class="metric-icon" style="background:#16a34a">●</div>
+        <strong>@Model.PublishedCount</strong>
+        <span>已发布</span>
+        <p class="mb-0 mt-2 text-secondary">当前市场可见资源</p>
+    </article>
+    <article class="admin-card metric-card">
+        <div class="metric-icon" style="background:#ea580c">★</div>
+        <strong>@Model.FeaturedCount</strong>
+        <span>推荐资源</span>
+        <p class="mb-0 mt-2 text-secondary">首页和榜单优先展示</p>
+    </article>
+    <article class="admin-card metric-card">
+        <div class="metric-icon" style="background:#7c3aed">↓</div>
+        <strong>@Model.Items.Sum(x => x.DownloadCount)</strong>
+        <span>下载次数</span>
+        <p class="mb-0 mt-2 text-secondary">资源累计下载记录</p>
+    </article>
+</section>
+
+<section class="admin-card">
+    <div class="admin-card-header">
+        <h2 class="admin-card-title">资源列表</h2>
+        <span class="text-secondary">第 @Model.Page / @Model.TotalPages 页</span>
+    </div>
+    <div class="admin-card-body border-bottom">
+        <form method="get" class="admin-filter-form layui-form">
+            <div>
+                <label class="form-label" for="keyword">关键词</label>
+                <input id="keyword" class="form-control layui-input" name="keyword" value="@Model.Keyword" placeholder="名称 / 标识 / 开发者" />
+            </div>
+            <div>
+                <label class="form-label" for="type">类型</label>
+                <select id="type" class="form-select layui-select" name="type">
+                    <option value="">全部类型</option>
+                    @foreach (var option in Enum.GetValues<AssetType>())
+                    {
+                        <option value="@((int)option)" selected="@(Model.Type == option)">@GetAssetTypeName(option)</option>
+                    }
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="status">状态</label>
+                <select id="status" class="form-select layui-select" name="status">
+                    <option value="">全部状态</option>
+                    @foreach (var option in Enum.GetValues<AssetStatus>())
+                    {
+                        <option value="@((int)option)" selected="@(Model.Status == option)">@GetAssetStatusName(option)</option>
+                    }
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="categoryId">分类</label>
+                <select id="categoryId" class="form-select layui-select" name="categoryId">
+                    <option value="">全部分类</option>
+                    @foreach (var category in Model.Categories)
+                    {
+                        <option value="@category.Id" selected="@(Model.CategoryId == category.Id)">@category.Name</option>
+                    }
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="featured">推荐</label>
+                <select id="featured" class="form-select layui-select" name="featured">
+                    <option value="">全部</option>
+                    <option value="true" selected="@(Model.Featured == true)">仅推荐</option>
+                    <option value="false" selected="@(Model.Featured == false)">非推荐</option>
+                </select>
+            </div>
+            <div class="admin-filter-actions">
+                <button class="layui-btn layui-btn-normal" type="submit">筛选</button>
+                <a class="layui-btn layui-btn-primary" asp-action="Index">重置</a>
+            </div>
+        </form>
+    </div>
+    <form id="assetBatchForm" asp-action="Batch" method="post" class="admin-batchbar">
+        @Html.AntiForgeryToken()
+        <strong>批量操作</strong>
+        <div class="admin-batchbar-fields">
+            <select class="form-select layui-select" name="operation" aria-label="批量操作">
+                <option value="publish">批量发布</option>
+                <option value="offline">批量下架</option>
+                <option value="hidden">批量隐藏</option>
+                <option value="draft">批量草稿</option>
+                <option value="feature">批量推荐</option>
+                <option value="unfeature">取消推荐</option>
+            </select>
+            <button class="layui-btn layui-btn-normal" type="submit">应用</button>
+        </div>
+    </form>
+    <div class="admin-card-body p-0">
+        <div class="table-responsive">
+            <table class="table admin-table layui-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="admin-check-cell"><input class="form-check-input" type="checkbox" data-check-all="assets" aria-label="全选资源" /></th>
+                        <th>名称</th>
+                        <th>类型</th>
+                        <th>分类</th>
+                        <th>状态</th>
+                        <th>开发者</th>
+                        <th>版本/定价</th>
+                        <th>下载</th>
+                        <th>发布时间</th>
+                        <th class="text-end">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.Items.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="10" class="text-center text-secondary py-5">暂无匹配资源，请调整筛选条件。</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var item in Model.Items)
+                        {
+                            <tr>
+                                <td class="admin-check-cell"><input class="form-check-input" form="assetBatchForm" type="checkbox" name="ids" value="@item.Id" data-check-item="assets" aria-label="选择 @item.Name" /></td>
+                                <td>
+                                    <strong>@item.Name</strong>
+                                    <small class="d-block text-secondary">@item.Slug</small>
+                                    <small class="d-block text-secondary text-truncate" style="max-width:260px">@item.ShortDescription</small>
+                                </td>
+                                <td>@item.TypeName</td>
+                                <td>@(item.CategoryName ?? "未分类")</td>
+                                <td><span class="admin-badge @GetStatusBadgeClass(item.Status)">@item.StatusName</span></td>
+                                <td>@item.DeveloperName</td>
+                                <td>@item.VersionCount / @item.PricingPlanCount</td>
+                                <td>@item.DownloadCount</td>
+                                <td>@(item.PublishedAtUtc?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "-")</td>
+                                <td class="text-end">
+                                    <div class="layui-btn-group admin-row-actions">
+                                        <a class="layui-btn layui-btn-primary layui-btn-sm" asp-action="Details" asp-route-id="@item.Id">详情</a>
+                                        <form asp-action="ToggleFeatured" asp-route-id="@item.Id" method="post">
+                                            @Html.AntiForgeryToken()
+                                            <button class="layui-btn layui-btn-sm" type="submit">@(item.IsFeatured ? "取消推荐" : "推荐")</button>
+                                        </form>
+                                        @if (item.Status == AssetStatus.Published)
+                                        {
+                                            <form asp-action="Offline" asp-route-id="@item.Id" method="post">
+                                                @Html.AntiForgeryToken()
+                                                <button class="layui-btn layui-btn-danger layui-btn-sm" type="submit">下架</button>
+                                            </form>
+                                        }
+                                        else
+                                        {
+                                            <form asp-action="Publish" asp-route-id="@item.Id" method="post">
+                                                @Html.AntiForgeryToken()
+                                                <button class="layui-btn layui-btn-normal layui-btn-sm" type="submit">发布</button>
+                                            </form>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="admin-card-body admin-pager">
+        <div class="text-secondary">共 @Model.TotalCount 条，每页 @Model.PageSize 条</div>
+        <div class="layui-btn-group">
+            <a class="layui-btn layui-btn-primary @(Model.HasPreviousPage ? string.Empty : "layui-btn-disabled")"
+               asp-action="Index"
+               asp-route-keyword="@Model.Keyword"
+               asp-route-type="@Model.Type"
+               asp-route-status="@Model.Status"
+               asp-route-categoryId="@Model.CategoryId"
+               asp-route-featured="@Model.Featured"
+               asp-route-page="@(Model.Page - 1)">上一页</a>
+            <a class="layui-btn layui-btn-primary @(Model.HasNextPage ? string.Empty : "layui-btn-disabled")"
+               asp-action="Index"
+               asp-route-keyword="@Model.Keyword"
+               asp-route-type="@Model.Type"
+               asp-route-status="@Model.Status"
+               asp-route-categoryId="@Model.CategoryId"
+               asp-route-featured="@Model.Featured"
+               asp-route-page="@(Model.Page + 1)">下一页</a>
+        </div>
+    </div>
+</section>
+
+@functions {
+    private static string GetAssetTypeName(AssetType type) => type switch
+    {
+        AssetType.Plugin => "插件",
+        AssetType.Skill => "技能",
+        AssetType.Agent => "智能体",
+        AssetType.Solution => "解决方案",
+        _ => type.ToString()
+    };
+
+    private static string GetAssetStatusName(AssetStatus status) => status switch
+    {
+        AssetStatus.Draft => "草稿",
+        AssetStatus.Published => "已发布",
+        AssetStatus.Hidden => "隐藏",
+        AssetStatus.Offline => "下架",
+        _ => status.ToString()
+    };
+
+    private static string GetStatusBadgeClass(AssetStatus status) => status switch
+    {
+        AssetStatus.Published => "admin-badge-success",
+        AssetStatus.Draft => "admin-badge-muted",
+        AssetStatus.Hidden => "admin-badge-warning",
+        AssetStatus.Offline => "admin-badge-danger",
+        _ => string.Empty
+    };
+}

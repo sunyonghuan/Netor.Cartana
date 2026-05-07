@@ -1,0 +1,21 @@
+@model Netor.Cortana.Platform.Admin.Models.Categories.CategoryEditViewModel
+@{
+    ViewData["Title"] = "新增分类";
+}
+
+<section class="admin-card admin-form-card">
+    <div class="admin-card-header">
+        <div>
+            <h2 class="admin-card-title">新增分类</h2>
+            <div class="text-secondary">创建资源市场的分类入口</div>
+        </div>
+        <a class="layui-btn layui-btn-primary layui-btn-sm" asp-action="Index">返回列表</a>
+    </div>
+    <div class="admin-card-body">
+        <partial name="_CategoryForm" model="Model" />
+    </div>
+</section>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

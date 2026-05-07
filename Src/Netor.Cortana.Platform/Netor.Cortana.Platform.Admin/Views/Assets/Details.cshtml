@@ -1,0 +1,123 @@
+@model Netor.Cortana.Platform.Admin.Models.Assets.AssetDetailViewModel
+@{
+    ViewData["Title"] = "资源详情";
+}
+
+<section class="admin-card mb-4">
+    <div class="admin-card-header">
+        <div>
+            <h2 class="admin-card-title">@Model.Name</h2>
+            <div class="text-secondary">@Model.Slug</div>
+        </div>
+        <a class="layui-btn layui-btn-primary layui-btn-sm" asp-action="Index">返回列表</a>
+    </div>
+    <div class="admin-card-body">
+        <div class="asset-detail-grid">
+            <div>
+                <div class="detail-label">类型</div>
+                <strong>@Model.TypeName</strong>
+            </div>
+            <div>
+                <div class="detail-label">状态</div>
+                <strong>@Model.StatusName</strong>
+            </div>
+            <div>
+                <div class="detail-label">分类</div>
+                <strong>@(Model.CategoryName ?? "未分类")</strong>
+            </div>
+            <div>
+                <div class="detail-label">开发者</div>
+                <strong>@Model.DeveloperName</strong>
+            </div>
+            <div>
+                <div class="detail-label">下载次数</div>
+                <strong>@Model.DownloadCount</strong>
+            </div>
+            <div>
+                <div class="detail-label">发布时间</div>
+                <strong>@(Model.PublishedAtUtc?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "-")</strong>
+            </div>
+        </div>
+
+        <hr />
+
+        <h3 class="h5">资源介绍</h3>
+        <p class="text-secondary">@Model.ShortDescription</p>
+        <p>@Model.Description</p>
+        <div class="text-secondary">标签：@(string.IsNullOrWhiteSpace(Model.Tags) ? "-" : Model.Tags)</div>
+    </div>
+</section>
+
+<section class="admin-card mb-4">
+    <div class="admin-card-header">
+        <h2 class="admin-card-title">版本信息</h2>
+    </div>
+    <div class="admin-card-body p-0">
+        <table class="table admin-table layui-table align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>版本</th>
+                    <th>发布说明</th>
+                    <th>包大小</th>
+                    <th>文件路径</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var version in Model.Versions)
+                {
+                    <tr>
+                        <td>@version.VersionName</td>
+                        <td>@version.ReleaseNotes</td>
+                        <td>@FormatSize(version.PackageSize)</td>
+                        <td><code>@version.FilePath</code></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="admin-card">
+    <div class="admin-card-header">
+        <h2 class="admin-card-title">定价方案</h2>
+    </div>
+    <div class="admin-card-body p-0">
+        <table class="table admin-table layui-table align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>名称</th>
+                    <th>类型</th>
+                    <th>价格</th>
+                    <th>有效期</th>
+                    <th>状态</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var plan in Model.PricingPlans)
+                {
+                    <tr>
+                        <td>@plan.Name</td>
+                        <td>@plan.PlanTypeName</td>
+                        <td>@plan.Price.ToString("0.00") @plan.Currency</td>
+                        <td>@(plan.DurationDays == 0 ? "永久" : $"{plan.DurationDays} 天")</td>
+                        <td>@(plan.IsActive ? "启用" : "停用")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</section>
+
+@functions {
+    private static string FormatSize(long size)
+    {
+        if (size <= 0)
+        {
+            return "-";
+        }
+
+        return size < 1024 * 1024
+            ? $"{size / 1024.0:0.##} KB"
+            : $"{size / 1024.0 / 1024.0:0.##} MB";
+    }
+}

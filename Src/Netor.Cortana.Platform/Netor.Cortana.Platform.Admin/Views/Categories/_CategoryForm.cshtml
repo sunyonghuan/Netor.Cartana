@@ -1,0 +1,42 @@
+@model Netor.Cortana.Platform.Admin.Models.Categories.CategoryEditViewModel
+
+<form method="post" class="admin-edit-form layui-form">
+    @Html.AntiForgeryToken()
+    <input asp-for="Id" type="hidden" />
+    <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+    <div class="row g-3">
+        <div class="col-md-6">
+            <label asp-for="Name" class="form-label"></label>
+            <input asp-for="Name" class="form-control layui-input" placeholder="例如：插件" />
+            <span asp-validation-for="Name" class="text-danger"></span>
+        </div>
+        <div class="col-md-6">
+            <label asp-for="Slug" class="form-label"></label>
+            <input asp-for="Slug" class="form-control layui-input" placeholder="例如：plugins" />
+            <span asp-validation-for="Slug" class="text-danger"></span>
+        </div>
+        <div class="col-md-4">
+            <label asp-for="SortOrder" class="form-label"></label>
+            <input asp-for="SortOrder" class="form-control layui-input" type="number" />
+            <span asp-validation-for="SortOrder" class="text-danger"></span>
+        </div>
+        <div class="col-md-8 d-flex align-items-end">
+            <label class="admin-switch mb-2">
+                <input asp-for="IsVisible" />
+                <span></span>
+                <strong>前台显示该分类</strong>
+            </label>
+        </div>
+        <div class="col-12">
+            <label asp-for="Description" class="form-label"></label>
+            <textarea asp-for="Description" class="form-control layui-textarea" rows="4" placeholder="说明该分类覆盖的资源范围"></textarea>
+            <span asp-validation-for="Description" class="text-danger"></span>
+        </div>
+    </div>
+
+    <div class="admin-form-actions">
+        <button class="layui-btn layui-btn-normal" type="submit">保存分类</button>
+        <a class="layui-btn layui-btn-primary" asp-action="Index">取消</a>
+    </div>
+</form>
