@@ -20,7 +20,7 @@
 ## 一、脚手架命令
 
 ```powershell
-.\skills\plugin-development\scripts\create-process-plugin.ps1 -Name MyPlugin -Id my_plugin
+scripts\create-process-plugin.ps1 -Name MyPlugin -Id my_plugin
 ```
 
 生成结构：
@@ -284,19 +284,19 @@ Console.WriteLine(result);
 ### 默认：JIT self-contained
 
 ```powershell
-.\skills\plugin-development\scripts\publish-process-plugin.ps1 -ProjectDir Samples\MyPlugin
+scripts\publish-process-plugin.ps1 -ProjectDir Samples\MyPlugin
 ```
 
 ### framework-dependent
 
 ```powershell
-.\skills\plugin-development\scripts\publish-process-plugin.ps1 -ProjectDir Samples\MyPlugin -FrameworkDependent
+scripts\publish-process-plugin.ps1 -ProjectDir Samples\MyPlugin -FrameworkDependent
 ```
 
 ### AOT exe
 
 ```powershell
-.\skills\plugin-development\scripts\publish-process-plugin.ps1 -ProjectDir Samples\MyPlugin -Aot
+scripts\publish-process-plugin.ps1 -ProjectDir Samples\MyPlugin -Aot
 ```
 
 ## 七、AI 编码规则

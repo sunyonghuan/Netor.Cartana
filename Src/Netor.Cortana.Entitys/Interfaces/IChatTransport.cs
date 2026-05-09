@@ -17,6 +17,18 @@ public sealed record AttachmentInfo(string Path, string Name, string MimeType);
 public sealed record AgentMention(AgentEntity Agent, int StartIndex, int EndIndex);
 
 /// <summary>
+/// WebSocket 客户端消息，保留原有 type/data/attachments 字段，并承载可选扩展字段。
+/// </summary>
+public sealed record WebSocketClientMessage(
+    string ClientId,
+    string Type,
+    string Data,
+    List<AttachmentInfo> Attachments,
+    string? Title,
+    string? Level,
+    string? Source);
+
+/// <summary>
 /// 聊天消息传输契约，解耦 AI 对话层对具体传输实现的依赖。
 /// 由 Networks 层（WebSocketServer）或其他传输实现，AI 层通过构造函数注入。
 /// </summary>
@@ -64,4 +76,9 @@ public interface IChatTransport
     /// 参数：clientId, type, data, attachments。
     /// </summary>
     event Func<string, string, string, List<AttachmentInfo>, Task>? OnMessageReceived;
+
+    /// <summary>
+    /// 当收到客户端发送的完整消息时触发。用于读取兼容扩展字段。
+    /// </summary>
+    event Func<WebSocketClientMessage, Task>? OnClientMessageReceived;
 }

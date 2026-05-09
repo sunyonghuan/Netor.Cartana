@@ -1,6 +1,6 @@
 ---
 name: process
-description: 'Cortana Process 插件开发子技能。位置：plugin-development/subskills/process。用于开发以独立 exe 进程运行的插件，支持 JIT self-contained 和 AOT exe 两种发布方式，通过 stdin/stdout JSON 协议与宿主通信。触发关键词：Process 插件、进程插件、exe 插件、JIT 插件、进程隔离插件。'
+description: 'Cortana Process 插件开发子技能。位置：subskills/process。用于开发以独立 exe 进程运行的插件，支持 JIT self-contained 和 AOT exe 两种发布方式，通过 stdin/stdout JSON 协议与宿主通信。触发关键词：Process 插件、进程插件、exe 插件、JIT 插件、进程隔离插件。'
 version: 3
 user-invocable: true
 ---

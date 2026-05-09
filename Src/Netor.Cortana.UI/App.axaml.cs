@@ -443,13 +443,13 @@ public partial class App : Application
 
     /// <summary>
     /// 处理 WebSocket 客户端连接/断开通知。
-    /// 主窗口可见时写入聊天界面；主窗口隐藏时额外弹出浮动气泡提示。
+    /// 主窗口可见时写入临时系统提示；主窗口隐藏时额外弹出浮动气泡提示。
     /// </summary>
     private void HandleWebSocketClientConnectionChanged(WebSocketClientConnectionChangedArgs args)
     {
         var message = args.IsConnected
-            ? $"系统通知：客户端 {args.RemoteEndpoint} 已连接到助理。"
-            : $"系统通知：客户端 {args.RemoteEndpoint} 已断开与助理的连接。";
+            ? $"客户端 {args.RemoteEndpoint} 已连接到助理。"
+            : $"客户端 {args.RemoteEndpoint} 已断开与助理的连接。";
 
         var bubbleText = args.IsConnected
             ? $"客户端 {args.RemoteEndpoint} 已连接"
@@ -458,7 +458,12 @@ public partial class App : Application
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             var mainWindow = Services.GetRequiredService<MainWindow>();
-            mainWindow.AddMessageBubble(message, isUser: false);
+            mainWindow.AddSystemNotice(new SystemNoticeArgs(
+                message,
+                args.IsConnected ? "外部连接" : "外部断开",
+                args.IsConnected ? "success" : "warning",
+                "WebSocket",
+                DateTimeOffset.UtcNow));
 
             if (!mainWindow.IsVisible)
             {
@@ -469,7 +474,7 @@ public partial class App : Application
 
     /// <summary>
     /// 处理 MCP 服务器连接状态变更通知。
-    /// 断线时通知用户（主窗口可见写入聊天，否则弹浮动气泡）。
+    /// 断线时通知用户（主窗口可见写入临时系统提示，否则弹浮动气泡）。
     /// </summary>
     private void HandleMcpConnectionStateChanged(McpConnectionStateChangedArgs args)
     {
@@ -477,8 +482,8 @@ public partial class App : Application
         if (args.IsReconnecting) return;
 
         var message = args.IsConnected
-            ? $"系统通知：MCP 服务「{args.ServerName}」已恢复连接。"
-            : $"系统通知：MCP 服务「{args.ServerName}」连接已断开，正在自动重连…";
+            ? $"MCP 服务「{args.ServerName}」已恢复连接。"
+            : $"MCP 服务「{args.ServerName}」连接已断开，正在自动重连…";
 
         var bubbleText = args.IsConnected
             ? $"MCP {args.ServerName} 已恢复"
@@ -487,7 +492,12 @@ public partial class App : Application
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             var mainWindow = Services.GetRequiredService<MainWindow>();
-            mainWindow.AddMessageBubble(message, isUser: false);
+            mainWindow.AddSystemNotice(new SystemNoticeArgs(
+                message,
+                args.IsConnected ? "MCP 已连接" : "MCP 已断开",
+                args.IsConnected ? "success" : "warning",
+                args.ServerName,
+                DateTimeOffset.UtcNow));
 
             if (!mainWindow.IsVisible)
             {

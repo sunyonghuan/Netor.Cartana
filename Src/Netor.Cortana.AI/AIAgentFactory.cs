@@ -216,7 +216,13 @@ public sealed class AIAgentFactory(
             {
                 var subAgentEntity = mention.Agent;
 
-                // 同名智能体去重
+                if (string.Equals(subAgentEntity.Id, mainAgent.Id, StringComparison.OrdinalIgnoreCase))
+                {
+                    logger.LogInformation("跳过与主智能体相同的子智能体：{Name}", subAgentEntity.Name);
+                    continue;
+                }
+
+                // 同一智能体去重
                 if (!processedAgentIds.Add(subAgentEntity.Id)) continue;
 
                 var (subProvider, subModel) = ResolveSubAgentProviderAndModel(

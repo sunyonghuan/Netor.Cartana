@@ -15,4 +15,7 @@ public static class CortanaWsEndpoints
 
     public static string BuildConversationFeedEndpoint(int port) =>
         $"ws://localhost:{port}{ConversationFeedPath}";
+
+    public static string BuildModelCapabilityEndpoint(int port) =>
+        ModelCapabilityProtocol.BuildEndpoint(port);
 }

@@ -33,6 +33,7 @@ public static class AIServiceExtensions
         services.AddSingleton<ChatHistoryDataProvider>();
         services.AddSingleton<ModelPurposeResolver>();
         services.AddSingleton<IHostCapabilityBroker, HostCapabilityBroker>();
+        services.AddSingleton<IPluginModelCapabilityService, PluginModelCapabilityService>();
 
         // 厂商驱动
         services.AddSingleton<IAiProviderDriver, OpenAiProviderDriver>();

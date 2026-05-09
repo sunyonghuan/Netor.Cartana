@@ -220,6 +220,17 @@ public partial class MainWindow : Window
             return Task.FromResult(false);
         });
 
+        _subscriber.Subscribe<SystemNoticeArgs>(Events.OnSystemNotice, (_, args) =>
+        {
+            if (string.IsNullOrWhiteSpace(args.Content)) return Task.FromResult(false);
+            Dispatcher.UIThread.Post(() =>
+            {
+                HideWelcome();
+                AddSystemNotice(args);
+            });
+            return Task.FromResult(false);
+        });
+
         // 工作目录变更 → 刷新文件树 + 重载会话
         _subscriber.Subscribe<WorkspaceChangedArgs>(Events.OnWorkspaceChanged, (_, args) =>
         {

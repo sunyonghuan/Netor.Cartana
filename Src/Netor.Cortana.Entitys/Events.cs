@@ -75,6 +75,9 @@ public static class Events
     /// <summary>WebSocket 输入通道收到用户消息，供主界面即时显示。</summary>
     public static WebSocketUserMessageReceivedEvent OnWebSocketUserMessageReceived = new("network.websocket.user.message.received");
 
+    /// <summary>收到临时系统提示，仅用于当前界面显示，不进入长期历史。</summary>
+    public static SystemNoticeEvent OnSystemNotice = new("system.notice");
+
     /// <summary>MCP 服务器连接状态发生变化（断线/重连成功/重连中）。</summary>
     public static McpConnectionStateChangedEvent OnMcpConnectionStateChanged = new("network.mcp.connection.changed");
 
@@ -163,6 +166,9 @@ public record WebSocketClientConnectionChangedEvent(string Eventid) : EventID<We
 
 /// <summary>WebSocket 用户消息接收事件</summary>
 public record WebSocketUserMessageReceivedEvent(string Eventid) : EventID<WebSocketUserMessageReceivedArgs>(Eventid);
+
+/// <summary>临时系统提示事件</summary>
+public record SystemNoticeEvent(string Eventid) : EventID<SystemNoticeArgs>(Eventid);
 
 /// <summary>MCP 服务器连接状态变更事件</summary>
 public record McpConnectionStateChangedEvent(string Eventid) : EventID<McpConnectionStateChangedArgs>(Eventid);
@@ -398,6 +404,21 @@ public record WebSocketUserMessageReceivedArgs(
     string ClientId,
     string Text,
     IReadOnlyList<AttachmentInfo> Attachments) : EventArgs;
+
+/// <summary>
+/// 临时系统提示参数。该消息只用于界面即时展示，不写入聊天历史。
+/// </summary>
+/// <param name="Content">提示详细内容，对应 WebSocket 协议中的 data。</param>
+/// <param name="Title">提示标题。</param>
+/// <param name="Level">提示等级，如 info、success、warning、error、progress。</param>
+/// <param name="Source">提示来源，如插件名、第三方软件名或客户端 ID。</param>
+/// <param name="CreatedAt">提示创建时间。</param>
+public record SystemNoticeArgs(
+    string Content,
+    string Title,
+    string Level,
+    string Source,
+    DateTimeOffset CreatedAt) : EventArgs;
 
 /// <summary>
 /// MCP 服务器连接状态变更事件参数

@@ -39,6 +39,7 @@ New-Item -ItemType Directory -Path $ProjectDir -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $ProjectDir 'Application') -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $ProjectDir 'Contracts') -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $ProjectDir 'Tools') -Force | Out-Null
+New-Item -ItemType Directory -Path (Join-Path $ProjectDir 'Debug') -Force | Out-Null
 
 # 2. 生成 csproj
 $csproj = @"
@@ -145,6 +146,41 @@ public class ${Name}Tools(${Name}GreetingService greetingService, ILogger<${Name
 "@
 Set-Content -Path (Join-Path $ProjectDir "Tools\${Name}Tools.cs") -Value $tools -Encoding UTF8
 
+# 8. 生成调试控制台项目
+$debugCsproj = @"
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\$Name.csproj" />
+        <PackageReference Include="Netor.Cortana.Plugin.Native.Debugger" Version="$PackageVersion" />
+    </ItemGroup>
+
+</Project>
+"@
+Set-Content -Path (Join-Path $ProjectDir "Debug\$Name.Debug.csproj") -Value $debugCsproj -Encoding UTF8
+
+# 9. 生成调试入口
+$debugProgram = @"
+using Netor.Cortana.Plugin.Native.Debugger;
+using $Name;
+
+await PluginDebugRunner.RunAsync(typeof(Startup).Assembly, options =>
+{
+        options.DataDirectory = Path.Combine(AppContext.BaseDirectory, ".debug_data");
+        options.WorkspaceDirectory = Path.Combine(AppContext.BaseDirectory, ".debug_workspace");
+        options.PluginDirectory = AppContext.BaseDirectory;
+        options.WsPort = 9090;
+});
+"@
+Set-Content -Path (Join-Path $ProjectDir 'Debug\Program.cs') -Value $debugProgram -Encoding UTF8
+
 Write-Host "✅ 项目已创建: $ProjectDir" -ForegroundColor Green
 Write-Host ""
 Write-Host "后续步骤:" -ForegroundColor Cyan
@@ -152,4 +188,5 @@ Write-Host "  1. cd $ProjectDir"
 Write-Host "  2. 如需外部包，先运行 resolve-package-version.ps1 + test-aot-package.ps1"
 Write-Host "  3. 按 Application/Contracts/Tools 继续扩展"
 Write-Host "  4. dotnet build          # 验证编译"
-Write-Host "  5. publish-native-plugin.ps1 -ProjectDir Samples\$Name -CreateZip"
+Write-Host "  5. dotnet run --project Debug\$Name.Debug.csproj  # REPL 调试每个工具"
+Write-Host "  6. publish-native-plugin.ps1 -ProjectDir Samples\$Name -CreateZip"

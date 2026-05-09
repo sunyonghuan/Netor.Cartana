@@ -40,5 +40,5 @@ Url: http://localhost:3000/sse
 ## 验证命令
 
 ```powershell
-.\skills\plugin-development\subskills\mcp\scripts\validate-mcp-server-config.ps1 -TransportType stdio -Name github -Command npx -Arguments '-y','@modelcontextprotocol/server-github' -EnvironmentVariables @{ GITHUB_TOKEN = '***' }
+subskills\mcp\scripts\validate-mcp-server-config.ps1 -TransportType stdio -Name github -Command npx -Arguments '-y','@modelcontextprotocol/server-github' -EnvironmentVariables @{ GITHUB_TOKEN = '***' }
 ```

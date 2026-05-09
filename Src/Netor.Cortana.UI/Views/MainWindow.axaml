@@ -196,39 +196,84 @@
 						</ItemsControl>
 
 						<!-- 输入框容器 -->
-						<Border x:Name="InputBorder" Background="#252526" CornerRadius="3"
-								BorderBrush="#3c3c3c" BorderThickness="1"
-								Padding="12"
-								DragDrop.AllowDrop="True">
-							<Grid ColumnDefinitions="*,Auto">
-								<TextBox x:Name="InputBox" Grid.Column="0"
-										 Classes="chat-input"
-										 PlaceholderText="输入消息 (# 引用文件  @ 调用智能体  Enter 发送  Shift+Enter 换行) ..."
-										 TextWrapping="Wrap"
-										 AcceptsReturn="True"
-										 MinHeight="80" MaxHeight="400" />
-								<!-- 发送/停止 图标按钮 -->
-								<Panel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Bottom">
-									<!-- 发送按钮（空闲时显示） -->
-									<Button x:Name="SendButton" Classes="titlebar-btn"
-											ToolTip.Tip="发送" IsVisible="True" Click="OnSendClick">
-										<Image Source="avares://Cortana/Assets/send.png" Width="14" Height="14" />
-									</Button>
-									<!-- 旋转加载按钮（发送中显示，点击可取消） -->
-									<Button x:Name="StopButton" Classes="titlebar-btn"
-											ToolTip.Tip="取消" IsVisible="False" Click="OnStopClick">
-										<Image x:Name="SpinnerIcon"
-											   Source="avares://Cortana/Assets/refresh.png"
-											   Width="14" Height="14"
-											   RenderTransformOrigin="50%,50%">
-											<Image.RenderTransform>
-												<RotateTransform Angle="0" />
-											</Image.RenderTransform>
-										</Image>
-									</Button>
-								</Panel>
-							</Grid>
-						</Border>
+						<Panel x:Name="InputBorderHost" ClipToBounds="True">
+							<Border x:Name="InputBorder" Background="#252526" CornerRadius="3"
+									BorderBrush="#3c3c3c" BorderThickness="1"
+									Padding="12"
+									DragDrop.AllowDrop="True">
+								<Grid ColumnDefinitions="*,Auto">
+									<TextBox x:Name="InputBox" Grid.Column="0"
+											 Classes="chat-input"
+											 PlaceholderText="输入消息 (# 引用文件  @ 调用智能体  Enter 发送  Shift+Enter 换行) ..."
+											 TextWrapping="Wrap"
+											 AcceptsReturn="True"
+											 MinHeight="80" MaxHeight="400" />
+									<!-- 发送/停止 图标按钮 -->
+									<Panel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Bottom">
+										<!-- 发送按钮（空闲时显示） -->
+										<Button x:Name="SendButton" Classes="titlebar-btn"
+												ToolTip.Tip="发送" IsVisible="True" Click="OnSendClick">
+											<Image Source="avares://Cortana/Assets/send.png" Width="14" Height="14" />
+										</Button>
+										<!-- 旋转加载按钮（发送中显示，点击可取消） -->
+										<Button x:Name="StopButton" Classes="titlebar-btn"
+												ToolTip.Tip="取消" IsVisible="False" Click="OnStopClick">
+											<Image x:Name="SpinnerIcon"
+												   Source="avares://Cortana/Assets/refresh.png"
+												   Width="14" Height="14"
+												   RenderTransformOrigin="50%,50%">
+												<Image.RenderTransform>
+													<RotateTransform Angle="0" />
+												</Image.RenderTransform>
+											</Image>
+										</Button>
+									</Panel>
+								</Grid>
+							</Border>
+
+							<Border x:Name="InputMarqueeBorder" IsVisible="False" IsHitTestVisible="False"
+									CornerRadius="3" ClipToBounds="True">
+								<Canvas Height="0" Margin="0,0,0,-120"
+										HorizontalAlignment="Stretch" VerticalAlignment="Top">
+									<Rectangle x:Name="InputMarqueeTop" Width="120" Height="2" HorizontalAlignment="Left" VerticalAlignment="Top" RadiusX="1" RadiusY="1">
+									<Rectangle.Fill>
+										<LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+											<GradientStop Color="#00007acc" Offset="0" />
+											<GradientStop Color="#ff39d7ff" Offset="0.5" />
+											<GradientStop Color="#00007acc" Offset="1" />
+										</LinearGradientBrush>
+									</Rectangle.Fill>
+								</Rectangle>
+									<Rectangle x:Name="InputMarqueeRight" Width="2" Height="120" HorizontalAlignment="Right" VerticalAlignment="Top" RadiusX="1" RadiusY="1">
+									<Rectangle.Fill>
+										<LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+											<GradientStop Color="#00007acc" Offset="0" />
+											<GradientStop Color="#ff39d7ff" Offset="0.5" />
+											<GradientStop Color="#00007acc" Offset="1" />
+										</LinearGradientBrush>
+									</Rectangle.Fill>
+								</Rectangle>
+									<Rectangle x:Name="InputMarqueeBottom" Width="120" Height="2" HorizontalAlignment="Right" VerticalAlignment="Bottom" RadiusX="1" RadiusY="1">
+									<Rectangle.Fill>
+										<LinearGradientBrush StartPoint="100%,0%" EndPoint="0%,0%">
+											<GradientStop Color="#00007acc" Offset="0" />
+											<GradientStop Color="#ff39d7ff" Offset="0.5" />
+											<GradientStop Color="#00007acc" Offset="1" />
+										</LinearGradientBrush>
+									</Rectangle.Fill>
+								</Rectangle>
+									<Rectangle x:Name="InputMarqueeLeft" Width="2" Height="120" HorizontalAlignment="Left" VerticalAlignment="Bottom" RadiusX="1" RadiusY="1">
+									<Rectangle.Fill>
+										<LinearGradientBrush StartPoint="0%,100%" EndPoint="0%,0%">
+											<GradientStop Color="#00007acc" Offset="0" />
+											<GradientStop Color="#ff39d7ff" Offset="0.5" />
+											<GradientStop Color="#00007acc" Offset="1" />
+										</LinearGradientBrush>
+									</Rectangle.Fill>
+								</Rectangle>
+								</Canvas>
+							</Border>
+						</Panel>
 
 						<!-- # 文件补全弹出列表 -->
 						<Popup x:Name="FilePopup" Placement="TopEdgeAlignedLeft"

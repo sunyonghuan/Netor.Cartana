@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 
 using Netor.Cortana.Entitys;
+using Netor.Cortana.Entitys.ModelCapability;
 
 namespace Netor.Cortana.Networks;
 
@@ -17,6 +18,10 @@ namespace Netor.Cortana.Networks;
 [JsonSerializable(typeof(ConversationUserMessageArgs))]
 [JsonSerializable(typeof(ConversationAssistantDeltaArgs))]
 [JsonSerializable(typeof(ConversationTurnCompletedArgs))]
+[JsonSerializable(typeof(ModelCapabilityRequest))]
+[JsonSerializable(typeof(ModelCapabilityResponse))]
+[JsonSerializable(typeof(ModelCapabilityError))]
+[JsonSerializable(typeof(ModelCapabilityConnectedMessage))]
 internal partial class WebSocketJsonContext : JsonSerializerContext;
 
 /// <summary>

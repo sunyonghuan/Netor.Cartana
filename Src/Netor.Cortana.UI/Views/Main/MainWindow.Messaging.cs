@@ -3,11 +3,14 @@ using Avalonia.Animation;
 using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Styling;
 using Avalonia.Threading;
+
+using System.Diagnostics;
 
 using Netor.Cortana.UI.Controls;
 using Netor.Cortana.Entitys;
@@ -29,6 +32,8 @@ public partial class MainWindow
 
     private CancellationTokenSource? _sendCts;
     private Animation? _spinnerAnimation;
+    private DispatcherTimer? _inputMarqueeTimer;
+    private readonly Stopwatch _inputMarqueeStopwatch = new();
 
     // 用户是否手动向上滚动（此时不自动跟随）
     private bool _userScrolledUp;
@@ -109,6 +114,7 @@ public partial class MainWindow
         _isSending = sending;
         SendButton.IsVisible = !sending;
         StopButton.IsVisible = sending;
+        InputMarqueeBorder.IsVisible = sending;
 
         if (sending)
         {
@@ -123,9 +129,52 @@ public partial class MainWindow
                 }
             };
             _spinnerAnimation.RunAsync(SpinnerIcon);
+            StartInputMarquee();
             return;
         }
+        StopInputMarquee();
         RefreshTokenProgress();
+    }
+
+    private void StartInputMarquee()
+    {
+        _inputMarqueeStopwatch.Restart();
+        _inputMarqueeTimer ??= new DispatcherTimer(TimeSpan.FromMilliseconds(16), DispatcherPriority.Render, (_, _) => UpdateInputMarquee());
+        _inputMarqueeTimer.Start();
+        UpdateInputMarquee();
+    }
+
+    private void StopInputMarquee()
+    {
+        _inputMarqueeTimer?.Stop();
+        _inputMarqueeStopwatch.Reset();
+    }
+
+    private void UpdateInputMarquee()
+    {
+        var width = Math.Max(InputBorderHost.Bounds.Width, 1);
+        var height = Math.Max(InputBorderHost.Bounds.Height, 1);
+        var linearProgress = _inputMarqueeStopwatch.Elapsed.TotalSeconds % 1.9 / 1.9;
+        var progress = EaseInOutCubic(linearProgress);
+
+        Canvas.SetLeft(InputMarqueeTop, -120 + (width + 120) * progress);
+        Canvas.SetTop(InputMarqueeTop, 0);
+
+        Canvas.SetLeft(InputMarqueeRight, width - 2);
+        Canvas.SetTop(InputMarqueeRight, -120 + (height + 120) * progress);
+
+        Canvas.SetLeft(InputMarqueeBottom, width - 120 - (width + 120) * progress);
+        Canvas.SetTop(InputMarqueeBottom, height - 2);
+
+        Canvas.SetLeft(InputMarqueeLeft, 0);
+        Canvas.SetTop(InputMarqueeLeft, height - 120 - (height + 120) * progress);
+    }
+
+    private static double EaseInOutCubic(double value)
+    {
+        return value < 0.5
+            ? 4 * value * value * value
+            : 1 - Math.Pow(-2 * value + 2, 3) / 2;
     }
 
     /// <summary>
@@ -276,6 +325,132 @@ public partial class MainWindow
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
         };
     }
+
+    /// <summary>
+    /// 添加临时系统提示卡片到消息列表。该内容不写入数据库，不进入长期历史。
+    /// </summary>
+    internal void AddSystemNotice(SystemNoticeArgs args)
+    {
+        const int collapseThreshold = 300;
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            var content = args.Content.Trim();
+            var collapsed = content.Length > collapseThreshold;
+            var displayContent = collapsed ? $"{content[..collapseThreshold]}…" : content;
+            var title = string.IsNullOrWhiteSpace(args.Title) ? "系统提示" : args.Title.Trim();
+            var level = string.IsNullOrWhiteSpace(args.Level) ? "info" : args.Level.Trim().ToLowerInvariant();
+            var source = string.IsNullOrWhiteSpace(args.Source) ? "系统" : args.Source.Trim();
+            var displayTime = args.CreatedAt.ToLocalTime().ToString("HH:mm");
+
+            var accentBrush = GetSystemNoticeAccentBrush(level);
+            var titleBrush = (IBrush)this.FindResource("TextBrush")!;
+            var subtextBrush = (IBrush)this.FindResource("SubtextBrush")!;
+
+            var icon = new TextBlock
+            {
+                Text = GetSystemNoticeIcon(level),
+                FontSize = 13,
+                Foreground = accentBrush,
+                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            };
+            var titleBlock = new TextBlock
+            {
+                Text = title,
+                FontSize = 12,
+                FontWeight = FontWeight.SemiBold,
+                Foreground = titleBrush,
+                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            };
+            var metaBlock = new TextBlock
+            {
+                Text = $"{source} · {displayTime}",
+                FontSize = 10,
+                Foreground = subtextBrush,
+                Opacity = 0.75,
+                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            };
+
+            var header = new StackPanel
+            {
+                Orientation = Avalonia.Layout.Orientation.Horizontal,
+                Spacing = 6,
+                Children = { icon, titleBlock, metaBlock },
+            };
+
+            var contentBlock = new TextBlock
+            {
+                Text = displayContent,
+                FontSize = 12,
+                Foreground = titleBrush,
+                TextWrapping = TextWrapping.Wrap,
+                Opacity = 0.92,
+            };
+
+            var body = new StackPanel { Spacing = 6 };
+            body.Children.Add(header);
+            body.Children.Add(contentBlock);
+
+            if (collapsed)
+            {
+                var expanded = false;
+                var toggle = new Button
+                {
+                    Content = "展开详情",
+                    Background = Brushes.Transparent,
+                    BorderThickness = new Thickness(0),
+                    Padding = new Thickness(0, 2),
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
+                    Foreground = accentBrush,
+                    Cursor = new Cursor(StandardCursorType.Hand),
+                    FontSize = 12,
+                };
+                toggle.Click += (_, _) =>
+                {
+                    expanded = !expanded;
+                    contentBlock.Text = expanded ? content : $"{content[..collapseThreshold]}…";
+                    toggle.Content = expanded ? "收起详情" : "展开详情";
+                    if (expanded)
+                    {
+                        ForceScrollToBottom();
+                    }
+                };
+                body.Children.Add(toggle);
+            }
+
+            var card = new Border
+            {
+                Background = new SolidColorBrush(Color.FromArgb(34, 255, 255, 255)),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(12, 8),
+                Margin = new Thickness(28, 0),
+                Child = body,
+            };
+
+            MessageList.Items.Add(card);
+            ScrollToBottom();
+        });
+    }
+
+    private IBrush GetSystemNoticeAccentBrush(string level) => level switch
+    {
+        "success" => (IBrush)this.FindResource("GreenBrush")!,
+        "warning" => new SolidColorBrush(Color.FromRgb(220, 170, 80)),
+        "error" => (IBrush)this.FindResource("RedBrush")!,
+        "progress" => (IBrush)this.FindResource("TealBrush")!,
+        _ => (IBrush)this.FindResource("BlueBrush")!,
+    };
+
+    private static string GetSystemNoticeIcon(string level) => level switch
+    {
+        "success" => "✓",
+        "warning" => "⚠",
+        "error" => "✕",
+        "progress" => "⟳",
+        _ => "ℹ",
+    };
 
     /// <summary>
     /// 添加消息气泡到消息列表。

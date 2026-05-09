@@ -196,6 +196,12 @@
                                 <TextBlock Text="插件管理" VerticalAlignment="Center" />
                             </StackPanel>
                         </ListBoxItem>
+                        <ListBoxItem Classes="nav-item" Tag="plugin-auth">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Image Source="/Assets/qx.png" Width="16" Height="16" />
+                                <TextBlock Text="插件授权" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </ListBoxItem>
                     </ListBox>
                 </DockPanel>
             </Border>

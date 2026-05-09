@@ -27,7 +27,7 @@ public sealed class WebSocketInputChannel(
     /// </summary>
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        transport.OnMessageReceived += HandleClientMessageAsync;
+        transport.OnClientMessageReceived += HandleClientMessageAsync;
         logger.LogInformation("WebSocket 输入通道已启动");
         return Task.CompletedTask;
     }
@@ -37,7 +37,7 @@ public sealed class WebSocketInputChannel(
     /// </summary>
     public Task StopAsync(CancellationToken cancellationToken)
     {
-        transport.OnMessageReceived -= HandleClientMessageAsync;
+        transport.OnClientMessageReceived -= HandleClientMessageAsync;
         logger.LogInformation("WebSocket 输入通道已停止");
         return Task.CompletedTask;
     }
@@ -45,19 +45,19 @@ public sealed class WebSocketInputChannel(
     /// <summary>
     /// 处理来自 WebSocket 客户端的消息。
     /// </summary>
-    private async Task HandleClientMessageAsync(string clientId, string type, string data, List<AttachmentInfo> attachments)
+    private async Task HandleClientMessageAsync(WebSocketClientMessage message)
     {
-        switch (type)
+        switch (message.Type)
         {
             case "send":
                 publisher.Publish(
                     Events.OnWebSocketUserMessageReceived,
-                    new WebSocketUserMessageReceivedArgs(clientId, data, [.. attachments]));
+                    new WebSocketUserMessageReceivedArgs(message.ClientId, message.Data, [.. message.Attachments]));
 
-                requestContext.ActiveClientId = clientId;
+                requestContext.ActiveClientId = message.ClientId;
                 try
                 {
-                    await chatEngine.SendMessageAsync(data, CancellationToken.None, attachments);
+                    await chatEngine.SendMessageAsync(message.Data, CancellationToken.None, message.Attachments);
                 }
                 finally
                 {
@@ -69,8 +69,19 @@ public sealed class WebSocketInputChannel(
                 chatEngine.Stop();
                 break;
 
+            case "system.notice":
+                publisher.Publish(
+                    Events.OnSystemNotice,
+                    new SystemNoticeArgs(
+                        message.Data,
+                        string.IsNullOrWhiteSpace(message.Title) ? "系统提示" : message.Title,
+                        string.IsNullOrWhiteSpace(message.Level) ? "info" : message.Level,
+                        string.IsNullOrWhiteSpace(message.Source) ? message.ClientId : message.Source,
+                        DateTimeOffset.UtcNow));
+                break;
+
             default:
-                logger.LogWarning("未知的客户端消息类型：{Type}", type);
+                logger.LogWarning("未知的客户端消息类型：{Type}", message.Type);
                 break;
         }
     }
@@ -80,6 +91,6 @@ public sealed class WebSocketInputChannel(
     {
         if (_disposed) return;
         _disposed = true;
-        transport.OnMessageReceived -= HandleClientMessageAsync;
+        transport.OnClientMessageReceived -= HandleClientMessageAsync;
     }
 }

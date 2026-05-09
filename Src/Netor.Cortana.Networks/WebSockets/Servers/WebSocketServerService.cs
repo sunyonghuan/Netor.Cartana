@@ -1,7 +1,9 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
+using Netor.Cortana.AI.Providers;
 using Netor.Cortana.Entitys;
+using Netor.Cortana.Entitys.ModelCapability;
 using Netor.Cortana.Entitys.Services;
 using Netor.EventHub;
 
@@ -35,7 +37,8 @@ public sealed class WebSocketServerService(
     ILogger<WebSocketServerService> logger,
     SystemSettingsService settingsService,
     IPublisher publisher,
-    CortanaDbContext db) : IHostedService, IChatTransport, IDisposable
+    CortanaDbContext db,
+    IPluginModelCapabilityService modelCapabilityService) : IHostedService, IChatTransport, IDisposable
 {
     private HttpListener? _listener;
     private CancellationTokenSource? _cts;
@@ -44,6 +47,8 @@ public sealed class WebSocketServerService(
     private readonly ConcurrentDictionary<string, WebSocket> _conversationFeedClients = new();
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _conversationFeedClientLocks = new();
     private readonly ConcurrentDictionary<string, byte> _conversationFeedSubscriptions = new();
+    private readonly ConcurrentDictionary<string, WebSocket> _modelCapabilityClients = new();
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _modelCapabilityClientLocks = new();
 
     /// <summary>
     /// 服务器监听端口。
@@ -55,6 +60,11 @@ public sealed class WebSocketServerService(
     /// 参数：clientId, type, data, attachments（文件路径列表）。
     /// </summary>
     public event Func<string, string, string, List<AttachmentInfo>, Task>? OnMessageReceived;
+
+    /// <summary>
+    /// 当收到客户端发送的完整消息时触发，用于读取扩展字段。
+    /// </summary>
+    public event Func<WebSocketClientMessage, Task>? OnClientMessageReceived;
 
     /// <summary>
     /// 当客户端连接时触发。
@@ -88,6 +98,7 @@ public sealed class WebSocketServerService(
             {
                 _listener.Prefixes.Add($"http://localhost:{Port}{CortanaWsEndpoints.ChatPath}");
                 _listener.Prefixes.Add($"http://localhost:{Port}{CortanaWsEndpoints.ConversationFeedPath}");
+                _listener.Prefixes.Add($"http://localhost:{Port}{ModelCapabilityProtocol.Path}");
                 _listener.Start();
             }
             catch (HttpListenerException ex)
@@ -98,6 +109,7 @@ public sealed class WebSocketServerService(
                 Port = GetRandomPort();
                 _listener.Prefixes.Add($"http://localhost:{Port}{CortanaWsEndpoints.ChatPath}");
                 _listener.Prefixes.Add($"http://localhost:{Port}{CortanaWsEndpoints.ConversationFeedPath}");
+                _listener.Prefixes.Add($"http://localhost:{Port}{ModelCapabilityProtocol.Path}");
                 _listener.Start();
             }
 
@@ -132,11 +144,18 @@ public sealed class WebSocketServerService(
             await CloseClientAsync(clientId, socket, "服务器关闭");
         }
 
+        foreach (var (clientId, socket) in _modelCapabilityClients)
+        {
+            await CloseClientAsync(clientId, socket, "服务器关闭");
+        }
+
         _clients.Clear();
         _clientLocks.Clear();
         _conversationFeedClients.Clear();
         _conversationFeedClientLocks.Clear();
         _conversationFeedSubscriptions.Clear();
+        _modelCapabilityClients.Clear();
+        _modelCapabilityClientLocks.Clear();
 
         _listener?.Close();
         logger.LogInformation("WebSocket 服务器已停止");
@@ -218,6 +237,12 @@ public sealed class WebSocketServerService(
                 if (requestPath == NormalizePath(CortanaWsEndpoints.ConversationFeedPath))
                 {
                     await AcceptConversationFeedClientAsync(httpContext, remoteIp, remotePort, cancellationToken);
+                    continue;
+                }
+
+                if (requestPath == NormalizePath(ModelCapabilityProtocol.Path))
+                {
+                    await AcceptModelCapabilityClientAsync(httpContext, remoteIp, remotePort, cancellationToken);
                     continue;
                 }
 
@@ -313,6 +338,41 @@ public sealed class WebSocketServerService(
 
         await SendToConversationFeedClientAsync(clientId, welcome, cancellationToken);
         _ = ReceiveConversationFeedMessagesAsync(clientId, socket, remoteIp, remotePort, cancellationToken);
+    }
+
+    private async Task AcceptModelCapabilityClientAsync(
+        HttpListenerContext httpContext,
+        string remoteIp,
+        int remotePort,
+        CancellationToken cancellationToken)
+    {
+        if (!httpContext.Request.IsWebSocketRequest)
+        {
+            httpContext.Response.StatusCode = 400;
+            httpContext.Response.Close();
+            return;
+        }
+
+        var wsContext = await httpContext.AcceptWebSocketAsync(null);
+        var clientId = Guid.NewGuid().ToString("N");
+        var socket = wsContext.WebSocket;
+
+        _modelCapabilityClients.TryAdd(clientId, socket);
+        _modelCapabilityClientLocks.TryAdd(clientId, new SemaphoreSlim(1, 1));
+
+        logger.LogInformation(
+            "内部模型能力客户端已连接：{ClientId}，远端：{RemoteEndpoint}，当前连接数：{Count}",
+            clientId,
+            remotePort > 0 ? $"{remoteIp}:{remotePort}" : remoteIp,
+            _modelCapabilityClients.Count);
+
+        var welcome = JsonSerializer.Serialize(new ModelCapabilityConnectedMessage
+        {
+            ClientId = clientId
+        }, WebSocketJsonContext.Default.ModelCapabilityConnectedMessage);
+
+        await SendToModelCapabilityClientAsync(clientId, welcome, cancellationToken);
+        _ = ReceiveModelCapabilityMessagesAsync(clientId, socket, remoteIp, remotePort, cancellationToken);
     }
 
     /// <summary>
@@ -415,6 +475,42 @@ public sealed class WebSocketServerService(
         }
     }
 
+    private async Task ReceiveModelCapabilityMessagesAsync(
+        string clientId,
+        WebSocket socket,
+        string remoteIp,
+        int remotePort,
+        CancellationToken cancellationToken)
+    {
+        var buffer = new byte[16 * 1024];
+
+        try
+        {
+            while (socket.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
+            {
+                var text = await ReadTextMessageAsync(socket, buffer, cancellationToken);
+                if (text is null) break;
+                await HandleModelCapabilityMessageAsync(clientId, text, cancellationToken);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (WebSocketException ex)
+        {
+            logger.LogWarning(ex, "内部模型能力通信异常，客户端：{ClientId}", clientId);
+        }
+        finally
+        {
+            RemoveModelCapabilityClient(clientId);
+            logger.LogInformation(
+                "内部模型能力客户端已断开：{ClientId}，远端：{RemoteEndpoint}，剩余连接数：{Count}",
+                clientId,
+                remotePort > 0 ? $"{remoteIp}:{remotePort}" : remoteIp,
+                _modelCapabilityClients.Count);
+        }
+    }
+
     /// <summary>
     /// 处理指定客户端发来的 JSON 消息。
     /// </summary>
@@ -426,6 +522,9 @@ public sealed class WebSocketServerService(
             var root = doc.RootElement;
             var type = root.GetProperty("type").GetString() ?? "";
             var data = root.TryGetProperty("data", out var d) ? d.GetString() ?? "" : "";
+            var title = root.TryGetProperty("title", out var titleElement) ? titleElement.GetString() : null;
+            var level = root.TryGetProperty("level", out var levelElement) ? levelElement.GetString() : null;
+            var source = root.TryGetProperty("source", out var sourceElement) ? sourceElement.GetString() : null;
 
             var attachments = new List<AttachmentInfo>();
             if (root.TryGetProperty("attachments", out var arr) && arr.ValueKind == JsonValueKind.Array)
@@ -446,6 +545,18 @@ public sealed class WebSocketServerService(
             if (OnMessageReceived is not null)
             {
                 await OnMessageReceived.Invoke(clientId, type, data, attachments);
+            }
+
+            if (OnClientMessageReceived is not null)
+            {
+                await OnClientMessageReceived.Invoke(new WebSocketClientMessage(
+                    clientId,
+                    type,
+                    data,
+                    attachments,
+                    title,
+                    level,
+                    source));
             }
         }
         catch (Exception ex)
@@ -519,6 +630,41 @@ public sealed class WebSocketServerService(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "解析内部对话 feed 消息失败：{ClientId}，{Json}", clientId, json);
+        }
+    }
+
+    private async Task HandleModelCapabilityMessageAsync(string clientId, string json, CancellationToken cancellationToken)
+    {
+        ModelCapabilityRequest? request = null;
+        try
+        {
+            request = JsonSerializer.Deserialize(json, WebSocketJsonContext.Default.ModelCapabilityRequest);
+            if (request is null)
+            {
+                await SendModelCapabilityErrorAsync(clientId, null, "INVALID_REQUEST", "请求内容为空。", false, cancellationToken);
+                return;
+            }
+
+            var response = await modelCapabilityService.InvokeAsync(request, cancellationToken);
+            var payload = JsonSerializer.Serialize(response, WebSocketJsonContext.Default.ModelCapabilityResponse);
+            await SendToModelCapabilityClientAsync(clientId, payload, cancellationToken);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            await SendModelCapabilityErrorAsync(clientId, request, "UNAUTHORIZED_CAPABILITY", ex.Message, false, cancellationToken);
+        }
+        catch (TimeoutException ex)
+        {
+            await SendModelCapabilityErrorAsync(clientId, request, "TIMEOUT", ex.Message, true, cancellationToken);
+        }
+        catch (InvalidOperationException ex)
+        {
+            await SendModelCapabilityErrorAsync(clientId, request, "MODEL_NOT_CONFIGURED", ex.Message, false, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "处理 model-capability 请求失败：{Json}", json);
+            await SendModelCapabilityErrorAsync(clientId, request, "INTERNAL_ERROR", ex.Message, true, cancellationToken);
         }
     }
 
@@ -676,6 +822,38 @@ public sealed class WebSocketServerService(
         }
     }
 
+    private async Task SendToModelCapabilityClientAsync(string clientId, string message, CancellationToken cancellationToken = default)
+    {
+        if (!_modelCapabilityClients.TryGetValue(clientId, out var socket) || socket.State != WebSocketState.Open)
+        {
+            return;
+        }
+
+        if (!_modelCapabilityClientLocks.TryGetValue(clientId, out var sendLock))
+        {
+            return;
+        }
+
+        await sendLock.WaitAsync(cancellationToken);
+        try
+        {
+            var bytes = Encoding.UTF8.GetBytes(message);
+            await socket.SendAsync(
+                new ArraySegment<byte>(bytes),
+                WebSocketMessageType.Text,
+                endOfMessage: true,
+                cancellationToken);
+        }
+        catch (WebSocketException ex)
+        {
+            logger.LogWarning(ex, "发送内部模型能力消息失败，客户端：{ClientId}", clientId);
+        }
+        finally
+        {
+            sendLock.Release();
+        }
+    }
+
     private Task SendConversationFeedErrorAsync(string clientId, string message, CancellationToken cancellationToken)
     {
         var payload = JsonSerializer.Serialize(new ConversationFeedControlMessage
@@ -688,6 +866,25 @@ public sealed class WebSocketServerService(
         }, WebSocketJsonContext.Default.ConversationFeedControlMessage);
 
         return SendToConversationFeedClientAsync(clientId, payload, cancellationToken);
+    }
+
+    private Task SendModelCapabilityErrorAsync(
+        string clientId,
+        ModelCapabilityRequest? request,
+        string code,
+        string message,
+        bool retryable,
+        CancellationToken cancellationToken)
+    {
+        var payload = JsonSerializer.Serialize(new ModelCapabilityResponse
+        {
+            RequestId = request?.RequestId ?? string.Empty,
+            Success = false,
+            ErrorCode = code,
+            ErrorMessage = message
+        }, WebSocketJsonContext.Default.ModelCapabilityResponse);
+
+        return SendToModelCapabilityClientAsync(clientId, payload, cancellationToken);
     }
 
     /// <summary>
@@ -735,6 +932,30 @@ public sealed class WebSocketServerService(
         {
             sendLock.Dispose();
         }
+    }
+
+    private void RemoveModelCapabilityClient(string clientId)
+    {
+        _modelCapabilityClients.TryRemove(clientId, out _);
+
+        if (_modelCapabilityClientLocks.TryRemove(clientId, out var sendLock))
+        {
+            sendLock.Dispose();
+        }
+    }
+
+    private static async Task<string?> ReadTextMessageAsync(WebSocket socket, byte[] buffer, CancellationToken cancellationToken)
+    {
+        using var message = new MemoryStream();
+        while (true)
+        {
+            var result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
+            if (result.MessageType == WebSocketMessageType.Close) return null;
+            if (result.Count > 0) message.Write(buffer, 0, result.Count);
+            if (result.EndOfMessage) break;
+        }
+
+        return Encoding.UTF8.GetString(message.ToArray());
     }
 
     private static string NormalizePath(string? path)

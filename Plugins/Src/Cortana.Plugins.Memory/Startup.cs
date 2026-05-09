@@ -33,9 +33,12 @@ public static partial class Startup
         services.AddSingleton<IMemoryObservationWriter, MemoryObservationWriter>();
         services.AddSingleton<IMemoryReadToolHandler, MemoryReadToolHandler>();
         services.AddSingleton<IMemoryWriteToolHandler, MemoryWriteToolHandler>();
-        services.AddSingleton<IMemorySemanticProcessor, FallbackMemorySemanticProcessor>();
+        services.AddSingleton<HostModelCapabilityClient>();
+        services.AddSingleton<FallbackMemorySemanticProcessor>();
+        services.AddSingleton<IMemorySemanticProcessor, HostModelMemorySemanticProcessor>();
         services.AddSingleton<IMemoryProcessingService, MemoryProcessingService>();
-        services.AddSingleton<IMemoryAbstractionGenerator, FallbackMemoryAbstractionGenerator>();
+        services.AddSingleton<FallbackMemoryAbstractionGenerator>();
+        services.AddSingleton<IMemoryAbstractionGenerator, HostModelMemoryAbstractionGenerator>();
         services.AddSingleton<IMemoryAbstractionService, MemoryAbstractionService>();
         services.AddHostedService<Services.MemoryIngestService>();
         services.AddHostedService<MemoryProcessingHostedService>();
