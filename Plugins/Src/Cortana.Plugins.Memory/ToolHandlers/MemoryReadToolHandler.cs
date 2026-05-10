@@ -39,7 +39,7 @@ public sealed class MemoryReadToolHandler(
 
             result = LimitRecallResult(result, maxMemoryCount);
             return MemoryToolResult.Ok("记忆召回成功。",
-                JsonSerializer.Serialize(result, MemoryToolJsonContext.Default.MemoryRecallResult));
+                JsonSerializer.Serialize(result, MemoryToolJsonContext.Chinese.MemoryRecallResult));
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
         {
@@ -72,7 +72,7 @@ public sealed class MemoryReadToolHandler(
             });
 
             return MemoryToolResult.Ok("记忆上下文供应成功。",
-                JsonSerializer.Serialize(result, MemoryToolJsonContext.Default.MemorySupplyResult));
+                JsonSerializer.Serialize(result, MemoryToolJsonContext.Chinese.MemorySupplyResult));
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
         {
@@ -98,7 +98,7 @@ public sealed class MemoryReadToolHandler(
             });
 
             return MemoryToolResult.Ok("记忆系统状态读取成功。",
-                JsonSerializer.Serialize(result, MemoryToolJsonContext.Default.MemoryStatusResult));
+                JsonSerializer.Serialize(result, MemoryToolJsonContext.Chinese.MemoryStatusResult));
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
         {

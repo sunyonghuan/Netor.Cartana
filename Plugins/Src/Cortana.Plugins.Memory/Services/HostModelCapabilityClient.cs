@@ -48,7 +48,7 @@ public sealed class HostModelCapabilityClient(PluginSettings settings, ILogger<H
                 Instruction = instruction,
                 Input = input,
                 OutputFormat = outputFormat,
-                TimeoutMs = 30000,
+                TimeoutMs = 0,
                 MaxOutputTokens = 4096
             };
 
@@ -64,12 +64,18 @@ public sealed class HostModelCapabilityClient(PluginSettings settings, ILogger<H
                 var response = JsonSerializer.Deserialize(text, MemoryHostModelCapabilityJsonContext.Default.HostModelCapabilityResponse);
                 if (response is null)
                 {
+                    await SafeCloseAsync(socket).ConfigureAwait(false);
                     return null;
                 }
 
-                if (response.Success) return response.Content;
+                if (response.Success)
+                {
+                    await SafeCloseAsync(socket).ConfigureAwait(false);
+                    return response.Content;
+                }
 
                 logger.LogWarning("宿主模型能力调用失败：{Code} {Message}", response.ErrorCode, response.ErrorMessage);
+                await SafeCloseAsync(socket).ConfigureAwait(false);
                 return null;
             }
         }
@@ -157,5 +163,20 @@ public sealed class HostModelCapabilityClient(PluginSettings settings, ILogger<H
         }
 
         return Encoding.UTF8.GetString(message.ToArray());
+    }
+
+    private static async Task SafeCloseAsync(ClientWebSocket socket)
+    {
+        try
+        {
+            if (socket.State is WebSocketState.Open or WebSocketState.CloseReceived)
+            {
+                await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None).ConfigureAwait(false);
+            }
+        }
+        catch
+        {
+            // 关闭握手失败不影响本次模型能力调用结果。
+        }
     }
 }

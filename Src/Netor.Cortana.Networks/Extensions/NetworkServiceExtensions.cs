@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
+using Netor.Cortana.AI.Memory;
 using Netor.Cortana.Entitys;
 using Netor.Cortana.Networks.Proxy;
 
@@ -25,6 +26,7 @@ public static class NetworkServiceExtensions
         services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<WebSocketEventRelayService>());
         services.AddSingleton<WebSocketFeedServerService>();
         services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<WebSocketFeedServerService>());
+        services.AddSingleton<ILongMemorySupplyClient>(sp => sp.GetRequiredService<WebSocketFeedServerService>());
         services.AddSingleton<WebSocketConversationFeedRelayService>();
         services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<WebSocketConversationFeedRelayService>());
 

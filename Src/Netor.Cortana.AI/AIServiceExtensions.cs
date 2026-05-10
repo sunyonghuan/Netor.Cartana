@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 using Netor.Cortana.AI.Drivers;
+using Netor.Cortana.AI.Memory;
 using Netor.Cortana.AI.Providers;
 using Netor.Cortana.Entitys;
 using Netor.Cortana.AI.Proxys;
@@ -30,6 +31,8 @@ public static class AIServiceExtensions
         // Providers（同时作为 AIContextProvider 注入到 AIAgentFactory）
         services.AddSingleton<ProjectSettingsProvider>();
         services.AddSingleton<AIContextProvider>(sp => sp.GetRequiredService<ProjectSettingsProvider>());
+        services.AddSingleton<LongMemoryContextProvider>();
+        services.AddSingleton<AIContextProvider>(sp => sp.GetRequiredService<LongMemoryContextProvider>());
         services.AddSingleton<ChatHistoryDataProvider>();
         services.AddSingleton<ModelPurposeResolver>();
         services.AddSingleton<IHostCapabilityBroker, HostCapabilityBroker>();

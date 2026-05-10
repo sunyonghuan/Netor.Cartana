@@ -280,7 +280,7 @@ public partial class MainWindow : Window
     private void OnWindowClosing(object? sender, WindowClosingEventArgs e)
     {
         // 用户点关闭按钮时隐藏窗口，不退出程序
-        if (!_forceClose)
+        if (!_forceClose && !App.IsShuttingDown)
         {
             e.Cancel = true;
             Hide();

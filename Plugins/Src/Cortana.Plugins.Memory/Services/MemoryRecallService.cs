@@ -55,7 +55,7 @@ public sealed class MemoryRecallService(IMemoryStore store, IMemorySettingsServi
         var summary = BuildSummary(windowItems, windows);
 
         var hitMemoryIds = windowItems.Select(static item => item.Id).ToArray();
-        var hitMemoryIdsJson = JsonSerializer.Serialize(hitMemoryIds, MemoryInternalJsonContext.Default.StringArray);
+        var hitMemoryIdsJson = JsonSerializer.Serialize(hitMemoryIds, MemoryInternalJsonContext.Chinese.StringArray);
         store.InsertRecallLog(new RecallLog
         {
             Id = Guid.NewGuid().ToString("N"),
@@ -77,7 +77,7 @@ public sealed class MemoryRecallService(IMemoryStore store, IMemorySettingsServi
                     MaxMemoryCount = options.MaxMemoryCount,
                     MinimumConfidence = options.MinimumConfidence
                 },
-                MemoryInternalJsonContext.Default.RecallBudgetSnapshot),
+                MemoryInternalJsonContext.Chinese.RecallBudgetSnapshot),
             AppliedPolicyJson = JsonSerializer.Serialize(
                 new RecallPolicySnapshot
                 {
@@ -86,7 +86,7 @@ public sealed class MemoryRecallService(IMemoryStore store, IMemorySettingsServi
                     Source = "memory-store-keyword",
                     SupportsPendingCandidateOnQueryMatch = true
                 },
-                MemoryInternalJsonContext.Default.RecallPolicySnapshot),
+                MemoryInternalJsonContext.Chinese.RecallPolicySnapshot),
             TraceId = request.TraceId,
             CreatedAt = accessedAt
         });

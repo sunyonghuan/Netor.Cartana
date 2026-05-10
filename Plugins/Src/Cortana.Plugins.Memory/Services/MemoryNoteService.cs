@@ -46,7 +46,7 @@ public sealed class MemoryNoteService(IMemoryStore store) : IMemoryNoteService
             Summary = content,
             Detail = content,
             KeywordsJson = "[]",
-            TagsJson = JsonSerializer.Serialize(new[] { "manual", "tool" }, MemoryInternalJsonContext.Default.StringArray),
+            TagsJson = JsonSerializer.Serialize(new[] { "manual", "tool" }, MemoryInternalJsonContext.Chinese.StringArray),
             EntitiesJson = "[]",
             SourceObservationIdsJson = "[]",
             SourceSessionIdsJson = "[]",
@@ -61,7 +61,7 @@ public sealed class MemoryNoteService(IMemoryStore store) : IMemoryNoteService
             ClarityLevel = "clear",
             ConfirmationState = "pending",
             LifecycleState = "candidate",
-            CompatibilityTagsJson = JsonSerializer.Serialize(new[] { "manual-note-v1" }, MemoryInternalJsonContext.Default.StringArray),
+            CompatibilityTagsJson = JsonSerializer.Serialize(new[] { "manual-note-v1" }, MemoryInternalJsonContext.Chinese.StringArray),
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -74,7 +74,7 @@ public sealed class MemoryNoteService(IMemoryStore store) : IMemoryNoteService
             MemoryKind = "fragment",
             MutationType = "manual_create",
             BeforeJson = null,
-            AfterJson = JsonSerializer.Serialize(fragment, MemoryInternalJsonContext.Default.MemoryFragment),
+            AfterJson = JsonSerializer.Serialize(fragment, MemoryInternalJsonContext.Chinese.MemoryFragment),
             Reason = request.Reason.Trim(),
             TraceId = traceId,
             CreatedAt = now

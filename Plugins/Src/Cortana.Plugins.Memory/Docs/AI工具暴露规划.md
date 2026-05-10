@@ -1,5 +1,7 @@
 # AI 工具暴露规划
 
+> 职责边界更新：`memory_supply_context` 是 AI 主动查询、MCP、调试和验收工具，不作为主对话默认长期记忆注入链路。默认注入已改由宿主 `LongMemoryContextProvider` 通过内部 WebSocket/feed 控制面 `memory.supply.request` 请求 Memory 插件完成。
+
 ## 1. 规划背景
 
 当前记忆插件已经具备事实摄取、长期记忆片段生成、抽象记忆生成和基础召回能力，但还不适合立即把全部能力暴露给 AI。
@@ -116,7 +118,9 @@ appliedPolicy: MemorySupplyPolicy
 1. 新会话开始。
 2. 用户切换项目或工作区。
 3. AI 进入编码、验收、规划、调试等复杂任务前。
-4. 宿主准备构建上下文前。
+4. 调试或验收宿主准备构建上下文前的供应质量。
+
+默认注入说明：宿主默认上下文注入不直接调用此工具，而是通过内部控制面协议传递完整 `agentId`、`sessionId`、`turnId`、`messageId`、`workspaceDirectory` 和 `traceId` 等上下文字段，再由宿主格式化为最终 prompt。
 
 ### 4.3 `memory_get_status`
 

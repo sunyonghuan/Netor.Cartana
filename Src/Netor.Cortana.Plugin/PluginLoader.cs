@@ -37,7 +37,7 @@ public sealed record LoadedPluginInfo(
 /// 扫描插件目录，根据 plugin.json 中的 runtime 字段委托给对应通道的 Host 加载，
 /// 并通过 <see cref="FileSystemWatcher"/> 实现热插拔。
 /// </summary>
-public sealed class PluginLoader : IDisposable
+public sealed class PluginLoader : IDisposable, IAsyncDisposable
 {
     private readonly ILogger<PluginLoader> _logger;
     private readonly ILoggerFactory _loggerFactory;
@@ -581,6 +581,37 @@ public sealed class PluginLoader : IDisposable
         {
             mcpHost.ConnectionStateChanged -= OnMcpConnectionStateChanged;
             mcpHost.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+
+        _mcpHosts.Clear();
+    }
+
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        DisposeWatchers();
+
+        foreach (var nativeHost in _nativeHosts.Values)
+        {
+            nativeHost.Dispose();
+        }
+
+        _nativeHosts.Clear();
+
+        foreach (var processHost in _processHosts.Values)
+        {
+            processHost.Dispose();
+        }
+
+        _processHosts.Clear();
+
+        foreach (var mcpHost in _mcpHosts.Values)
+        {
+            mcpHost.ConnectionStateChanged -= OnMcpConnectionStateChanged;
+            await mcpHost.DisposeAsync();
         }
 
         _mcpHosts.Clear();

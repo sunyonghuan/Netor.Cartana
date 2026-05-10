@@ -11,30 +11,44 @@ public sealed class MemoryAbstractionService(
     IMemoryAbstractionGenerator generator,
     ILogger<MemoryAbstractionService> logger) : IMemoryAbstractionService
 {
-    public void RunAbstractionPass(string? agentId = null, string? workspaceId = null, int minSupportCount = 3, int topPerTopic = 50)
+    public async Task RunAbstractionPassAsync(string? agentId = null, string? workspaceId = null, int minSupportCount = 3, int topPerTopic = 50, CancellationToken cancellationToken = default)
     {
         var generatedCount = 0;
+        var skippedCount = 0;
         var agents = string.IsNullOrWhiteSpace(agentId) ? store.GetDistinctAgentIds() : new[] { agentId };
         foreach (var ag in agents)
         {
-            // 拉取候选 fragment，按 topic 聚合
-            var fragments = store.GetFragmentsForAbstraction(ag, workspaceId, null, minSupportCount, topPerTopic);
-            var byTopic = fragments.GroupBy(f => f.Topic ?? string.Empty, StringComparer.OrdinalIgnoreCase);
-            foreach (var g in byTopic)
+            var workspaces = workspaceId is null ? store.GetDistinctWorkspaceIds(ag) : [workspaceId];
+            foreach (var ws in workspaces)
             {
-                var topic = g.Key;
-                var list = g.ToList();
-                if (list.Count < minSupportCount) continue;
+                cancellationToken.ThrowIfCancellationRequested();
 
-                var abstraction = generator.GenerateAbstraction(ag, workspaceId, topic, list, Guid.NewGuid().ToString("N"));
-                store.UpsertMemoryAbstraction(abstraction);
-                InsertMutation(ag, abstraction.Id, "abstraction", "create", null, JsonSerializer.Serialize(abstraction, MemoryInternalJsonContext.Default.MemoryAbstraction), "抽象记忆批处理生成。", null!);
-                InsertAbstractionCreatedEvent(ag, abstraction.Id, abstraction.SupportingMemoryIdsJson);
-                generatedCount++;
+                var fragments = store.GetFragmentsForAbstraction(ag, ws, null, minSupportCount, topPerTopic);
+                var byTopic = fragments.GroupBy(f => f.Topic ?? string.Empty, StringComparer.OrdinalIgnoreCase);
+                foreach (var g in byTopic)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    var topic = g.Key;
+                    var list = g.ToList();
+                    if (list.Count < minSupportCount) continue;
+
+                    var abstraction = await generator.GenerateAbstractionAsync(ag, ws, topic, list, Guid.NewGuid().ToString("N"), cancellationToken).ConfigureAwait(false);
+                    if (abstraction is null)
+                    {
+                        skippedCount++;
+                        continue;
+                    }
+
+                    store.UpsertMemoryAbstraction(abstraction);
+                    InsertMutation(ag, abstraction.Id, "abstraction", "create", null, JsonSerializer.Serialize(abstraction, MemoryInternalJsonContext.Chinese.MemoryAbstraction), "抽象记忆批处理生成。", null!);
+                    InsertAbstractionCreatedEvent(ag, abstraction.Id, abstraction.SupportingMemoryIdsJson);
+                    generatedCount++;
+                }
             }
         }
 
-        logger.LogInformation("抽象记忆批处理完成。AgentId={AgentId}, WorkspaceId={WorkspaceId}, GeneratedCount={GeneratedCount}", agentId, workspaceId, generatedCount);
+        logger.LogInformation("抽象记忆批处理完成。AgentId={AgentId}, WorkspaceId={WorkspaceId}, Generated={GeneratedCount}, Skipped={SkippedCount}", agentId, workspaceId, generatedCount, skippedCount);
     }
 
     private void InsertAbstractionCreatedEvent(string agentId, string abstractionId, string supportingMemoryIdsJson)
@@ -49,7 +63,7 @@ public sealed class MemoryAbstractionService(
             EventId = Guid.NewGuid().ToString("N"),
             AgentId = string.IsNullOrWhiteSpace(agentId) ? "global" : agentId,
             EventType = "abstraction.created",
-            PayloadJson = JsonSerializer.Serialize(payload, MemoryInternalJsonContext.Default.AbstractionCreatedEventPayload),
+            PayloadJson = JsonSerializer.Serialize(payload, MemoryInternalJsonContext.Chinese.AbstractionCreatedEventPayload),
             ProcessedAt = DateTimeOffset.UtcNow.ToString("O")
         });
     }

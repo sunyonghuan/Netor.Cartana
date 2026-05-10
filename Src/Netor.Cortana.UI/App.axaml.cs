@@ -25,6 +25,7 @@ namespace Netor.Cortana.UI;
 public partial class App : Application
 {
     private static CancellationTokenSource _cts = new();
+    private static volatile bool _isShuttingDown;
 
     private TrayIcon? _trayIcon;
     private FloatWindow? _floatWindow;
@@ -38,6 +39,7 @@ public partial class App : Application
     /// </summary>
     internal static string AppName {get;}="玛得令";
     internal static CancellationTokenSource CancellationTokenSource => _cts;
+    internal static bool IsShuttingDown => _isShuttingDown;
 
     /// <summary>
     /// 用户数据路径（exe 所在目录）。
@@ -136,9 +138,7 @@ public partial class App : Application
 
             desktop.Exit += (_, _) =>
             {
-                _ = StopBackgroundServicesAsync(_cts.Token);
-                _cts.Cancel();
-                _trayIcon?.Dispose();
+                ShutdownApplicationAsync().GetAwaiter().GetResult();
             };
         }
 
@@ -307,12 +307,6 @@ public partial class App : Application
             description: "加载历史时最多携带多少个摘要段落，超出的旧段落不再加载（但不删除）。",
             defaultValue: "15", valueType: "int", sortOrder: 3);
 
-        // v1.2.x: 用途级模型路由 —— 宿主先行原则
-        sysSettings.EnsureSetting("Memory.ModelId",
-            group: "记忆体系", displayName: "记忆加工模型",
-            description: "插件申请 LLM 用于记忆提取/更新/检索时所使用的模型。留空则回退到当前对话模型。",
-            defaultValue: "", valueType: "model", sortOrder: 0);
-
         sysSettings.EnsureSetting("AI.Trace.Enabled",
             group: "调试", displayName: "AI 全量调试日志",
             description: "记录 AI 请求、流式更新、响应和异常的完整调试日志。发布版默认关闭，开启后可用于排查工具调用与上下文问题。",
@@ -320,9 +314,10 @@ public partial class App : Application
 
         // v1.3: Ollama 兼容代理配置，供 ProxyWindow 设置页和网络代理服务读取。
         sysSettings.EnsureOllamaProxySettings();
-        // 版本迁移：移除已废弃的旧压缩配置项
+        // 版本迁移：移除已废弃的旧配置项
         sysSettings.DeleteSetting("ChatHistory.MaxContentLength");
         sysSettings.DeleteSetting("ChatHistory.MaxContentCount");
+        sysSettings.DeleteSetting("Memory.ModelId");
 
         var savedWorkspace = sysSettings.GetValue("System.WorkspaceDirectory");
         var workspacePath = (!string.IsNullOrWhiteSpace(savedWorkspace) && Directory.Exists(savedWorkspace))
@@ -385,7 +380,7 @@ public partial class App : Application
         var exitItem = new NativeMenuItem("退出助理");
         exitItem.Click += (_, _) =>
         {
-            desktop.Shutdown();
+            _ = ShutdownFromTrayAsync(desktop);
         };
 
         var menu = new NativeMenu();
@@ -416,6 +411,57 @@ public partial class App : Application
     private static void UpdateVoiceMenuItemHeader(NativeMenuItem item, bool enabled)
     {
         item.Header = enabled ? "语音唤醒：开" : "语音唤醒：关";
+    }
+
+    /// <summary>
+    /// 托盘菜单触发的退出入口。先释放后台资源，再关闭 Avalonia，避免插件子进程驻留。
+    /// </summary>
+    private async Task ShutdownFromTrayAsync(IClassicDesktopStyleApplicationLifetime desktop)
+    {
+        if (_isShuttingDown) return;
+
+        await ShutdownApplicationAsync();
+
+        if (desktop.MainWindow is MainWindow mainWindow)
+        {
+            mainWindow.ForceClose();
+        }
+
+        _trayIcon?.Dispose();
+        _trayIcon = null;
+        desktop.Shutdown();
+    }
+
+    /// <summary>
+    /// 统一退出流程：取消业务任务、卸载插件/MCP、停止托管服务、释放 DI 容器。
+    /// </summary>
+    private static async Task ShutdownApplicationAsync()
+    {
+        if (_isShuttingDown) return;
+        _isShuttingDown = true;
+
+        try { _cts.Cancel(); } catch { }
+
+        await RunShutdownStepAsync(UnloadPluginsAsync(), "卸载插件/MCP 系统");
+        await RunShutdownStepAsync(StopBackgroundServicesAsync(CancellationToken.None), "停止后台服务");
+
+        if (Services is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
+    }
+
+    private static async Task RunShutdownStepAsync(Task task, string stepName)
+    {
+        try
+        {
+            await task.WaitAsync(TimeSpan.FromSeconds(8));
+        }
+        catch (TimeoutException)
+        {
+            var logger = Services.GetService<ILogger<App>>();
+            logger?.LogWarning("退出流程超时，跳过步骤：{StepName}", stepName);
+        }
     }
 
     /// <summary>
@@ -538,6 +584,8 @@ public partial class App : Application
     /// </summary>
     private static async Task LoadPluginsAsync(CancellationToken cancellationToken)
     {
+        if (cancellationToken.IsCancellationRequested) return;
+
         var logger = Services.GetRequiredService<ILogger<App>>();
         try
         {
@@ -561,6 +609,25 @@ public partial class App : Application
         catch (Exception ex)
         {
             logger.LogError(ex, "插件/MCP 系统启动失败");
+        }
+    }
+
+    /// <summary>
+    /// 退出时显式卸载插件、断开 MCP，并杀掉进程通道插件子进程。
+    /// </summary>
+    private static async Task UnloadPluginsAsync()
+    {
+        try
+        {
+            var pluginLoader = Services.GetService<PluginLoader>();
+            if (pluginLoader is null) return;
+
+            await pluginLoader.DisposeAsync();
+        }
+        catch (Exception ex)
+        {
+            var logger = Services.GetService<ILogger<App>>();
+            logger?.LogError(ex, "卸载插件/MCP 系统失败");
         }
     }
 

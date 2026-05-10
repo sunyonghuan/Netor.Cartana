@@ -22,5 +22,5 @@ public sealed record MemoryToolResult
         Serialize(new MemoryToolResult { Success = false, Code = code, Message = message, Data = data });
 
     private static string Serialize(MemoryToolResult result) =>
-        JsonSerializer.Serialize(result, MemoryToolJsonContext.Default.MemoryToolResult);
+        JsonSerializer.Serialize(result, MemoryToolJsonContext.Chinese.MemoryToolResult);
 }

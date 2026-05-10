@@ -81,7 +81,7 @@ LIMIT @limit";
         if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("抽象记忆标识不能为空。", nameof(id));
         if (string.IsNullOrWhiteSpace(accessedAt)) throw new ArgumentException("访问时间不能为空。", nameof(accessedAt));
 
-        database.Execute("UPDATE memory_abstractions SET accessCount = accessCount + 1, lastAccessedAt = @accessedAt, updatedAt = @accessedAt WHERE id = @id", command =>
+        database.Execute("UPDATE memory_abstractions SET accessCount = accessCount + 1, retentionScore = MIN(retentionScore + 0.05, 1.0), lastAccessedAt = @accessedAt, updatedAt = @accessedAt WHERE id = @id", command =>
         {
             command.AddParameter("@accessedAt", accessedAt);
             command.AddParameter("@id", id);

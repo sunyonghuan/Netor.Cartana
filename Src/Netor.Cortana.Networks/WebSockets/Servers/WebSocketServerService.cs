@@ -1,8 +1,10 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
+using Netor.Cortana.AI.Memory;
 using Netor.Cortana.AI.Providers;
 using Netor.Cortana.Entitys;
+using Netor.Cortana.Entitys.Memory;
 using Netor.Cortana.Entitys.ModelCapability;
 using Netor.Cortana.Entitys.Services;
 using Netor.EventHub;
@@ -38,7 +40,7 @@ public sealed class WebSocketServerService(
     SystemSettingsService settingsService,
     IPublisher publisher,
     CortanaDbContext db,
-    IPluginModelCapabilityService modelCapabilityService) : IHostedService, IChatTransport, IDisposable
+    IPluginModelCapabilityService modelCapabilityService) : IHostedService, IChatTransport, ILongMemorySupplyClient, IDisposable
 {
     private HttpListener? _listener;
     private CancellationTokenSource? _cts;
@@ -49,6 +51,7 @@ public sealed class WebSocketServerService(
     private readonly ConcurrentDictionary<string, byte> _conversationFeedSubscriptions = new();
     private readonly ConcurrentDictionary<string, WebSocket> _modelCapabilityClients = new();
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _modelCapabilityClientLocks = new();
+    private readonly ConcurrentDictionary<string, TaskCompletionSource<MemoryContextSupplyPackage?>> _memorySupplyPendingRequests = new();
 
     /// <summary>
     /// 服务器监听端口。
@@ -209,6 +212,66 @@ public sealed class WebSocketServerService(
         foreach (var (clientId, _) in _conversationFeedSubscriptions)
         {
             await SendToConversationFeedClientAsync(clientId, message, cancellationToken);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<MemoryContextSupplyPackage?> SupplyAsync(
+        MemoryContextSupplyRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (_conversationFeedClients.IsEmpty)
+        {
+            logger.LogDebug("长期记忆供应请求跳过：没有已连接的内部对话 feed 客户端。RequestId={RequestId}", request.RequestId);
+            return null;
+        }
+
+        var requestId = string.IsNullOrWhiteSpace(request.RequestId)
+            ? Guid.NewGuid().ToString("N")
+            : request.RequestId;
+        if (!string.Equals(request.RequestId, requestId, StringComparison.Ordinal))
+        {
+            request = request with { RequestId = requestId };
+        }
+
+        var pending = new TaskCompletionSource<MemoryContextSupplyPackage?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_memorySupplyPendingRequests.TryAdd(requestId, pending))
+        {
+            logger.LogDebug("长期记忆供应请求 requestId 冲突，已降级为空。RequestId={RequestId}", requestId);
+            return null;
+        }
+
+        try
+        {
+            var payload = JsonSerializer.Serialize(request, WebSocketJsonContext.Default.MemoryContextSupplyRequest);
+            var sent = false;
+            foreach (var clientId in _conversationFeedClients.Keys)
+            {
+                await SendToConversationFeedClientAsync(clientId, payload, cancellationToken).ConfigureAwait(false);
+                sent = true;
+            }
+
+            if (!sent)
+            {
+                return null;
+            }
+
+            var timeoutMs = Math.Clamp(request.TimeoutMs <= 0 ? 250 : request.TimeoutMs, 50, 2_000);
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(TimeSpan.FromMilliseconds(timeoutMs));
+            await using var registration = timeoutCts.Token.Register(static state =>
+            {
+                var source = (TaskCompletionSource<MemoryContextSupplyPackage?>)state!;
+                source.TrySetResult(null);
+            }, pending);
+
+            return await pending.Task.ConfigureAwait(false);
+        }
+        finally
+        {
+            _memorySupplyPendingRequests.TryRemove(requestId, out _);
         }
     }
 
@@ -574,6 +637,23 @@ public sealed class WebSocketServerService(
             var type = root.TryGetProperty("type", out var typeElement)
                 ? typeElement.GetString() ?? string.Empty
                 : string.Empty;
+            var op = root.TryGetProperty("op", out var opElement)
+                ? opElement.GetString() ?? string.Empty
+                : string.Empty;
+
+            if (string.Equals(type, "response", StringComparison.Ordinal)
+                && string.Equals(op, MemoryContextSupplyProtocol.SupplyPackageOperation, StringComparison.Ordinal))
+            {
+                CompleteMemorySupplyPackage(json);
+                return;
+            }
+
+            if (string.Equals(type, "error", StringComparison.Ordinal)
+                && string.Equals(op, MemoryContextSupplyProtocol.SupplyErrorOperation, StringComparison.Ordinal))
+            {
+                CompleteMemorySupplyError(json);
+                return;
+            }
 
             if (string.Equals(type, "subscribe", StringComparison.Ordinal))
             {
@@ -630,6 +710,41 @@ public sealed class WebSocketServerService(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "解析内部对话 feed 消息失败：{ClientId}，{Json}", clientId, json);
+        }
+    }
+
+    private void CompleteMemorySupplyPackage(string json)
+    {
+        var package = JsonSerializer.Deserialize(json, WebSocketJsonContext.Default.MemoryContextSupplyPackage);
+        if (package is null || string.IsNullOrWhiteSpace(package.RequestId))
+        {
+            return;
+        }
+
+        if (_memorySupplyPendingRequests.TryRemove(package.RequestId, out var pending))
+        {
+            pending.TrySetResult(package);
+        }
+    }
+
+    private void CompleteMemorySupplyError(string json)
+    {
+        var error = JsonSerializer.Deserialize(json, WebSocketJsonContext.Default.MemoryContextSupplyError);
+        if (error is null || string.IsNullOrWhiteSpace(error.RequestId))
+        {
+            return;
+        }
+
+        logger.LogDebug(
+            "长期记忆供应返回错误：RequestId={RequestId}, Code={Code}, Message={Message}, Retryable={Retryable}",
+            error.RequestId,
+            error.Code,
+            error.Message,
+            error.Retryable);
+
+        if (_memorySupplyPendingRequests.TryRemove(error.RequestId, out var pending))
+        {
+            pending.TrySetResult(null);
         }
     }
 

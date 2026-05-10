@@ -460,6 +460,18 @@ VALUES
         }
     }
 
+    public IReadOnlyList<string?> GetDistinctWorkspaceIds(string agentId)
+    {
+        try
+        {
+            return memoryFragments.GetDistinctWorkspaceIds(agentId);
+        }
+        catch (SqliteException ex)
+        {
+            throw CreateStorageException("读取工作区列表", ex);
+        }
+    }
+
     public IReadOnlyList<ObservationRecord> GetUnprocessedObservations(string processorName, string? agentId, string? workspaceId, int limit)
     {
         if (string.IsNullOrWhiteSpace(processorName)) throw new ArgumentException("处理器名称不能为空。", nameof(processorName));
@@ -509,6 +521,18 @@ VALUES
         catch (SqliteException ex)
         {
             throw CreateStorageException("检索相似记忆片段", ex);
+        }
+    }
+
+    public MemoryFragment? GetFragmentById(string id)
+    {
+        try
+        {
+            return memoryFragments.GetById(id);
+        }
+        catch (SqliteException ex)
+        {
+            throw CreateStorageException("按ID查询记忆片段", ex);
         }
     }
 
@@ -970,5 +994,109 @@ WHERE (@agent IS NULL OR agentId = @agent)
     private static MemoryStorageException CreateStorageException(string operation, SqliteException exception)
     {
         return new MemoryStorageException($"记忆存储操作失败：{operation}", exception);
+    }
+
+    public int ApplyDecay(double minimumScore, double forgetThreshold)
+    {
+        try
+        {
+            using var conn = database.OpenConnection();
+            var now = DateTime.UtcNow.ToString("o");
+            var totalAffected = 0;
+
+            // 1. 对活跃/候选片段执行衰减
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = @"UPDATE memory_fragments 
+                    SET retentionScore = MAX(retentionScore - decayRate, 0.0), updatedAt = @now
+                    WHERE lifecycleState IN ('active', 'candidate') AND retentionScore > 0";
+                Set(cmd, "@now", now);
+                totalAffected += cmd.ExecuteNonQuery();
+            }
+
+            // 2. 对活跃/候选抽象执行衰减
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = @"UPDATE memory_abstractions 
+                    SET retentionScore = MAX(retentionScore - decayRate, 0.0), updatedAt = @now
+                    WHERE lifecycleState IN ('active', 'candidate') AND retentionScore > 0";
+                Set(cmd, "@now", now);
+                totalAffected += cmd.ExecuteNonQuery();
+            }
+
+            // 3. 低于 minimumScore 的标记为 fading
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = @"UPDATE memory_fragments 
+                    SET lifecycleState = 'fading', updatedAt = @now
+                    WHERE lifecycleState IN ('active', 'candidate') AND retentionScore < @minScore AND retentionScore >= @forgetScore";
+                Set(cmd, "@now", now);
+                Set(cmd, "@minScore", minimumScore);
+                Set(cmd, "@forgetScore", forgetThreshold);
+                cmd.ExecuteNonQuery();
+            }
+
+            // 4. 低于 forgetThreshold 的标记为 forgotten
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = @"UPDATE memory_fragments 
+                    SET lifecycleState = 'forgotten', updatedAt = @now
+                    WHERE lifecycleState IN ('active', 'candidate', 'fading') AND retentionScore < @forgetScore";
+                Set(cmd, "@now", now);
+                Set(cmd, "@forgetScore", forgetThreshold);
+                cmd.ExecuteNonQuery();
+            }
+
+            // 5. 抽象同理
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = @"UPDATE memory_abstractions 
+                    SET lifecycleState = 'fading', updatedAt = @now
+                    WHERE lifecycleState IN ('active', 'candidate') AND retentionScore < @minScore AND retentionScore >= @forgetScore";
+                Set(cmd, "@now", now);
+                Set(cmd, "@minScore", minimumScore);
+                Set(cmd, "@forgetScore", forgetThreshold);
+                cmd.ExecuteNonQuery();
+            }
+
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = @"UPDATE memory_abstractions 
+                    SET lifecycleState = 'forgotten', updatedAt = @now
+                    WHERE lifecycleState IN ('active', 'candidate', 'fading') AND retentionScore < @forgetScore";
+                Set(cmd, "@now", now);
+                Set(cmd, "@forgetScore", forgetThreshold);
+                cmd.ExecuteNonQuery();
+            }
+
+            return totalAffected;
+        }
+        catch (SqliteException ex)
+        {
+            throw CreateStorageException("执行记忆衰减", ex);
+        }
+    }
+
+    public int AutoConfirmCandidates(int requiredAccessCount)
+    {
+        if (requiredAccessCount <= 0) requiredAccessCount = 3;
+
+        try
+        {
+            using var conn = database.OpenConnection();
+            var now = DateTime.UtcNow.ToString("o");
+
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"UPDATE memory_fragments 
+                SET lifecycleState = 'active', confirmationState = 'confirmed', updatedAt = @now
+                WHERE lifecycleState = 'candidate' AND confirmationState = 'pending' AND accessCount >= @count";
+            Set(cmd, "@now", now);
+            Set(cmd, "@count", requiredAccessCount);
+            return cmd.ExecuteNonQuery();
+        }
+        catch (SqliteException ex)
+        {
+            throw CreateStorageException("自动确认候选片段", ex);
+        }
     }
 }

@@ -9,10 +9,15 @@ namespace Cortana.Plugins.Memory.Processing;
 public sealed class FallbackMemorySemanticProcessor(ILogger<FallbackMemorySemanticProcessor> logger) : IMemorySemanticProcessor
 {
     private const int MaximumSummaryLength = 240;
-    private const int MinimumContentLength = 4; // 可调节的最小长度阈值
-    private const double MinimumConfidenceForFragment = 0.5; // 降低置信度阈值以便生成更多候选
+    private const int MinimumContentLength = 4;
+    private const double MinimumConfidenceForFragment = 0.5;
 
-    public IReadOnlyList<MemorySemanticCandidate> ExtractCandidates(ObservationRecord observation, string traceId)
+    public Task<IReadOnlyList<MemorySemanticCandidate>> ExtractCandidatesAsync(ObservationRecord observation, string traceId, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(ExtractCandidates(observation, traceId));
+    }
+
+    internal IReadOnlyList<MemorySemanticCandidate> ExtractCandidates(ObservationRecord observation, string traceId)
     {
         ArgumentNullException.ThrowIfNull(observation);
 

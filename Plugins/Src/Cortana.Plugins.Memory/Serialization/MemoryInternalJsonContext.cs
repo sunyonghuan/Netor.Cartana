@@ -1,3 +1,5 @@
+using System.Text.Encodings.Web;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Cortana.Plugins.Memory.Models;
 using Cortana.Plugins.Memory.Processing;
@@ -20,12 +22,22 @@ namespace Cortana.Plugins.Memory.Serialization;
 [JsonSerializable(typeof(RecallPolicySnapshot))]
 [JsonSerializable(typeof(ConversationFeedSubscribeFrame))]
 [JsonSerializable(typeof(ConversationFeedReplayFrame))]
+[JsonSerializable(typeof(MemoryContextSupplyRequest))]
+[JsonSerializable(typeof(MemoryContextSupplyPackage))]
+[JsonSerializable(typeof(MemoryContextSupplyError))]
 [JsonSerializable(typeof(McpObservationSourceFacts))]
 [JsonSerializable(typeof(FragmentExtractedEventPayload))]
 [JsonSerializable(typeof(ProcessingFailedEventPayload))]
 [JsonSerializable(typeof(AbstractionCreatedEventPayload))]
 internal sealed partial class MemoryInternalJsonContext : JsonSerializerContext
 {
+    /// <summary>
+    /// 中文明文序列化实例，避免中文被转义为 \uXXXX。
+    /// </summary>
+    public static MemoryInternalJsonContext Chinese { get; } = new(new JsonSerializerOptions
+    {
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    });
 }
 
 /// <summary>召回时记录到 <c>RecallLog.BudgetJson</c> 的预算快照。</summary>

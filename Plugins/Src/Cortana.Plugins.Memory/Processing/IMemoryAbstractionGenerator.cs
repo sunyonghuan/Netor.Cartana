@@ -8,7 +8,7 @@ namespace Cortana.Plugins.Memory.Processing;
 public interface IMemoryAbstractionGenerator
 {
     /// <summary>
-    /// 从多个 memory fragment 生成抽象记忆（statement、summary）。
+    /// 从多个 memory fragment 生成抽象记忆。模型不可用时返回 null，不降级。
     /// </summary>
-    MemoryAbstraction GenerateAbstraction(string agentId, string? workspaceId, string topic, IReadOnlyList<MemoryFragment> fragments, string traceId);
+    Task<MemoryAbstraction?> GenerateAbstractionAsync(string agentId, string? workspaceId, string topic, IReadOnlyList<MemoryFragment> fragments, string traceId, CancellationToken cancellationToken = default);
 }

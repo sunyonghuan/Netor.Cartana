@@ -88,6 +88,26 @@ LIMIT @limit";
     }
 
     /// <summary>
+    /// 获取指定智能体下已出现过的工作区标识集合。
+    /// </summary>
+    /// <param name="agentId">智能体标识。</param>
+    /// <returns>去重后的工作区标识列表；全局记忆以 null 表示。</returns>
+    public IReadOnlyList<string?> GetDistinctWorkspaceIds(string agentId)
+    {
+        if (string.IsNullOrWhiteSpace(agentId)) throw new ArgumentException("智能体标识不能为空。", nameof(agentId));
+
+        using var connection = database.OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT DISTINCT workspaceId FROM memory_fragments WHERE agentId = @agent";
+        command.AddParameter("@agent", agentId);
+
+        var list = new List<string?>();
+        using var reader = command.ExecuteReader();
+        while (reader.Read()) list.Add(reader.GetNullableString(0));
+        return list;
+    }
+
+    /// <summary>
     /// 查找与指定摘要完全一致的同类型记忆片段，用于合并或去重判断。
     /// </summary>
     /// <param name="agentId">智能体标识。</param>
@@ -135,9 +155,10 @@ LIMIT @limit";
 
         using var connection = database.OpenConnection();
         using var command = connection.CreateCommand();
+        var workspaceFilter = workspaceId is null ? "workspaceId IS NULL" : "workspaceId = @workspace";
         command.CommandText = "SELECT " + Columns + @" FROM memory_fragments
-WHERE agentId = @agent
-  AND (@workspace IS NULL OR workspaceId IS NULL OR workspaceId = @workspace)
+    WHERE agentId = @agent
+      AND " + workspaceFilter + @"
   AND (@topic IS NULL OR topic = @topic)
 ORDER BY salienceScore DESC, updatedAt DESC
 LIMIT @limit";
@@ -159,7 +180,7 @@ LIMIT @limit";
         if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("记忆片段标识不能为空。", nameof(id));
         if (string.IsNullOrWhiteSpace(accessedAt)) throw new ArgumentException("访问时间不能为空。", nameof(accessedAt));
 
-        database.Execute("UPDATE memory_fragments SET accessCount = accessCount + 1, lastAccessedAt = @accessedAt, updatedAt = @accessedAt WHERE id = @id", command =>
+        database.Execute("UPDATE memory_fragments SET accessCount = accessCount + 1, retentionScore = MIN(retentionScore + 0.05, 1.0), lastAccessedAt = @accessedAt, updatedAt = @accessedAt WHERE id = @id", command =>
         {
             command.AddParameter("@accessedAt", accessedAt);
             command.AddParameter("@id", id);

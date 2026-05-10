@@ -33,7 +33,7 @@ public sealed class MemoryMcpToolHandler(
             });
 
             return MemoryToolResult.Ok("对话轮次记录成功。",
-                JsonSerializer.Serialize(result, MemoryToolJsonContext.Default.MemoryRecordTurnResult));
+                JsonSerializer.Serialize(result, MemoryToolJsonContext.Chinese.MemoryRecordTurnResult));
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
         {
@@ -66,7 +66,7 @@ public sealed class MemoryMcpToolHandler(
         };
 
         return MemoryToolResult.Ok("当前 MCP 记忆作用域读取成功。",
-            JsonSerializer.Serialize(result, MemoryToolJsonContext.Default.MemoryScopeResult));
+            JsonSerializer.Serialize(result, MemoryToolJsonContext.Chinese.MemoryScopeResult));
     }
 
     private static string? NormalizeOptional(string? value)

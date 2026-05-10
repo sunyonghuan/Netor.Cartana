@@ -347,13 +347,6 @@ public partial class MainWindow
             var titleBrush = (IBrush)this.FindResource("TextBrush")!;
             var subtextBrush = (IBrush)this.FindResource("SubtextBrush")!;
 
-            var icon = new TextBlock
-            {
-                Text = GetSystemNoticeIcon(level),
-                FontSize = 13,
-                Foreground = accentBrush,
-                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            };
             var titleBlock = new TextBlock
             {
                 Text = title,
@@ -374,8 +367,8 @@ public partial class MainWindow
             var header = new StackPanel
             {
                 Orientation = Avalonia.Layout.Orientation.Horizontal,
-                Spacing = 6,
-                Children = { icon, titleBlock, metaBlock },
+                Spacing = 8,
+                Children = { titleBlock, metaBlock },
             };
 
             var contentBlock = new TextBlock
@@ -420,12 +413,12 @@ public partial class MainWindow
 
             var card = new Border
             {
-                Background = new SolidColorBrush(Color.FromArgb(34, 255, 255, 255)),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)),
+                Background = new SolidColorBrush(Color.FromArgb(22, 0, 0, 0)),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(30, 255, 255, 255)),
                 BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(6),
-                Padding = new Thickness(12, 8),
-                Margin = new Thickness(28, 0),
+                CornerRadius = new CornerRadius(3),
+                Padding = new Thickness(10, 7),
+                Margin = new Thickness(50, 0),
                 Child = body,
             };
 
@@ -441,15 +434,6 @@ public partial class MainWindow
         "error" => (IBrush)this.FindResource("RedBrush")!,
         "progress" => (IBrush)this.FindResource("TealBrush")!,
         _ => (IBrush)this.FindResource("BlueBrush")!,
-    };
-
-    private static string GetSystemNoticeIcon(string level) => level switch
-    {
-        "success" => "✓",
-        "warning" => "⚠",
-        "error" => "✕",
-        "progress" => "⟳",
-        _ => "ℹ",
     };
 
     /// <summary>

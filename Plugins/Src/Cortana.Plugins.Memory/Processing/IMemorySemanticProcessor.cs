@@ -10,5 +10,5 @@ public interface IMemorySemanticProcessor
     /// <summary>
     /// 从观察记录中生成候选长期记忆。
     /// </summary>
-    IReadOnlyList<MemorySemanticCandidate> ExtractCandidates(ObservationRecord observation, string traceId);
+    Task<IReadOnlyList<MemorySemanticCandidate>> ExtractCandidatesAsync(ObservationRecord observation, string traceId, CancellationToken cancellationToken = default);
 }

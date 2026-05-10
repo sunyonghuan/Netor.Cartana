@@ -136,6 +136,12 @@ public abstract class ExternalProcessPluginHostBase : IDisposable
         _process = ProcessDiag.Start(startInfo)
             ?? throw new InvalidOperationException($"启动插件子进程失败：{startInfo.FileName}");
 
+        // 将子进程加入 Job Object，确保主进程退出时子进程自动终止
+        if (OperatingSystem.IsWindows())
+        {
+            ChildProcessTracker.AddProcess(_process);
+        }
+
         _writer = _process.StandardInput;
         _writer.AutoFlush = false;
         _reader = _process.StandardOutput;
@@ -250,7 +256,10 @@ public abstract class ExternalProcessPluginHostBase : IDisposable
         try
         {
             if (_process is { HasExited: false })
+            {
                 _process.Kill(entireProcessTree: true);
+                _process.WaitForExit(3000);
+            }
         }
         catch { }
         finally

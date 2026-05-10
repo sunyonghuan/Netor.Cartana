@@ -31,6 +31,11 @@ public sealed class MemorySupplyRequest
     public string? CurrentTask { get; init; }
 
     /// <summary>
+    /// 当前会话标题，用于宽泛主题召回。
+    /// </summary>
+    public string? SessionTitle { get; init; }
+
+    /// <summary>
     /// 最近消息摘要或文本片段。
     /// </summary>
     public IReadOnlyList<string> RecentMessages { get; init; } = [];

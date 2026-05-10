@@ -27,23 +27,66 @@ public sealed class MemorySupplyService(
             return CreateDisabledResult(request, supplyOptions, recallOptions, maxMemoryCount);
         }
 
-        var queryText = BuildQueryText(request);
-        var recall = recallService.Recall(new MemoryRecallRequest
+        // ── 双路召回 ──
+        // 路径 1：用最新用户消息做精确召回（捕捉当前意图）
+        var primaryQuery = BuildPrimaryQueryText(request);
+        var primaryRecall = recallService.Recall(new MemoryRecallRequest
         {
             RequestId = request.RequestId,
             AgentId = request.AgentId,
             WorkspaceId = request.WorkspaceId,
-            QueryText = queryText,
+            QueryText = primaryQuery,
             QueryIntent = request.Scenario,
             TriggerSource = request.TriggerSource,
             TraceId = request.TraceId
         });
 
-        var items = recall.Items
-            .OrderByDescending(static item => item.RecallScore)
-            .Take(maxMemoryCount)
+        // 路径 2：用 session 标题 + 场景做宽泛召回（捕捉全局主题）
+        var secondaryQuery = BuildSecondaryQueryText(request);
+        IReadOnlyList<MemoryRecallItem> secondaryItems = [];
+        if (!string.IsNullOrWhiteSpace(secondaryQuery) && !string.Equals(primaryQuery, secondaryQuery, StringComparison.Ordinal))
+        {
+            var secondaryRecall = recallService.Recall(new MemoryRecallRequest
+            {
+                RequestId = request.RequestId,
+                AgentId = request.AgentId,
+                WorkspaceId = request.WorkspaceId,
+                QueryText = secondaryQuery,
+                QueryIntent = "topic-context",
+                TriggerSource = request.TriggerSource,
+                TraceId = request.TraceId
+            });
+            secondaryItems = secondaryRecall.Items;
+        }
+
+        // ── 合并去重，分层 ──
+        var allItems = primaryRecall.Items
+            .Concat(secondaryItems)
+            .GroupBy(static item => item.Id, StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group.OrderByDescending(item => item.RecallScore).First())
+            .ToList();
+
+        // 分离 profile（abstractions）和 context（fragments）
+        var profileItems = allItems
+            .Where(static item => string.Equals(item.Kind, "abstraction", StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(static item => item.Confidence)
+            .ThenByDescending(static item => item.RecallScore)
+            .Take(Math.Max(2, maxMemoryCount / 3))  // profile 占 1/3 名额，至少 2 条
             .Select(ToSupplyItem)
             .ToList();
+
+        var profileIds = profileItems.Select(static item => item.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var contextBudget = maxMemoryCount - profileItems.Count;
+
+        var contextItems = allItems
+            .Where(item => !profileIds.Contains(item.Id))
+            .OrderByDescending(static item => item.RecallScore)
+            .Take(contextBudget)
+            .Select(ToSupplyItem)
+            .ToList();
+
+        // 合并最终列表：profile 在前，context 在后
+        var items = profileItems.Concat(contextItems).ToList();
 
         if (request.MaxTokenBudget is > 0)
         {
@@ -87,8 +130,8 @@ public sealed class MemorySupplyService(
                 SupplyEnabled = true,
                 MaxMemoryCount = maxMemoryCount,
                 RecallMinimumConfidence = recallOptions.MinimumConfidence,
-                Ranking = "recallScore/confidence/salience/retention",
-                Grouping = "abstraction/constraint/preference/task/fact/other"
+                Ranking = "dual-path/profile-first/recallScore",
+                Grouping = "profile(abstraction)/constraint/preference/task/fact/other"
             },
             TraceId = request.TraceId
         };
@@ -131,18 +174,53 @@ public sealed class MemorySupplyService(
         return Math.Min(limit, MaximumToolMemoryCount);
     }
 
-    private static string BuildQueryText(MemorySupplyRequest request)
+    /// <summary>
+    /// 路径 1：用最新用户消息构建精确查询文本。
+    /// </summary>
+    private static string BuildPrimaryQueryText(MemorySupplyRequest request)
     {
         var builder = new StringBuilder();
-        Append(builder, request.Scenario);
-        Append(builder, request.CurrentTask);
 
-        foreach (var message in request.RecentMessages.Where(static message => !string.IsNullOrWhiteSpace(message)).TakeLast(8))
+        // 优先取最后一条用户消息（最新意图）
+        var lastUserMessage = request.RecentMessages
+            .Where(static m => !string.IsNullOrWhiteSpace(m))
+            .LastOrDefault();
+
+        if (!string.IsNullOrWhiteSpace(lastUserMessage))
         {
-            Append(builder, message);
+            // 去掉 "user: " 前缀
+            var content = lastUserMessage;
+            if (content.StartsWith("user:", StringComparison.OrdinalIgnoreCase))
+                content = content[5..].TrimStart();
+            Append(builder, content);
+        }
+        else
+        {
+            Append(builder, request.CurrentTask);
         }
 
         return builder.Length == 0 ? request.TriggerSource ?? "memory supply context" : builder.ToString();
+    }
+
+    /// <summary>
+    /// 路径 2：用 session 标题 + 场景构建宽泛查询文本。
+    /// </summary>
+    private static string BuildSecondaryQueryText(MemorySupplyRequest request)
+    {
+        var builder = new StringBuilder();
+        Append(builder, request.SessionTitle);
+        Append(builder, request.Scenario);
+
+        // 如果有多条消息，取前几条补充主题上下文
+        foreach (var message in request.RecentMessages.Where(static m => !string.IsNullOrWhiteSpace(m)).Take(2))
+        {
+            var content = message;
+            if (content.StartsWith("user:", StringComparison.OrdinalIgnoreCase))
+                content = content[5..].TrimStart();
+            Append(builder, content);
+        }
+
+        return builder.ToString();
     }
 
     private static void Append(StringBuilder builder, string? value)
@@ -243,11 +321,11 @@ public sealed class MemorySupplyService(
     {
         return groupKey switch
         {
-            "constraint" => 0,
-            "preference" => 1,
-            "task" => 2,
-            "fact" => 3,
-            "abstraction" => 4,
+            "abstraction" => 0,
+            "constraint" => 1,
+            "preference" => 2,
+            "task" => 3,
+            "fact" => 4,
             _ => 9
         };
     }

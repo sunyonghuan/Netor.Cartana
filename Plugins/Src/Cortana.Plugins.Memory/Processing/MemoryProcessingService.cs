@@ -19,7 +19,7 @@ public sealed class MemoryProcessingService(
 {
     public const string FragmentExtractionProcessorName = "fragment-extraction";
 
-    public MemoryProcessingResult Process(MemoryProcessingRequest request)
+    public async Task<MemoryProcessingResult> ProcessAsync(MemoryProcessingRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -43,7 +43,8 @@ public sealed class MemoryProcessingService(
             var observations = store.GetUnprocessedObservations(FragmentExtractionProcessorName, request.AgentId, request.WorkspaceId, limit);
             foreach (var observation in observations)
             {
-                ProcessObservation(observation, traceId, result);
+                cancellationToken.ThrowIfCancellationRequested();
+                await ProcessObservationAsync(observation, traceId, result, cancellationToken).ConfigureAwait(false);
                 result.ProcessedObservationCount++;
                 state.LastObservationTimestamp = observation.CreatedTimestamp;
                 state.LastObservationId = observation.Id;
@@ -61,10 +62,14 @@ public sealed class MemoryProcessingService(
             result.Summary = $"处理观察记录 {result.ProcessedObservationCount} 条，创建长期记忆 {result.CreatedFragmentCount} 条，合并 {result.MergedFragmentCount} 条，失败 {result.FailedObservationCount} 条。";
             InsertProcessingResultEvent("processing.completed", request.AgentId ?? "global", result);
 
-            // 触发抽象记忆生成（降级实现或宿主适配后会使用模型）
+            // 触发抽象记忆生成（模型不可用时跳过，不降级）
             try
             {
-                abstractionService.RunAbstractionPass(request.AgentId, request.WorkspaceId);
+                await abstractionService.RunAbstractionPassAsync(request.AgentId, request.WorkspaceId, cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
             }
             catch (Exception ex)
             {
@@ -72,6 +77,13 @@ public sealed class MemoryProcessingService(
             }
 
             return result;
+        }
+        catch (OperationCanceledException)
+        {
+            state.State = "cancelled";
+            state.UpdatedAt = DateTimeOffset.UtcNow.ToString("O");
+            store.UpsertProcessingState(state);
+            throw;
         }
         catch (Exception ex) when (ex is MemoryStorageException or InvalidOperationException or ArgumentException)
         {
@@ -93,13 +105,13 @@ public sealed class MemoryProcessingService(
         return store.GetProcessingState(processorName, agentId, workspaceId);
     }
 
-    private void ProcessObservation(ObservationRecord observation, string traceId, MemoryProcessingResult result)
+    private async Task ProcessObservationAsync(ObservationRecord observation, string traceId, MemoryProcessingResult result, CancellationToken cancellationToken)
     {
         try
         {
             if (string.IsNullOrWhiteSpace(observation.AgentId) || string.IsNullOrWhiteSpace(observation.Content)) return;
 
-            var candidates = semanticProcessor.ExtractCandidates(observation, traceId);
+            var candidates = await semanticProcessor.ExtractCandidatesAsync(observation, traceId, cancellationToken).ConfigureAwait(false);
             foreach (var candidate in candidates)
             {
                 if (string.IsNullOrWhiteSpace(candidate.Summary)) continue;
@@ -110,7 +122,7 @@ public sealed class MemoryProcessingService(
                     var fragment = CreateFragment(candidate, traceId);
                     store.UpsertMemoryFragment(fragment);
                     result.CreatedFragmentCount++;
-                    InsertMutation(fragment.AgentId, fragment.Id, "fragment", "create", null, JsonSerializer.Serialize(fragment, MemoryInternalJsonContext.Default.MemoryFragment), "记忆数据处理创建长期记忆。", traceId);
+                    InsertMutation(fragment.AgentId, fragment.Id, "fragment", "create", null, JsonSerializer.Serialize(fragment, MemoryInternalJsonContext.Chinese.MemoryFragment), "记忆数据处理创建长期记忆。", traceId);
                     InsertFragmentExtractedEvent(fragment.AgentId, fragment.Id, observation.Id, traceId);
                 }
                 else
@@ -123,8 +135,8 @@ public sealed class MemoryProcessingService(
                         merged.Id,
                         "fragment",
                         "merge",
-                        JsonSerializer.Serialize(existing, MemoryInternalJsonContext.Default.MemoryFragment),
-                        JsonSerializer.Serialize(merged, MemoryInternalJsonContext.Default.MemoryFragment),
+                        JsonSerializer.Serialize(existing, MemoryInternalJsonContext.Chinese.MemoryFragment),
+                        JsonSerializer.Serialize(merged, MemoryInternalJsonContext.Chinese.MemoryFragment),
                         "记忆数据处理合并相似长期记忆。",
                         traceId);
                 }
@@ -155,11 +167,11 @@ public sealed class MemoryProcessingService(
             Title = candidate.Title,
             Summary = candidate.Summary,
             Detail = candidate.Detail,
-            KeywordsJson = JsonSerializer.Serialize((IReadOnlyList<string>)candidate.Keywords, MemoryInternalJsonContext.Default.IReadOnlyListString),
-            TagsJson = JsonSerializer.Serialize(new[] { "memory-processing", $"trace:{traceId}" }, MemoryInternalJsonContext.Default.StringArray),
-            SourceObservationIdsJson = JsonSerializer.Serialize(new[] { observation.Id }, MemoryInternalJsonContext.Default.StringArray),
-            SourceSessionIdsJson = JsonSerializer.Serialize(new[] { observation.SessionId }, MemoryInternalJsonContext.Default.StringArray),
-            SourceTurnIdsJson = string.IsNullOrWhiteSpace(observation.TurnId) ? null : JsonSerializer.Serialize(new[] { observation.TurnId }, MemoryInternalJsonContext.Default.StringArray),
+            KeywordsJson = JsonSerializer.Serialize((IReadOnlyList<string>)candidate.Keywords, MemoryInternalJsonContext.Chinese.IReadOnlyListString),
+            TagsJson = JsonSerializer.Serialize(new[] { "memory-processing", $"trace:{traceId}" }, MemoryInternalJsonContext.Chinese.StringArray),
+            SourceObservationIdsJson = JsonSerializer.Serialize(new[] { observation.Id }, MemoryInternalJsonContext.Chinese.StringArray),
+            SourceSessionIdsJson = JsonSerializer.Serialize(new[] { observation.SessionId }, MemoryInternalJsonContext.Chinese.StringArray),
+            SourceTurnIdsJson = string.IsNullOrWhiteSpace(observation.TurnId) ? null : JsonSerializer.Serialize(new[] { observation.TurnId }, MemoryInternalJsonContext.Chinese.StringArray),
             Importance = Clamp(candidate.Importance),
             Confidence = Clamp(candidate.Confidence),
             Novelty = Clamp(candidate.Novelty),
@@ -213,7 +225,7 @@ public sealed class MemoryProcessingService(
             EventId = Guid.NewGuid().ToString("N"),
             AgentId = string.IsNullOrWhiteSpace(agentId) ? "global" : agentId,
             EventType = "fragment.extracted",
-            PayloadJson = JsonSerializer.Serialize(payload, MemoryInternalJsonContext.Default.FragmentExtractedEventPayload),
+            PayloadJson = JsonSerializer.Serialize(payload, MemoryInternalJsonContext.Chinese.FragmentExtractedEventPayload),
             ProcessedAt = DateTimeOffset.UtcNow.ToString("O")
         });
     }
@@ -231,7 +243,7 @@ public sealed class MemoryProcessingService(
             EventId = Guid.NewGuid().ToString("N"),
             AgentId = string.IsNullOrWhiteSpace(agentId) ? "global" : agentId,
             EventType = "processing.failed",
-            PayloadJson = JsonSerializer.Serialize(payload, MemoryInternalJsonContext.Default.ProcessingFailedEventPayload),
+            PayloadJson = JsonSerializer.Serialize(payload, MemoryInternalJsonContext.Chinese.ProcessingFailedEventPayload),
             ProcessedAt = DateTimeOffset.UtcNow.ToString("O")
         });
     }
@@ -243,7 +255,7 @@ public sealed class MemoryProcessingService(
             EventId = Guid.NewGuid().ToString("N"),
             AgentId = string.IsNullOrWhiteSpace(agentId) ? "global" : agentId,
             EventType = eventType,
-            PayloadJson = JsonSerializer.Serialize(result, MemoryInternalJsonContext.Default.MemoryProcessingResult),
+            PayloadJson = JsonSerializer.Serialize(result, MemoryInternalJsonContext.Chinese.MemoryProcessingResult),
             ProcessedAt = DateTimeOffset.UtcNow.ToString("O")
         });
     }
@@ -269,10 +281,10 @@ public sealed class MemoryProcessingService(
     {
         var values = string.IsNullOrWhiteSpace(json)
             ? []
-            : JsonSerializer.Deserialize(json, MemoryInternalJsonContext.Default.ListString) ?? [];
+            : JsonSerializer.Deserialize(json, MemoryInternalJsonContext.Chinese.ListString) ?? [];
 
         if (!values.Contains(value, StringComparer.Ordinal)) values.Add(value);
-        return JsonSerializer.Serialize(values, MemoryInternalJsonContext.Default.ListString);
+        return JsonSerializer.Serialize(values, MemoryInternalJsonContext.Chinese.ListString);
     }
 
     private static double CalculateSalience(double importance, double confidence, double novelty, string role)

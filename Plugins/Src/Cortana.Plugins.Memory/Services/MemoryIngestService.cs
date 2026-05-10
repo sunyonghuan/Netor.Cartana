@@ -18,7 +18,11 @@ namespace Cortana.Plugins.Memory.Services;
 /// - 握手 connected → subscribe → subscribed
 /// - 接收 event 帧并通过记忆存储门面写入观察记录
 /// </summary>
-public sealed class MemoryIngestService(PluginSettings settings, ILogger<MemoryIngestService> logger, IMemoryStore store) : IHostedService
+public sealed class MemoryIngestService(
+    PluginSettings settings,
+    ILogger<MemoryIngestService> logger,
+    IMemoryStore store,
+    MemorySupplyControlHandler supplyControlHandler) : IHostedService
 {
     private readonly CancellationTokenSource _cts = new();
     private readonly Dictionary<string, AssistantStreamBuffer> _assistantStreams = new(StringComparer.Ordinal);
@@ -87,7 +91,7 @@ public sealed class MemoryIngestService(PluginSettings settings, ILogger<MemoryI
             Protocol = "conversation-feed",
             Version = "1.0.0"
         };
-        var json = JsonSerializer.Serialize(sub, MemoryInternalJsonContext.Default.ConversationFeedSubscribeFrame);
+        var json = JsonSerializer.Serialize(sub, MemoryInternalJsonContext.Chinese.ConversationFeedSubscribeFrame);
         await ws.SendAsync(Encoding.UTF8.GetBytes(json), WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
 
         // 3) 等 subscribed
@@ -101,7 +105,7 @@ public sealed class MemoryIngestService(PluginSettings settings, ILogger<MemoryI
         // 3.5) 触发历史回放（since=0）
         var replay = new ConversationFeedReplayFrame { Type = "replay", SinceTimestamp = 0, BatchSize = 500 };
         await ws.SendAsync(
-            Encoding.UTF8.GetBytes(JsonSerializer.Serialize(replay, MemoryInternalJsonContext.Default.ConversationFeedReplayFrame)),
+            Encoding.UTF8.GetBytes(JsonSerializer.Serialize(replay, MemoryInternalJsonContext.Chinese.ConversationFeedReplayFrame)),
             WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
 
         // 4) 主接收循环：batch 入库 + 实时事件最小入库
@@ -117,6 +121,14 @@ public sealed class MemoryIngestService(PluginSettings settings, ILogger<MemoryI
                     using var doc = JsonDocument.Parse(text);
                     var root = doc.RootElement;
                     var type = root.TryGetProperty("type", out var t) ? t.GetString() : null;
+                    var op = root.TryGetProperty("op", out var opElement) ? opElement.GetString() : null;
+                    if (string.Equals(type, "request", StringComparison.Ordinal)
+                        && string.Equals(op, MemoryContextSupplyProtocol.SupplyRequestOperation, StringComparison.Ordinal))
+                    {
+                        await HandleMemorySupplyRequestAsync(ws, text, ct).ConfigureAwait(false);
+                        continue;
+                    }
+
                     if (!string.Equals(type, "event", StringComparison.Ordinal))
                     {
                         logger.LogDebug("忽略非 event 帧：{Text}", text);
@@ -153,6 +165,54 @@ public sealed class MemoryIngestService(PluginSettings settings, ILogger<MemoryI
         {
             await SafeCloseAsync(ws).ConfigureAwait(false);
         }
+    }
+
+    private async Task HandleMemorySupplyRequestAsync(ClientWebSocket ws, string text, CancellationToken ct)
+    {
+        MemoryContextSupplyRequest? request = null;
+        try
+        {
+            request = JsonSerializer.Deserialize(text, MemoryInternalJsonContext.Chinese.MemoryContextSupplyRequest);
+            if (request is null)
+            {
+                await SendMemorySupplyErrorAsync(ws, null, null, "INVALID_REQUEST", "请求内容为空。", false, ct).ConfigureAwait(false);
+                return;
+            }
+
+            var response = supplyControlHandler.Handle(request);
+            var json = JsonSerializer.Serialize(response, MemoryInternalJsonContext.Chinese.MemoryContextSupplyPackage);
+            await ws.SendAsync(Encoding.UTF8.GetBytes(json), WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
+        }
+        catch (ArgumentException ex)
+        {
+            await SendMemorySupplyErrorAsync(ws, request?.RequestId, request?.TraceId, "INVALID_ARGUMENT", ex.Message, false, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "处理长期记忆供应请求失败。RequestId={RequestId}", request?.RequestId);
+            await SendMemorySupplyErrorAsync(ws, request?.RequestId, request?.TraceId, "INTERNAL_ERROR", ex.Message, true, ct).ConfigureAwait(false);
+        }
+    }
+
+    private static async Task SendMemorySupplyErrorAsync(
+        ClientWebSocket ws,
+        string? requestId,
+        string? traceId,
+        string code,
+        string message,
+        bool retryable,
+        CancellationToken ct)
+    {
+        var error = new MemoryContextSupplyError
+        {
+            RequestId = requestId,
+            TraceId = traceId,
+            Code = code,
+            Message = message,
+            Retryable = retryable
+        };
+        var json = JsonSerializer.Serialize(error, MemoryInternalJsonContext.Chinese.MemoryContextSupplyError);
+        await ws.SendAsync(Encoding.UTF8.GetBytes(json), WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
     }
 
     // 初始化迁移逻辑已下沉至 IMemoryStore
@@ -295,17 +355,34 @@ public sealed class MemoryIngestService(PluginSettings settings, ILogger<MemoryI
         return string.IsNullOrWhiteSpace(status)
             || string.Equals(status, "succeeded", StringComparison.OrdinalIgnoreCase)
             || string.Equals(status, "success", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase);
+            || string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, "0", StringComparison.Ordinal); // ConversationTurnStatus.Succeeded 枚举序列化为数字 0
     }
 
     private string? ResolveWorkspaceId(JsonElement el)
     {
         if (el.TryGetProperty("workspaceId", out var workspace) || el.TryGetProperty("WorkspaceId", out workspace))
         {
-            return workspace.GetString();
+            var value = workspace.GetString();
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                // 如果已经是哈希格式（32位十六进制），直接返回；否则做 MD5 哈希保持与宿主一致
+                return IsHexHash(value) ? value : Md5Hash(value);
+            }
         }
 
-        return string.IsNullOrWhiteSpace(settings.WorkspaceDirectory) ? null : settings.WorkspaceDirectory;
+        return string.IsNullOrWhiteSpace(settings.WorkspaceDirectory) ? null : Md5Hash(settings.WorkspaceDirectory);
+    }
+
+    private static bool IsHexHash(string value)
+    {
+        return value.Length == 32 && value.All(c => c is (>= '0' and <= '9') or (>= 'a' and <= 'f') or (>= 'A' and <= 'F'));
+    }
+
+    private static string Md5Hash(string input)
+    {
+        var hash = System.Security.Cryptography.MD5.HashData(Encoding.UTF8.GetBytes(input));
+        return Convert.ToHexStringLower(hash);
     }
 
     private static string ToIsoTime(long timestamp)

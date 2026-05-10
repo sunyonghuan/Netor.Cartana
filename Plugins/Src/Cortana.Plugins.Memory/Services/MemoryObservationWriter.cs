@@ -58,7 +58,7 @@ public sealed class MemoryObservationWriter(IMemoryStore store, IMemoryRuntimeCo
             AttachmentsJson = "[]",
             CreatedTimestamp = timestamp,
             TraceId = Guid.NewGuid().ToString("N"),
-            SourceFactsJson = JsonSerializer.Serialize(facts, MemoryInternalJsonContext.Default.McpObservationSourceFacts),
+            SourceFactsJson = JsonSerializer.Serialize(facts, MemoryInternalJsonContext.Chinese.McpObservationSourceFacts),
             CreatedAt = DateTimeOffset.FromUnixTimeMilliseconds(timestamp).UtcDateTime.ToString("O")
         });
 

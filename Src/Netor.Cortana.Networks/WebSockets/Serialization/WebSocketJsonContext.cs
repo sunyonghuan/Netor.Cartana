@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 
 using Netor.Cortana.Entitys;
+using Netor.Cortana.Entitys.Memory;
 using Netor.Cortana.Entitys.ModelCapability;
 
 namespace Netor.Cortana.Networks;
@@ -22,6 +23,9 @@ namespace Netor.Cortana.Networks;
 [JsonSerializable(typeof(ModelCapabilityResponse))]
 [JsonSerializable(typeof(ModelCapabilityError))]
 [JsonSerializable(typeof(ModelCapabilityConnectedMessage))]
+[JsonSerializable(typeof(MemoryContextSupplyRequest))]
+[JsonSerializable(typeof(MemoryContextSupplyPackage))]
+[JsonSerializable(typeof(MemoryContextSupplyError))]
 internal partial class WebSocketJsonContext : JsonSerializerContext;
 
 /// <summary>

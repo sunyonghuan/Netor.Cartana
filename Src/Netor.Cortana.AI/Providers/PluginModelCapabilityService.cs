@@ -11,6 +11,14 @@ using System.Diagnostics;
 
 namespace Netor.Cortana.AI.Providers;
 
+/// <summary>
+/// 基于插件授权配置向插件提供受控的大模型调用能力。
+/// </summary>
+/// <param name="settingsService">系统设置服务，用于读取插件模型能力授权配置。</param>
+/// <param name="providerService">AI 厂商配置服务。</param>
+/// <param name="modelService">AI 模型配置服务。</param>
+/// <param name="driverRegistry">AI 厂商驱动注册表。</param>
+/// <param name="logger">日志记录器。</param>
 public sealed class PluginModelCapabilityService(
     SystemSettingsService settingsService,
     AiProviderService providerService,
@@ -19,8 +27,18 @@ public sealed class PluginModelCapabilityService(
     ILogger<PluginModelCapabilityService> logger) : IPluginModelCapabilityService
 {
     private const string LlmCapability = "llm";
+    private const int DefaultTimeoutMs = 120000;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _concurrencyLocks = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// 执行插件发起的模型能力调用，并返回宿主模型输出。
+    /// </summary>
+    /// <param name="request">模型能力调用请求。</param>
+    /// <param name="cancellationToken">取消调用的令牌。</param>
+    /// <returns>模型能力调用响应。</returns>
+    /// <exception cref="InvalidOperationException">请求无效、授权模型缺失或关联厂商不可用时抛出。</exception>
+    /// <exception cref="UnauthorizedAccessException">插件未被授权使用大模型能力时抛出。</exception>
+    /// <exception cref="TimeoutException">调用超时或并发限流等待超时时抛出。</exception>
     public async Task<ModelCapabilityResponse> InvokeAsync(ModelCapabilityRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -92,6 +110,11 @@ public sealed class PluginModelCapabilityService(
         }
     }
 
+    /// <summary>
+    /// 读取指定插件的大模型能力授权与配额配置。
+    /// </summary>
+    /// <param name="pluginId">插件标识。</param>
+    /// <returns>插件大模型能力设置。</returns>
     private PluginLlmSettings ReadSettings(string pluginId)
     {
         var prefix = $"Plugin:{pluginId}:Capability:{LlmCapability}";
@@ -101,11 +124,16 @@ public sealed class PluginModelCapabilityService(
             settingsService.GetValue($"{prefix}:ModelId", string.Empty),
             settingsService.GetValue($"{prefix}:MaxInputTokens", 128000),
             settingsService.GetValue($"{prefix}:MaxOutputTokens", 128000),
-            settingsService.GetValue($"{prefix}:TimeoutMs", 30000),
+            NormalizeTimeout(settingsService.GetValue($"{prefix}:TimeoutMs", DefaultTimeoutMs)),
             Math.Max(1, settingsService.GetValue($"{prefix}:MaxConcurrency", 3)),
             settingsService.GetValue($"{prefix}:AllowBackground", true));
     }
 
+    /// <summary>
+    /// 根据插件配置解析实际使用的模型，未指定时回退到默认厂商与默认模型。
+    /// </summary>
+    /// <param name="settings">插件大模型能力设置。</param>
+    /// <returns>可用模型实体；未找到时返回 <see langword="null"/>。</returns>
     private AiModelEntity? ResolveModel(PluginLlmSettings settings)
     {
         if (!string.IsNullOrWhiteSpace(settings.ModelId))
@@ -127,6 +155,11 @@ public sealed class PluginModelCapabilityService(
         return providerModels.FirstOrDefault(model => model.IsDefault) ?? providerModels.FirstOrDefault();
     }
 
+    /// <summary>
+    /// 将模型能力请求转换为通用聊天消息列表。
+    /// </summary>
+    /// <param name="request">模型能力调用请求。</param>
+    /// <returns>发送给聊天客户端的消息列表。</returns>
     private static List<ChatMessage> BuildMessages(ModelCapabilityRequest request)
     {
         var messages = new List<ChatMessage>();
@@ -139,6 +172,14 @@ public sealed class PluginModelCapabilityService(
         return messages;
     }
 
+    /// <summary>
+    /// 根据插件配额与请求参数构建聊天选项。
+    /// </summary>
+    /// <param name="driver">当前厂商对应的 AI 驱动。</param>
+    /// <param name="provider">当前使用的 AI 厂商配置。</param>
+    /// <param name="request">模型能力调用请求。</param>
+    /// <param name="settings">插件大模型能力设置。</param>
+    /// <returns>聊天客户端调用选项。</returns>
     private static ChatOptions BuildOptions(
         IAiProviderDriver driver,
         AiProviderEntity provider,
@@ -165,12 +206,39 @@ public sealed class PluginModelCapabilityService(
         return driver.BuildChatOptions(provider, agent);
     }
 
+    /// <summary>
+    /// 计算本次调用的实际超时时间。
+    /// </summary>
+    /// <param name="requestTimeoutMs">请求指定的超时时间，单位为毫秒。</param>
+    /// <param name="configuredTimeoutMs">插件授权配置中的超时时间，单位为毫秒。</param>
+    /// <returns>请求与配置共同限制后的超时时间。</returns>
     private static int GetEffectiveTimeout(int requestTimeoutMs, int configuredTimeoutMs)
     {
-        var configured = configuredTimeoutMs <= 0 ? 30000 : configuredTimeoutMs;
+        var configured = NormalizeTimeout(configuredTimeoutMs);
         return requestTimeoutMs <= 0 ? configured : Math.Min(requestTimeoutMs, configured);
     }
 
+    /// <summary>
+    /// 标准化超时时间，过小或无效的配置回退到默认超时。
+    /// </summary>
+    /// <param name="timeoutMs">待标准化的超时时间，单位为毫秒。</param>
+    /// <returns>有效的超时时间。</returns>
+    private static int NormalizeTimeout(int timeoutMs)
+    {
+        return timeoutMs <= 30000 ? DefaultTimeoutMs : timeoutMs;
+    }
+
+    /// <summary>
+    /// 插件大模型能力授权、模型绑定与调用配额设置。
+    /// </summary>
+    /// <param name="Enabled">指示插件是否被授权使用大模型能力。</param>
+    /// <param name="ProviderId">授权绑定的 AI 厂商标识。</param>
+    /// <param name="ModelId">授权绑定的 AI 模型标识。</param>
+    /// <param name="MaxInputTokens">最大输入 Token 数。</param>
+    /// <param name="MaxOutputTokens">最大输出 Token 数。</param>
+    /// <param name="TimeoutMs">调用超时时间，单位为毫秒。</param>
+    /// <param name="MaxConcurrency">插件级最大并发调用数。</param>
+    /// <param name="AllowBackground">指示是否允许后台调用。</param>
     private sealed record PluginLlmSettings(
         bool Enabled,
         string ProviderId,

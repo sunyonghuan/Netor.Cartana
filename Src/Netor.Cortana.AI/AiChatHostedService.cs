@@ -252,6 +252,11 @@ public sealed class AiChatHostedService(
 
         try
         {
+            _session!.StateBag.SetValue("turnid", turnId);
+            _session.StateBag.SetValue("traceid", traceId);
+            _session.StateBag.SetValue("usermessageid", userMessageId);
+            _session.StateBag.SetValue("currenttask", userInput ?? string.Empty);
+
             conversationMetadata = CreateConversationEventMetadata(
                 currentSessionId,
                 turnId,

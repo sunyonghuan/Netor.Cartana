@@ -8,7 +8,7 @@ public interface IMemoryProcessingService
     /// <summary>
     /// 执行一轮记忆数据处理。
     /// </summary>
-    MemoryProcessingResult Process(MemoryProcessingRequest request);
+    Task<MemoryProcessingResult> ProcessAsync(MemoryProcessingRequest request, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 获取指定处理器状态。

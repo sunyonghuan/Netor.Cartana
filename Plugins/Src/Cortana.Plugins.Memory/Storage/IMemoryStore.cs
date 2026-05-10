@@ -27,10 +27,24 @@ public interface IMemoryStore
     MemoryProcessingState GetProcessingState(string processorName, string? agentId, string? workspaceId);
     void UpsertProcessingState(MemoryProcessingState state);
     IReadOnlyList<MemoryFragment> SearchSimilarFragments(string agentId, string? workspaceId, string memoryType, string summary, int limit);
+    MemoryFragment? GetFragmentById(string id);
     IReadOnlyList<MemoryRecallItem> SearchRecallCandidates(string agentId, string? workspaceId, string? queryText, double minimumConfidence, bool includeCandidateMemories, int limit);
     void RecordMemoryAccesses(IEnumerable<MemoryRecallItem> items, string accessedAt);
     IReadOnlyList<MemoryRecentItem> ListRecentMemories(string? agentId, string? workspaceId, string? kind, int limit);
     IReadOnlyList<MemoryFragment> GetFragmentsForAbstraction(string agentId, string? workspaceId, string? topic, int minSupportCount, int limit);
     IReadOnlyList<string> GetDistinctAgentIds();
+    IReadOnlyList<string?> GetDistinctWorkspaceIds(string agentId);
     MemoryStoreStatusSnapshot GetStatusSnapshot(string? agentId, string? workspaceId);
+
+    /// <summary>
+    /// 对所有活跃记忆执行衰减：retentionScore -= decayRate，低于阈值的标记为 fading/forgotten。
+    /// </summary>
+    /// <returns>受影响的记忆数量。</returns>
+    int ApplyDecay(double minimumScore, double forgetThreshold);
+
+    /// <summary>
+    /// 将访问次数达标的候选片段自动确认为活跃状态。
+    /// </summary>
+    /// <returns>被确认的片段数量。</returns>
+    int AutoConfirmCandidates(int requiredAccessCount);
 }
