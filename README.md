@@ -380,6 +380,7 @@ Netor.Cortana/
 
 | 文档 | 说明 |
 | --- | --- |
+| `Docs/release-notes/v1.3.6/DRAFT.md` | 插件授权、宿主模型能力、长期记忆默认注入与 system.notice 阶段发布草稿。 |
 | `Docs/release-notes/v1.3.3/RELEASE.md` | AI 工具链协议修复与 trace。 |
 | `Docs/release-notes/v1.3.1/RELEASE.md` | Ollama 本地协议代理。 |
 | `Docs/release-notes/v1.2.9/RELEASE.md` | reasoning / function call 能力位与工具链修复。 |
