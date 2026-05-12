@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -9,6 +7,8 @@ using Netor.EventHub;
 using Netor.EventHub.Interfances;
 
 using SherpaOnnx;
+
+using System.Collections.Concurrent;
 
 namespace Netor.Cortana.Voice;
 
@@ -353,8 +353,16 @@ public sealed class SpeechRecognitionService(
     public void Dispose()
     {
         CancelCurrentRound();
-        _serviceCts?.Cancel();
-        _serviceCts?.Dispose();
-        _recognizer?.Dispose();
+        try
+        {
+            _serviceCts?.Cancel();
+            _serviceCts?.Dispose();
+            _recognizer?.Dispose();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "语音识别服务清理异常");
+        }
+
     }
 }

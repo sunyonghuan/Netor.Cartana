@@ -4,12 +4,12 @@ using Avalonia.Platform.Storage;
 
 using Microsoft.Extensions.Hosting;
 
-using Netor.Cortana.UI.Views;
-using Netor.Cortana.UI.Views.Proxy;
 using Netor.Cortana.Entitys;
 using Netor.Cortana.Entitys.Services;
 using Netor.Cortana.Networks;
 using Netor.Cortana.Plugin;
+using Netor.Cortana.UI.Views;
+using Netor.Cortana.UI.Views.Proxy;
 using Netor.Cortana.Voice;
 using Netor.EventHub;
 
@@ -34,10 +34,12 @@ public partial class App : Application
 #pragma warning disable CS8618
     internal static IServiceProvider Services { get; private set; }
 #pragma warning restore CS8618
+
     /// <summary>
     /// 应用名称
     /// </summary>
-    internal static string AppName {get;}="玛得令";
+    internal static string AppName { get; } = "玛得令";
+
     internal static CancellationTokenSource CancellationTokenSource => _cts;
     internal static bool IsShuttingDown => _isShuttingDown;
 
@@ -419,17 +421,24 @@ public partial class App : Application
     private async Task ShutdownFromTrayAsync(IClassicDesktopStyleApplicationLifetime desktop)
     {
         if (_isShuttingDown) return;
-
-        await ShutdownApplicationAsync();
+        try
+        {
+            await ShutdownApplicationAsync();
+        }
+        catch (Exception ex)
+        {
+            var logger = Services.GetRequiredService<ILogger<App>>();
+            logger?.LogError(ex, "退出过程中发生异常");
+        }
 
         if (desktop.MainWindow is MainWindow mainWindow)
         {
             mainWindow.ForceClose();
         }
-
         _trayIcon?.Dispose();
         _trayIcon = null;
         desktop.Shutdown();
+        Environment.Exit(0);
     }
 
     /// <summary>
@@ -441,13 +450,16 @@ public partial class App : Application
         _isShuttingDown = true;
 
         try { _cts.Cancel(); } catch { }
-
         await RunShutdownStepAsync(UnloadPluginsAsync(), "卸载插件/MCP 系统");
         await RunShutdownStepAsync(StopBackgroundServicesAsync(CancellationToken.None), "停止后台服务");
 
         if (Services is IDisposable disposable)
         {
-            disposable.Dispose();
+            try
+            {
+                disposable.Dispose();
+            }
+            catch { }
         }
     }
 
