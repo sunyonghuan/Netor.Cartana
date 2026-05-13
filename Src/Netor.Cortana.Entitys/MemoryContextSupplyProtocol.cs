@@ -5,9 +5,9 @@ namespace Netor.Cortana.Entitys;
 /// </summary>
 public static class MemoryContextSupplyProtocol
 {
-    public const string Protocol = "memory-context-supply";
-    public const string Version = "1.0.0";
-    public const string SupplyRequestOperation = "memory.supply.request";
-    public const string SupplyPackageOperation = "memory.supply.package";
-    public const string SupplyErrorOperation = "memory.supply.error";
+    public const string Protocol = CortanaWsEndpoints.PluginBusProtocol;
+    public const string Version = CortanaWsEndpoints.PluginBusVersion;
+    public const string SupplyRequestOperation = CortanaWsEndpoints.MemoryContextSupplyRequestOperation;
+    public const string SupplyPackageOperation = CortanaWsEndpoints.MemoryContextSupplyResponseOperation;
+    public const string SupplyErrorOperation = CortanaWsEndpoints.MemoryContextSupplyErrorOperation;
 }

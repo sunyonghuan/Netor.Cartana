@@ -1,8 +1,12 @@
-# WebSocket Client Checklist
+# PluginBus Checklist
 
-1. 使用 ws://host:port/ws/。
-2. 连接后先等待 connected。
-3. 所有 JSON 使用 JsonSerializerContext。
-4. send 完成后持续接收 token。
-5. 收到 done 或 error 后结束当前会话。
-6. 关闭前发送 stop 仅用于主动中断。
+1. 连接 `ws://localhost:{pluginBusPort}/internal`
+2. 读取 `pluginBusEndpoint` 或 `pluginBusPort`
+3. 等待 `connected`
+4. 发送 `subscribe`
+5. 使用 `type=request/topic=conversation/op=chat.message.send`
+6. 接收 `event`，从 `payload.type` 读取 `token/done/error`
+7. 收到 `ping` 返回 `pong`
+8. 使用 `JsonSerializerContext`
+9. 忽略未知 `type/op`
+10. 断线后重建 `ClientWebSocket`

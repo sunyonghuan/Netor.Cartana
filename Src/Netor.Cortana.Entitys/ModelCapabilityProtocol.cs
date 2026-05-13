@@ -5,10 +5,10 @@ namespace Netor.Cortana.Entitys;
 /// </summary>
 public static class ModelCapabilityProtocol
 {
-    public const string Path = "/internal/model-capability/";
-    public const string Protocol = "model-capability";
-    public const string Version = "1.0.0";
-    public const string LlmInvokeOperation = "llm.invoke";
+    public const string Path = CortanaWsEndpoints.PluginBusPath;
+    public const string Protocol = CortanaWsEndpoints.PluginBusProtocol;
+    public const string Version = CortanaWsEndpoints.PluginBusVersion;
+    public const string LlmInvokeOperation = CortanaWsEndpoints.ModelCapabilityRequestOperation;
 
-    public static string BuildEndpoint(int port) => $"ws://localhost:{port}{Path}";
+    public static string BuildEndpoint(int port) => CortanaWsEndpoints.BuildPluginBusEndpoint(port);
 }

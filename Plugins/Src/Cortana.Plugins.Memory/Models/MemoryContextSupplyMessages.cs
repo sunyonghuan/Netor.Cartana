@@ -13,6 +13,9 @@ public sealed record MemoryContextSupplyRequest
     [JsonPropertyName("version")]
     public string Version { get; init; } = MemoryContextSupplyProtocol.Version;
 
+    [JsonPropertyName("topic")]
+    public string Topic { get; init; } = "memory";
+
     [JsonPropertyName("op")]
     public string Op { get; init; } = MemoryContextSupplyProtocol.SupplyRequestOperation;
 
@@ -93,6 +96,9 @@ public sealed record MemoryContextSupplyPackage
 
     [JsonPropertyName("version")]
     public string Version { get; init; } = MemoryContextSupplyProtocol.Version;
+
+    [JsonPropertyName("topic")]
+    public string Topic { get; init; } = "memory";
 
     [JsonPropertyName("op")]
     public string Op { get; init; } = MemoryContextSupplyProtocol.SupplyPackageOperation;
@@ -225,6 +231,9 @@ public sealed record MemoryContextSupplyError
 
     [JsonPropertyName("version")]
     public string Version { get; init; } = MemoryContextSupplyProtocol.Version;
+
+    [JsonPropertyName("topic")]
+    public string Topic { get; init; } = "memory";
 
     [JsonPropertyName("op")]
     public string Op { get; init; } = MemoryContextSupplyProtocol.SupplyErrorOperation;

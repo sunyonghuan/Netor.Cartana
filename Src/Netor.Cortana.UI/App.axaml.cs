@@ -24,14 +24,35 @@ namespace Netor.Cortana.UI;
 /// </summary>
 public partial class App : Application
 {
+    /// <summary>
+    /// 应用级取消令牌源，用于通知后台任务和服务停止。
+    /// </summary>
     private static CancellationTokenSource _cts = new();
+
+    /// <summary>
+    /// 标记应用是否正在执行关闭流程，避免重复退出。
+    /// </summary>
     private static volatile bool _isShuttingDown;
 
+    /// <summary>
+    /// 系统托盘图标实例。
+    /// </summary>
     private TrayIcon? _trayIcon;
+
+    /// <summary>
+    /// 浮动唤醒窗口实例。
+    /// </summary>
     private FloatWindow? _floatWindow;
+
+    /// <summary>
+    /// 浮动气泡通知窗口实例。
+    /// </summary>
     private BubbleWindow? _bubbleWindow;
 
 #pragma warning disable CS8618
+    /// <summary>
+    /// 应用全局服务提供程序。
+    /// </summary>
     internal static IServiceProvider Services { get; private set; }
 #pragma warning restore CS8618
 
@@ -40,7 +61,14 @@ public partial class App : Application
     /// </summary>
     internal static string AppName { get; } = "玛得令";
 
+    /// <summary>
+    /// 当前应用生命周期共享的取消令牌源。
+    /// </summary>
     internal static CancellationTokenSource CancellationTokenSource => _cts;
+
+    /// <summary>
+    /// 获取应用是否正在关闭。
+    /// </summary>
     internal static bool IsShuttingDown => _isShuttingDown;
 
     /// <summary>
@@ -93,11 +121,17 @@ public partial class App : Application
             Directory.CreateDirectory(WorkspaceSkillsDirectory);
     }
 
+    /// <summary>
+    /// 加载 Avalonia XAML 资源。
+    /// </summary>
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
     }
 
+    /// <summary>
+    /// 在 Avalonia 框架初始化完成后配置服务、窗口和应用生命周期事件。
+    /// </summary>
     public override void OnFrameworkInitializationCompleted()
     {
         ConfigureServices();
@@ -107,6 +141,7 @@ public partial class App : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             var mainWindow = Services.GetRequiredService<MainWindow>();
+            mainWindow.ApplySavedPlacement();
             desktop.MainWindow = mainWindow;
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
@@ -410,6 +445,9 @@ public partial class App : Application
         };
     }
 
+    /// <summary>
+    /// 根据语音唤醒状态刷新托盘菜单项文本。
+    /// </summary>
     private static void UpdateVoiceMenuItemHeader(NativeMenuItem item, bool enabled)
     {
         item.Header = enabled ? "语音唤醒：开" : "语音唤醒：关";
@@ -449,6 +487,8 @@ public partial class App : Application
         if (_isShuttingDown) return;
         _isShuttingDown = true;
 
+        Services.GetService<MainWindow>()?.SaveCurrentPlacement();
+
         try { _cts.Cancel(); } catch { }
         await RunShutdownStepAsync(UnloadPluginsAsync(), "卸载插件/MCP 系统");
         await RunShutdownStepAsync(StopBackgroundServicesAsync(CancellationToken.None), "停止后台服务");
@@ -463,6 +503,9 @@ public partial class App : Application
         }
     }
 
+    /// <summary>
+    /// 执行单个退出步骤，并在超时后记录警告继续后续退出流程。
+    /// </summary>
     private static async Task RunShutdownStepAsync(Task task, string stepName)
     {
         try
@@ -601,15 +644,13 @@ public partial class App : Application
         var logger = Services.GetRequiredService<ILogger<App>>();
         try
         {
-            var wsServer = Services.GetRequiredService<WebSocketInteractionServerService>();
-            var feedServer = Services.GetRequiredService<WebSocketFeedServerService>();
+            var pluginBusServer = Services.GetRequiredService<WebSocketPluginBusServerService>();
             var pluginLoader = Services.GetRequiredService<PluginLoader>();
-            pluginLoader.WsPort = wsServer.Port;
-            pluginLoader.FeedPort = feedServer.Port;
+            pluginLoader.PluginBusPort = pluginBusServer.Port;
 
-            if (pluginLoader.WsPort <= 0 || pluginLoader.FeedPort <= 0)
+            if (pluginLoader.PluginBusPort <= 0)
             {
-                logger.LogWarning("WS 端口未初始化，插件可能无法连接宿主：ws={WsPort} feed={FeedPort}", pluginLoader.WsPort, pluginLoader.FeedPort);
+                logger.LogWarning("PluginBus 端口未初始化，插件可能无法连接宿主：pluginBus={PluginBusPort}", pluginLoader.PluginBusPort);
             }
 
             await pluginLoader.ScanAndLoadAsync(cancellationToken);

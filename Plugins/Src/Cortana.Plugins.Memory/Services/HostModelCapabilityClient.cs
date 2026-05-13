@@ -1,5 +1,3 @@
-using System.Net.WebSockets;
-using System.Text;
 using System.Text.Json;
 
 using Microsoft.Extensions.Logging;
@@ -11,7 +9,10 @@ namespace Cortana.Plugins.Memory.Services;
 /// <summary>
 /// Memory 插件访问宿主大模型能力的轻量客户端。
 /// </summary>
-public sealed class HostModelCapabilityClient(PluginSettings settings, ILogger<HostModelCapabilityClient> logger)
+public sealed class HostModelCapabilityClient(
+    PluginSettings settings,
+    MemoryPluginBusConnection pluginBus,
+    ILogger<HostModelCapabilityClient> logger)
 {
     private const string FallbackPluginId = "memory_engine";
 
@@ -31,15 +32,10 @@ public sealed class HostModelCapabilityClient(PluginSettings settings, ILogger<H
         string outputFormat,
         CancellationToken cancellationToken = default)
     {
-        var endpoint = ResolveEndpoint();
-        if (string.IsNullOrWhiteSpace(endpoint)) return null;
+        if (!pluginBus.IsOpen) return null;
 
         try
         {
-            using var socket = new ClientWebSocket();
-            await socket.ConnectAsync(new Uri(endpoint), cancellationToken);
-            _ = await ReadTextMessageAsync(socket, cancellationToken); // connected
-
             var request = new HostModelCapabilityRequest
             {
                 RequestId = Guid.NewGuid().ToString("N"),
@@ -52,32 +48,12 @@ public sealed class HostModelCapabilityClient(PluginSettings settings, ILogger<H
                 MaxOutputTokens = 4096
             };
 
-            var json = JsonSerializer.Serialize(request, MemoryHostModelCapabilityJsonContext.Default.HostModelCapabilityRequest);
-            var bytes = Encoding.UTF8.GetBytes(json);
-            await socket.SendAsync(bytes, WebSocketMessageType.Text, true, cancellationToken);
+            var response = await pluginBus.InvokeModelAsync(request, cancellationToken).ConfigureAwait(false);
+            if (response is null) return null;
+            if (response.Success) return response.Content;
 
-            while (socket.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
-            {
-                var text = await ReadTextMessageAsync(socket, cancellationToken);
-                if (string.IsNullOrWhiteSpace(text)) return null;
-
-                var response = JsonSerializer.Deserialize(text, MemoryHostModelCapabilityJsonContext.Default.HostModelCapabilityResponse);
-                if (response is null)
-                {
-                    await SafeCloseAsync(socket).ConfigureAwait(false);
-                    return null;
-                }
-
-                if (response.Success)
-                {
-                    await SafeCloseAsync(socket).ConfigureAwait(false);
-                    return response.Content;
-                }
-
-                logger.LogWarning("宿主模型能力调用失败：{Code} {Message}", response.ErrorCode, response.ErrorMessage);
-                await SafeCloseAsync(socket).ConfigureAwait(false);
-                return null;
-            }
+            logger.LogWarning("宿主模型能力调用失败：{Code} {Message}", response.ErrorCode, response.ErrorMessage);
+            return null;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -117,66 +93,4 @@ public sealed class HostModelCapabilityClient(PluginSettings settings, ILogger<H
         return FallbackPluginId;
     }
 
-    /// <summary>
-    /// 从宿主下发的插件扩展配置中解析模型能力控制面地址。
-    /// </summary>
-    /// <returns>WebSocket 地址；未下发时返回 <see langword="null"/>。</returns>
-    private string? ResolveEndpoint()
-    {
-        if (settings.Extensions.TryGetValue("modelCapabilityEndpoint", out var endpoint)
-            && !string.IsNullOrWhiteSpace(endpoint))
-        {
-            return endpoint;
-        }
-
-        if (settings.Extensions.TryGetValue("modelCapabilityPort", out var portValue)
-            && int.TryParse(portValue, out var port)
-            && port > 0)
-        {
-            return $"ws://localhost:{port}/internal/model-capability/";
-        }
-
-        if (settings.ConversationFeedPort > 0)
-        {
-            return $"ws://localhost:{settings.ConversationFeedPort}/internal/model-capability/";
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// 从 WebSocket 读取一条完整文本消息。
-    /// </summary>
-    /// <param name="socket">WebSocket 连接。</param>
-    /// <param name="cancellationToken">取消令牌。</param>
-    /// <returns>文本消息；连接关闭时返回 <see langword="null"/>。</returns>
-    private static async Task<string?> ReadTextMessageAsync(ClientWebSocket socket, CancellationToken cancellationToken)
-    {
-        var buffer = new byte[16 * 1024];
-        using var message = new MemoryStream();
-        while (true)
-        {
-            var result = await socket.ReceiveAsync(buffer, cancellationToken);
-            if (result.MessageType == WebSocketMessageType.Close) return null;
-            if (result.Count > 0) message.Write(buffer, 0, result.Count);
-            if (result.EndOfMessage) break;
-        }
-
-        return Encoding.UTF8.GetString(message.ToArray());
-    }
-
-    private static async Task SafeCloseAsync(ClientWebSocket socket)
-    {
-        try
-        {
-            if (socket.State is WebSocketState.Open or WebSocketState.CloseReceived)
-            {
-                await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None).ConfigureAwait(false);
-            }
-        }
-        catch
-        {
-            // 关闭握手失败不影响本次模型能力调用结果。
-        }
-    }
 }

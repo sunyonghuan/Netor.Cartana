@@ -20,8 +20,9 @@ namespace Cortana.Plugins.Memory.Serialization;
 [JsonSerializable(typeof(MemoryProcessingResult))]
 [JsonSerializable(typeof(RecallBudgetSnapshot))]
 [JsonSerializable(typeof(RecallPolicySnapshot))]
-[JsonSerializable(typeof(ConversationFeedSubscribeFrame))]
-[JsonSerializable(typeof(ConversationFeedReplayFrame))]
+[JsonSerializable(typeof(PluginBusSubscribeFrame))]
+[JsonSerializable(typeof(PluginBusReplayFrame))]
+[JsonSerializable(typeof(PluginBusReplayPayload))]
 [JsonSerializable(typeof(MemoryContextSupplyRequest))]
 [JsonSerializable(typeof(MemoryContextSupplyPackage))]
 [JsonSerializable(typeof(MemoryContextSupplyError))]
@@ -57,8 +58,8 @@ internal sealed class RecallPolicySnapshot
     public bool SupportsPendingCandidateOnQueryMatch { get; init; }
 }
 
-/// <summary>conversation-feed 订阅帧。</summary>
-internal sealed class ConversationFeedSubscribeFrame
+/// <summary>PluginBus 订阅帧。</summary>
+internal sealed class PluginBusSubscribeFrame
 {
     [JsonPropertyName("type")] public string Type { get; init; } = "subscribe";
     [JsonPropertyName("topics")] public string[] Topics { get; init; } = [];
@@ -66,10 +67,21 @@ internal sealed class ConversationFeedSubscribeFrame
     [JsonPropertyName("version")] public string Version { get; init; } = string.Empty;
 }
 
-/// <summary>conversation-feed 回放请求帧。</summary>
-internal sealed class ConversationFeedReplayFrame
+/// <summary>PluginBus 历史回放请求帧。</summary>
+internal sealed class PluginBusReplayFrame
 {
-    [JsonPropertyName("type")] public string Type { get; init; } = "replay";
+    [JsonPropertyName("type")] public string Type { get; init; } = "request";
+    [JsonPropertyName("protocol")] public string Protocol { get; init; } = "cortana.plugin-bus";
+    [JsonPropertyName("version")] public string Version { get; init; } = "1.0.0";
+    [JsonPropertyName("topic")] public string Topic { get; init; } = "conversation";
+    [JsonPropertyName("op")] public string Op { get; init; } = "conversation.history.replay";
+    [JsonPropertyName("requestId")] public string RequestId { get; init; } = Guid.NewGuid().ToString("N");
+    [JsonPropertyName("payload")] public PluginBusReplayPayload Payload { get; init; } = new();
+}
+
+/// <summary>PluginBus 历史回放请求载荷。</summary>
+internal sealed class PluginBusReplayPayload
+{
     [JsonPropertyName("sinceTimestamp")] public long SinceTimestamp { get; init; }
     [JsonPropertyName("batchSize")] public int BatchSize { get; init; }
 }

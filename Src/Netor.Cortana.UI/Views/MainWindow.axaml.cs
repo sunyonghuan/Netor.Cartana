@@ -1,11 +1,14 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia;
 using Avalonia.Threading;
 
 using Netor.Cortana.Entitys;
 using Netor.Cortana.Entitys.Services;
 using Netor.EventHub;
+
+using System.Globalization;
 
 namespace Netor.Cortana.UI.Views;
 
@@ -23,6 +26,11 @@ namespace Netor.Cortana.UI.Views;
 /// </summary>
 public partial class MainWindow : Window
 {
+    private const string PlacementXKey = "UI.MainWindow.X";
+    private const string PlacementYKey = "UI.MainWindow.Y";
+    private const string PlacementWidthKey = "UI.MainWindow.Width";
+    private const string PlacementHeightKey = "UI.MainWindow.Height";
+
     private ISubscriber? _subscriber;
     private bool _forceClose;
     private bool _workspaceOpen;
@@ -285,6 +293,75 @@ public partial class MainWindow : Window
             e.Cancel = true;
             Hide();
         }
+    }
+
+    /// <summary>从系统设置恢复主窗口位置和大小；首次启动无设置时保持 XAML 的居中启动。</summary>
+    internal void ApplySavedPlacement()
+    {
+        var settings = App.Services.GetRequiredService<SystemSettingsService>();
+        var x = ReadInt(settings, PlacementXKey);
+        var y = ReadInt(settings, PlacementYKey);
+        var width = ReadDouble(settings, PlacementWidthKey);
+        var height = ReadDouble(settings, PlacementHeightKey);
+
+        if (x is null || y is null || width is null || height is null)
+        {
+            return;
+        }
+
+        Width = Math.Max(MinWidth, width.Value);
+        Height = Math.Max(MinHeight, height.Value);
+
+        var position = new PixelPoint(x.Value, y.Value);
+        if (IsPositionVisible(position))
+        {
+            WindowStartupLocation = WindowStartupLocation.Manual;
+            Position = position;
+        }
+    }
+
+    /// <summary>保存当前主窗口位置和大小到系统设置表。</summary>
+    internal void SaveCurrentPlacement()
+    {
+        if (WindowState != WindowState.Normal)
+        {
+            return;
+        }
+
+        var settings = App.Services.GetRequiredService<SystemSettingsService>();
+        settings.SetValue(PlacementXKey, Position.X.ToString(CultureInfo.InvariantCulture));
+        settings.SetValue(PlacementYKey, Position.Y.ToString(CultureInfo.InvariantCulture));
+        settings.SetValue(PlacementWidthKey, Width.ToString(CultureInfo.InvariantCulture));
+        settings.SetValue(PlacementHeightKey, Height.ToString(CultureInfo.InvariantCulture));
+    }
+
+    private bool IsPositionVisible(PixelPoint position)
+    {
+        foreach (var screen in Screens.All)
+        {
+            var area = screen.WorkingArea;
+            if (position.X >= area.X && position.X < area.X + area.Width
+                && position.Y >= area.Y && position.Y < area.Y + area.Height)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static int? ReadInt(SystemSettingsService settings, string key)
+    {
+        return int.TryParse(settings.GetValue(key), CultureInfo.InvariantCulture, out var value)
+            ? value
+            : null;
+    }
+
+    private static double? ReadDouble(SystemSettingsService settings, string key)
+    {
+        return double.TryParse(settings.GetValue(key), CultureInfo.InvariantCulture, out var value)
+            ? value
+            : null;
     }
 
     /// <summary>强制关闭窗口（退出应用时使用）。</summary>

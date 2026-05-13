@@ -43,18 +43,18 @@ internal sealed class WebSocketHeartbeatLoop
             WebSocketJsonContext.Default.WsMessage);
     }
 
-    public static string CreateFeedPingPayload(string clientId, string timestamp)
+    public static string CreatePluginBusPingPayload(string clientId, string timestamp)
     {
         return JsonSerializer.Serialize(
-            new ConversationFeedControlMessage
+            new PluginBusControlMessage
             {
                 Type = "ping",
                 ClientId = clientId,
-                Protocol = CortanaWsEndpoints.ConversationFeedProtocol,
-                Version = CortanaWsEndpoints.ConversationFeedVersion,
+                Protocol = CortanaWsEndpoints.PluginBusProtocol,
+                Version = CortanaWsEndpoints.PluginBusVersion,
                 Message = timestamp
             },
-            WebSocketJsonContext.Default.ConversationFeedControlMessage);
+            WebSocketJsonContext.Default.PluginBusControlMessage);
     }
 
     public static string CreateModelCapabilityPingPayload(string clientId, string timestamp)

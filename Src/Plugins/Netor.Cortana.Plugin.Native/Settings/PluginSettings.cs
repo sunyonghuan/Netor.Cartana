@@ -7,10 +7,9 @@ namespace Netor.Cortana.Plugin.Native;
 /// </summary>
 public sealed class PluginSettings
 {
-    private const string DefaultChatPath = "/ws/";
-    private const string DefaultConversationFeedPath = "/internal/conversation-feed/";
-    private const string DefaultConversationFeedProtocol = "conversation-feed";
-    private const string DefaultConversationFeedVersion = "1.0.0";
+    private const string DefaultPluginBusPath = "/internal";
+    private const string DefaultPluginBusProtocol = "cortana.plugin-bus";
+    private const string DefaultPluginBusVersion = "1.0.0";
 
     /// <summary>插件专属的数据存储目录。</summary>
     public string DataDirectory { get; }
@@ -27,19 +26,31 @@ public sealed class PluginSettings
     /// <summary>插件 init 扩展参数。</summary>
     public IReadOnlyDictionary<string, string> Extensions { get; }
 
-    /// <summary>旧聊天 WebSocket 端点。</summary>
+    /// <summary>内部插件总线端点。</summary>
+    public string PluginBusEndpoint { get; }
+
+    /// <summary>内部插件总线协议名。</summary>
+    public string PluginBusProtocol { get; }
+
+    /// <summary>内部插件总线协议版本。</summary>
+    public string PluginBusVersion { get; }
+
+    /// <summary>内部插件总线端口。</summary>
+    public int PluginBusPort { get; }
+
+    /// <summary>内部插件总线端点。保留旧属性名以兼容现有调用点。</summary>
     public string ChatWsEndpoint { get; }
 
-    /// <summary>内部对话 feed 端点。</summary>
+    /// <summary>内部插件总线端点。保留旧属性名以兼容现有调用点。</summary>
     public string ConversationFeedEndpoint { get; }
 
-    /// <summary>内部对话 feed 协议名。</summary>
+    /// <summary>内部插件总线协议名。保留旧属性名以兼容现有调用点。</summary>
     public string ConversationFeedProtocol { get; }
 
-    /// <summary>内部对话 feed 协议版本。</summary>
+    /// <summary>内部插件总线协议版本。保留旧属性名以兼容现有调用点。</summary>
     public string ConversationFeedVersion { get; }
 
-    /// <summary>内部对话 feed 端口（扩展字段，优先于 Endpoint）。</summary>
+    /// <summary>内部插件总线端口。保留旧属性名以兼容现有调用点。</summary>
     public int ConversationFeedPort { get; }
 
     /// <summary>直接构造运行时配置。</summary>
@@ -72,19 +83,33 @@ public sealed class PluginSettings
         Extensions = extensions is null
             ? new Dictionary<string, string>(StringComparer.Ordinal)
             : new Dictionary<string, string>(extensions, StringComparer.Ordinal);
-        ChatWsEndpoint = !string.IsNullOrWhiteSpace(chatWsEndpoint)
-            ? chatWsEndpoint
-            : wsPort > 0 ? $"ws://localhost:{wsPort}{DefaultChatPath}" : string.Empty;
-        ConversationFeedEndpoint = !string.IsNullOrWhiteSpace(conversationFeedEndpoint)
+        var pluginBusEndpoint = GetExtension(Extensions, "pluginBusEndpoint");
+        var pluginBusProtocol = GetExtension(Extensions, "pluginBusProtocol");
+        var pluginBusVersion = GetExtension(Extensions, "pluginBusVersion");
+        var pluginBusPort = GetExtensionInt32(Extensions, "pluginBusPort");
+
+        PluginBusPort = pluginBusPort > 0 ? pluginBusPort : conversationFeedPort > 0 ? conversationFeedPort : wsPort;
+        PluginBusEndpoint = !string.IsNullOrWhiteSpace(pluginBusEndpoint)
+            ? pluginBusEndpoint
+            : !string.IsNullOrWhiteSpace(conversationFeedEndpoint)
             ? conversationFeedEndpoint
-            : wsPort > 0 ? $"ws://localhost:{wsPort}{DefaultConversationFeedPath}" : string.Empty;
-        ConversationFeedProtocol = !string.IsNullOrWhiteSpace(conversationFeedProtocol)
+            : PluginBusPort > 0 ? $"ws://localhost:{PluginBusPort}{DefaultPluginBusPath}" : string.Empty;
+        PluginBusProtocol = !string.IsNullOrWhiteSpace(pluginBusProtocol)
+            ? pluginBusProtocol
+            : !string.IsNullOrWhiteSpace(conversationFeedProtocol)
             ? conversationFeedProtocol
-            : DefaultConversationFeedProtocol;
-        ConversationFeedVersion = !string.IsNullOrWhiteSpace(conversationFeedVersion)
+            : DefaultPluginBusProtocol;
+        PluginBusVersion = !string.IsNullOrWhiteSpace(pluginBusVersion)
+            ? pluginBusVersion
+            : !string.IsNullOrWhiteSpace(conversationFeedVersion)
             ? conversationFeedVersion
-            : DefaultConversationFeedVersion;
-        ConversationFeedPort = conversationFeedPort;
+            : DefaultPluginBusVersion;
+
+        ChatWsEndpoint = PluginBusEndpoint;
+        ConversationFeedEndpoint = PluginBusEndpoint;
+        ConversationFeedProtocol = PluginBusProtocol;
+        ConversationFeedVersion = PluginBusVersion;
+        ConversationFeedPort = PluginBusPort;
     }
 
     /// <summary>
@@ -114,11 +139,11 @@ public sealed class PluginSettings
             : 0;
 
         var extensions = ReadExtensions(root);
-        var chatWsEndpoint = GetExtension(extensions, "chatWsEndpoint");
-        var conversationFeedEndpoint = GetExtension(extensions, "conversationFeedEndpoint");
-        var conversationFeedProtocol = GetExtension(extensions, "conversationFeedProtocol");
-        var conversationFeedVersion = GetExtension(extensions, "conversationFeedVersion");
-        var conversationFeedPort = GetExtensionInt32(extensions, "conversationFeedPort");
+        var chatWsEndpoint = GetExtension(extensions, "pluginBusEndpoint");
+        var conversationFeedEndpoint = GetExtension(extensions, "pluginBusEndpoint");
+        var conversationFeedProtocol = GetExtension(extensions, "pluginBusProtocol");
+        var conversationFeedVersion = GetExtension(extensions, "pluginBusVersion");
+        var conversationFeedPort = GetExtensionInt32(extensions, "pluginBusPort");
 
         return new PluginSettings(
             dataDirectory,

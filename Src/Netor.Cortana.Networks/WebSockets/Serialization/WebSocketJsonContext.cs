@@ -11,9 +11,10 @@ namespace Netor.Cortana.Networks;
 /// WebSocket 消息 JSON 源生成器上下文（AOT 兼容）。
 /// </summary>
 [JsonSerializable(typeof(WsMessage))]
-[JsonSerializable(typeof(ConversationFeedControlMessage))]
-[JsonSerializable(typeof(ConversationFeedEventMessage))]
+[JsonSerializable(typeof(PluginBusControlMessage))]
+[JsonSerializable(typeof(PluginBusEventMessage))]
 [JsonSerializable(typeof(ConversationExportBatch))]
+[JsonSerializable(typeof(ConversationHistoryCompletedPayload))]
 [JsonSerializable(typeof(ConversationExportRecord))]
 [JsonSerializable(typeof(ConversationTurnStartedArgs))]
 [JsonSerializable(typeof(ConversationUserMessageArgs))]
@@ -47,9 +48,9 @@ internal sealed record WsMessage
 }
 
 /// <summary>
-/// 内部对话事件 feed 的控制消息。
+/// 内部插件总线控制消息。
 /// </summary>
-internal sealed record ConversationFeedControlMessage
+internal sealed record PluginBusControlMessage
 {
     [JsonPropertyName("type")]
     public string Type { get; init; } = string.Empty;
@@ -71,9 +72,9 @@ internal sealed record ConversationFeedControlMessage
 }
 
 /// <summary>
-/// 内部对话事件 feed 的事件消息。
+/// 内部插件总线事件消息。
 /// </summary>
-internal sealed record ConversationFeedEventMessage
+internal sealed record PluginBusEventMessage
 {
     [JsonPropertyName("type")]
     public string Type { get; init; } = string.Empty;
@@ -87,6 +88,21 @@ internal sealed record ConversationFeedEventMessage
     [JsonPropertyName("topic")]
     public string Topic { get; init; } = string.Empty;
 
+    [JsonPropertyName("requestId")]
+    public string? RequestId { get; init; }
+
+    [JsonPropertyName("op")]
+    public string? Op { get; init; }
+
+    [JsonPropertyName("source")]
+    public string? Source { get; init; }
+
+    [JsonPropertyName("target")]
+    public string? Target { get; init; }
+
+    [JsonPropertyName("timestamp")]
+    public long? Timestamp { get; init; }
+
     [JsonPropertyName("eventType")]
     public string EventType { get; init; } = string.Empty;
 
@@ -95,7 +111,7 @@ internal sealed record ConversationFeedEventMessage
 }
 
 /// <summary>
-/// 历史回放批次负载（conversation.export.batch）。
+/// 历史回放批次负载（conversation.history.batch）。
 /// </summary>
 internal sealed record ConversationExportBatch
 {

@@ -9,10 +9,10 @@ using Netor.EventHub;
 namespace Netor.Cortana.Networks;
 
 /// <summary>
-/// 订阅宿主内部 Conversation 事件，并通过内部 WebSocket feed 转发给插件侧订阅者。
+/// 订阅宿主内部 Conversation 事件，并通过内部 PluginBus 转发给插件侧订阅者。
 /// </summary>
 public sealed class WebSocketConversationFeedRelayService(
-    IConversationFeedBroadcaster server,
+    IPluginBusBroadcaster server,
     ISubscriber subscriber) : IHostedService
 {
     public Task StartAsync(CancellationToken cancellationToken)
@@ -71,16 +71,20 @@ public sealed class WebSocketConversationFeedRelayService(
         JsonTypeInfo<TArgs> jsonTypeInfo)
     {
         var payload = JsonSerializer.SerializeToElement(args, jsonTypeInfo);
-        var message = JsonSerializer.Serialize(new ConversationFeedEventMessage
+        var message = JsonSerializer.Serialize(new PluginBusEventMessage
         {
             Type = "event",
-            Protocol = CortanaWsEndpoints.ConversationFeedProtocol,
-            Version = CortanaWsEndpoints.ConversationFeedVersion,
+            Protocol = CortanaWsEndpoints.PluginBusProtocol,
+            Version = CortanaWsEndpoints.PluginBusVersion,
             Topic = CortanaWsEndpoints.ConversationTopic,
+            Op = CortanaWsEndpoints.ConversationEventPublishOperation,
+            Source = "host",
+            Target = "plugin.memory",
+            Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
             EventType = eventType,
             Payload = payload
-        }, WebSocketJsonContext.Default.ConversationFeedEventMessage);
+        }, WebSocketJsonContext.Default.PluginBusEventMessage);
 
-        return server.BroadcastConversationFeedAsync(message);
+        return server.BroadcastPluginBusAsync(CortanaWsEndpoints.ConversationTopic, message);
     }
 }

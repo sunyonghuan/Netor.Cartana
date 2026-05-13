@@ -198,20 +198,15 @@ public abstract class ExternalProcessPluginHostBase : IDisposable
         {
             DataDirectory = Path.Combine(PluginDirectory, "data"),
             WorkspaceDirectory = context.WorkspaceDirectory,
-            WsPort = context.WsPort,
+            WsPort = context.PluginBusPort,
             PluginDirectory = PluginDirectory,
             Extensions = new NativePluginInitExtensions
             {
-                ["modelCapabilityEndpoint"] = CortanaWsEndpoints.BuildModelCapabilityEndpoint(context.FeedPort > 0 ? context.FeedPort : context.WsPort),
-                ["modelCapabilityPort"] = (context.FeedPort > 0 ? context.FeedPort : context.WsPort).ToString(),
-                ["modelCapabilityPath"] = ModelCapabilityProtocol.Path,
-                ["modelCapabilityProtocol"] = ModelCapabilityProtocol.Protocol,
-                ["modelCapabilityVersion"] = ModelCapabilityProtocol.Version,
-                ["chatWsEndpoint"] = CortanaWsEndpoints.BuildChatEndpoint(context.WsPort),
-                ["conversationFeedEndpoint"] = CortanaWsEndpoints.BuildConversationFeedEndpoint(context.FeedPort > 0 ? context.FeedPort : context.WsPort),
-                ["conversationFeedPort"] = (context.FeedPort > 0 ? context.FeedPort : context.WsPort).ToString(),
-                ["conversationFeedProtocol"] = CortanaWsEndpoints.ConversationFeedProtocol,
-                ["conversationFeedVersion"] = CortanaWsEndpoints.ConversationFeedVersion
+                ["pluginBusEndpoint"] = CortanaWsEndpoints.BuildPluginBusEndpoint(context.PluginBusPort),
+                ["pluginBusPort"] = context.PluginBusPort.ToString(),
+                ["pluginBusPath"] = CortanaWsEndpoints.PluginBusPath,
+                ["pluginBusProtocol"] = CortanaWsEndpoints.PluginBusProtocol,
+                ["pluginBusVersion"] = CortanaWsEndpoints.PluginBusVersion
             }
         }, NativePluginJsonContext.Default.NativePluginInitConfig);
 

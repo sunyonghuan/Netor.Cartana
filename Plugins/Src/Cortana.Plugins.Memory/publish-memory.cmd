@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 chcp 65001 >nul
 where pwsh >nul 2>nul
 if %ERRORLEVEL%==0 (

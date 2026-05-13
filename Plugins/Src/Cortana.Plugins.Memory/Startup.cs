@@ -8,14 +8,14 @@ using Netor.Cortana.Plugin.Native;
 namespace Cortana.Plugins.Memory;
 
 /// <summary>
-/// 记忆引擎插件入口：注册后台摄取服务，订阅宿主内部对话 feed。
+/// 记忆引擎插件入口：注册后台摄取服务，订阅宿主内部 PluginBus。
 /// </summary>
 [Plugin(
     Id = "memory_engine",
     Name = "增强记忆引擎",
-    Version = "1.0.25",
-    Description = "订阅宿主内部对话事实流，为长期记忆构建做摄取与预处理。",
-    Tags = ["memory", "ingest", "conversation-feed"],
+    Version = "1.0.31",
+    Description = "订阅宿主内部 PluginBus，为长期记忆构建做摄取、供应与模型能力协作。",
+    Tags = ["memory", "ingest", "plugin-bus"],
     Instructions = """
         记忆工具使用指引：
         【何时写入记忆】当用户明确说"记住这个"、"帮我记下"、"加入长期记忆"时，调用 memory_add_note 写入。不要在用户未授权时静默写入。
@@ -43,6 +43,10 @@ public static partial class Startup
         services.AddSingleton<IMemoryObservationWriter, MemoryObservationWriter>();
         services.AddSingleton<IMemoryReadToolHandler, MemoryReadToolHandler>();
         services.AddSingleton<IMemoryWriteToolHandler, MemoryWriteToolHandler>();
+        services.AddSingleton<MemoryPluginBusConnection>();
+        services.AddSingleton<MemoryConversationEventHandler>();
+        services.AddSingleton<MemorySupplyRequestHandler>();
+        services.AddSingleton<MemoryPluginBusDispatcher>();
         services.AddSingleton<HostModelCapabilityClient>();
         services.AddSingleton<FallbackMemorySemanticProcessor>();
         services.AddSingleton<IMemorySemanticProcessor, HostModelMemorySemanticProcessor>();

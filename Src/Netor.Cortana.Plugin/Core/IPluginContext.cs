@@ -19,9 +19,6 @@ public interface IPluginContext
     /// <summary>HTTP 客户端工厂。</summary>
     IHttpClientFactory HttpClientFactory { get; }
 
-    /// <summary>宿主 WebSocket 端口。</summary>
-    int WsPort { get; }
-
-    /// <summary>对话事实 Feed 专用端口。</summary>
-    int FeedPort { get; }
+    /// <summary>内部插件总线端口。</summary>
+    int PluginBusPort { get; }
 }

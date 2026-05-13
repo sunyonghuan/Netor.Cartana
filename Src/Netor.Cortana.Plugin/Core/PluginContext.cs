@@ -12,8 +12,7 @@ namespace Netor.Cortana.Plugin;
 public sealed class PluginContext : IPluginContext
 {
     private readonly IAppPaths _appPaths;
-    private readonly int _wsPort;
-    private readonly int _feedPort;
+    private readonly int _pluginBusPort;
 
     /// <inheritdoc />
     public string DataDirectory { get; }
@@ -28,16 +27,14 @@ public sealed class PluginContext : IPluginContext
     public IHttpClientFactory HttpClientFactory { get; }
 
     /// <inheritdoc />
-    public int WsPort => _wsPort;
-    public int FeedPort => _feedPort;
+    public int PluginBusPort => _pluginBusPort;
 
     public PluginContext(
         string dataDirectory,
         ILoggerFactory loggerFactory,
         IHttpClientFactory httpClientFactory,
         IAppPaths appPaths,
-        int wsPort,
-        int feedPort)
+        int pluginBusPort)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(dataDirectory);
         ArgumentNullException.ThrowIfNull(loggerFactory);
@@ -48,8 +45,7 @@ public sealed class PluginContext : IPluginContext
         LoggerFactory = loggerFactory;
         HttpClientFactory = httpClientFactory;
         _appPaths = appPaths;
-        _wsPort = wsPort;
-        _feedPort = feedPort;
+        _pluginBusPort = pluginBusPort;
 
         if (!Directory.Exists(dataDirectory))
             Directory.CreateDirectory(dataDirectory);

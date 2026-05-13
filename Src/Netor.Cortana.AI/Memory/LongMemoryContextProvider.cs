@@ -68,11 +68,33 @@ public sealed class LongMemoryContextProvider(
             var package = await supplyClient.SupplyAsync(request, cts.Token).ConfigureAwait(false);
             if (package is null)
             {
+                logger.LogDebug(
+                    "长期记忆上下文供应为空：RequestId={RequestId}, AgentId={AgentId}, Workspace={WorkspaceId}, TraceId={TraceId}",
+                    request.RequestId,
+                    request.AgentId,
+                    request.WorkspaceId,
+                    request.TraceId);
                 return new AIContext();
             }
 
             var minimumConfidence = systemSettings.GetValue(MinimumConfidenceKey, 0.2d);
             var instructions = LongMemoryPromptFormatter.Format(package, minimumConfidence);
+            var suppliedCount = package.Items.Count;
+            var eligibleCount = CountEligibleItems(package, minimumConfidence);
+            var injectedCount = CountInjectedItems(package, minimumConfidence);
+            logger.LogInformation(
+                "长期记忆上下文供应完成：RequestId={RequestId}, AgentId={AgentId}, Workspace={WorkspaceId}, Supplied={SuppliedCount}, Eligible={EligibleCount}, Injected={InjectedCount}, Groups={GroupCount}, Confidence={Confidence:F4}, InstructionLength={InstructionLength}, TraceId={TraceId}",
+                package.RequestId,
+                request.AgentId,
+                request.WorkspaceId,
+                suppliedCount,
+                eligibleCount,
+                injectedCount,
+                package.Groups.Count,
+                package.Confidence,
+                instructions.Length,
+                request.TraceId);
+
             return string.IsNullOrWhiteSpace(instructions)
                 ? new AIContext()
                 : new AIContext { Instructions = instructions };
@@ -113,5 +135,19 @@ public sealed class LongMemoryContextProvider(
     private static string? Normalize(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static int CountEligibleItems(MemoryContextSupplyPackage package, double minimumConfidence)
+    {
+        return package.Items.Count(item => !string.IsNullOrWhiteSpace(item.Content) && item.Confidence >= minimumConfidence);
+    }
+
+    private static int CountInjectedItems(MemoryContextSupplyPackage package, double minimumConfidence)
+    {
+        return package.Groups
+            .SelectMany(static group => group.Items)
+            .Where(item => !string.IsNullOrWhiteSpace(item.Content) && item.Confidence >= minimumConfidence)
+            .GroupBy(static item => item.Content.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Count();
     }
 }

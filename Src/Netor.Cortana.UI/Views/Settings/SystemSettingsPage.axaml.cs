@@ -268,7 +268,7 @@ public partial class SystemSettingsPage : UserControl
         // 如果端口发生了变化，重启 WebSocket 服务
         if (portEntry != default)
         {
-            var currentServer = App.Services.GetRequiredService<WebSocketInteractionServerService>();
+            var currentServer = App.Services.GetRequiredService<WebSocketPluginBusServerService>();
             var oldPort = currentServer.Port;
             if (int.TryParse(portEntry.Value, out var newPort) && newPort != oldPort)
             {

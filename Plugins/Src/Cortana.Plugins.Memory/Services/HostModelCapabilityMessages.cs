@@ -11,6 +11,18 @@ internal sealed record HostModelCapabilityRequest
     [JsonPropertyName("type")]
     public string Type { get; init; } = "request";
 
+    [JsonPropertyName("protocol")]
+    public string Protocol { get; init; } = "cortana.plugin-bus";
+
+    [JsonPropertyName("version")]
+    public string Version { get; init; } = "1.0.0";
+
+    [JsonPropertyName("topic")]
+    public string Topic { get; init; } = "model";
+
+    [JsonPropertyName("op")]
+    public string Op { get; init; } = "model.capability.request";
+
     /// <summary>请求唯一标识，用于匹配响应和日志追踪。</summary>
     [JsonPropertyName("requestId")]
     public string RequestId { get; init; } = string.Empty;
@@ -52,6 +64,12 @@ internal sealed record HostModelCapabilityResponse
     /// <summary>消息类型。当前固定为 <c>response</c>。</summary>
     [JsonPropertyName("type")]
     public string Type { get; init; } = string.Empty;
+
+    [JsonPropertyName("topic")]
+    public string? Topic { get; init; }
+
+    [JsonPropertyName("op")]
+    public string? Op { get; init; }
 
     /// <summary>请求唯一标识。</summary>
     [JsonPropertyName("requestId")]

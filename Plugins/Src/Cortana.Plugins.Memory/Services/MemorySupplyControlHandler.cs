@@ -36,7 +36,7 @@ public sealed class MemorySupplyControlHandler(IMemorySupplyService supplyServic
                     : $"{message.Role.Trim()}: {message.Content.Trim()}")
                 .TakeLast(20)
                 .ToList(),
-            TriggerSource = Normalize(request.TriggerSource) ?? "memory.supply.request",
+            TriggerSource = Normalize(request.TriggerSource) ?? MemoryContextSupplyProtocol.SupplyRequestOperation,
             MaxMemoryCount = request.MaxMemoryCount,
             MaxTokenBudget = request.MaxTokenBudget,
             TraceId = request.TraceId

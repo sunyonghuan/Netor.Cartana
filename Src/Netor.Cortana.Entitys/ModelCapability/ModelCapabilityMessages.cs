@@ -95,7 +95,19 @@ public sealed record ModelCapabilityRequest
     /// 消息类型，调用请求固定为 request。
     /// </summary>
     [JsonPropertyName("type")]
-    public string Type { get; init; } = string.Empty;
+    public string Type { get; init; } = "request";
+
+    /// <summary>
+    /// 插件总线主题。
+    /// </summary>
+    [JsonPropertyName("topic")]
+    public string Topic { get; init; } = CortanaWsEndpoints.ModelTopic;
+
+    /// <summary>
+    /// 模型能力操作名。
+    /// </summary>
+    [JsonPropertyName("op")]
+    public string Op { get; init; } = ModelCapabilityProtocol.LlmInvokeOperation;
 
     /// <summary>
     /// 本次模型能力调用的请求标识。
@@ -156,6 +168,18 @@ public sealed record ModelCapabilityResponse
     /// </summary>
     [JsonPropertyName("type")]
     public string Type { get; init; } = "response";
+
+    /// <summary>
+    /// 插件总线主题。
+    /// </summary>
+    [JsonPropertyName("topic")]
+    public string Topic { get; init; } = CortanaWsEndpoints.ModelTopic;
+
+    /// <summary>
+    /// 模型能力响应操作名。
+    /// </summary>
+    [JsonPropertyName("op")]
+    public string Op { get; init; } = CortanaWsEndpoints.ModelCapabilityResponseOperation;
 
     /// <summary>
     /// 对应请求的标识。

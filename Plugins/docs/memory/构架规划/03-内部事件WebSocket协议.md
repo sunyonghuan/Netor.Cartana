@@ -1,6 +1,8 @@
 # 03 - 内部事件 WebSocket 协议
 
-> 状态：第一版已落地
+> 状态：已被 S08 单端点 PluginBus 方案取代  
+> 当前主线：`ws://localhost:{pluginBusPort}/internal`，协议 `cortana.plugin-bus`  
+> 说明：本文保留为历史设计记录，旧 `/internal/conversation-feed/`、`conversation-feed` 协议和 `memory.supply.*` 操作名不再作为当前实现依据。
 
 ## 目标
 
@@ -15,12 +17,30 @@
 
 ## 当前地址
 
-- `ws://localhost:{ChatWsPort}/ws/`：聊天协议
-- `ws://localhost:{ChatWsPort}/internal/conversation-feed/`：内部事件协议
+当前实现已收敛为单端点插件总线：
 
-第一版实际采用同端口不同路径，不新增独立 feed 端口。
+- `ws://localhost:{pluginBusPort}/internal`：PluginBus 统一内部协议。
+
+历史地址已废弃：
+
+- `ws://localhost:{ChatWsPort}/ws/`：不再作为 Memory 插件内部通信入口。
+- `ws://localhost:{ChatWsPort}/internal/conversation-feed/`：已废弃，不再注册独立服务。
 
 ## 握手消息
+
+当前实现使用 `cortana.plugin-bus`：
+
+```json
+{
+	"type": "connected",
+	"clientId": "plugin-bus-client-id",
+	"topics": ["conversation", "memory", "model", "plugin"],
+	"protocol": "cortana.plugin-bus",
+	"version": "1.0.0"
+}
+```
+
+以下为旧协议示例，仅作历史记录：
 
 ```json
 {
@@ -34,6 +54,19 @@
 
 ## 插件订阅请求
 
+当前实现订阅 `conversation`、`memory`、`model`：
+
+```json
+{
+	"type": "subscribe",
+	"topics": ["conversation", "memory", "model"],
+	"protocol": "cortana.plugin-bus",
+	"version": "1.0.0"
+}
+```
+
+以下为旧协议示例，仅作历史记录：
+
 ```json
 {
 	"type": "subscribe",
@@ -43,9 +76,11 @@
 }
 ```
 
-当前实现只支持 `conversation` topic。
+旧实现只支持 `conversation` topic；当前 PluginBus 已按 topic 订阅分发。
 
 ## 订阅确认
+
+当前实现使用 `cortana.plugin-bus`，并回传实际订阅的 topic。以下旧示例仅作历史记录：
 
 ```json
 {
@@ -59,6 +94,8 @@
 
 ## 错误消息
 
+当前实现错误帧使用 `protocol = "cortana.plugin-bus"`。结构化 `error` 对象仍属于 S08-25 后续标准化范围。以下旧示例仅作历史记录：
+
 ```json
 {
 	"type": "error",
@@ -70,6 +107,23 @@
 ```
 
 ## 事件消息
+
+当前实时对话事件使用：
+
+```json
+{
+	"type": "event",
+	"protocol": "cortana.plugin-bus",
+	"version": "1.0.0",
+	"topic": "conversation",
+	"op": "conversation.event.publish",
+	"source": "host",
+	"target": "plugin.memory",
+	"payload": {}
+}
+```
+
+以下为旧协议示例，仅作历史记录：
 
 ```json
 {
@@ -91,12 +145,14 @@
 
 ## 长期记忆上下文供应控制消息
 
-第一版长期记忆默认注入复用 `/internal/conversation-feed/` 长连接承载轻量控制面请求/响应。该扩展不改变原有 `event` 消息语义：
+当前长期记忆供应已迁移到 PluginBus memory topic：
 
-- 宿主在构建主智能体上下文前向已连接的 Memory 插件 feed 客户端发送 `memory.supply.request`。
-- Memory 插件复用 `IMemorySupplyService` 生成结构化供应包。
-- 插件返回 `memory.supply.package`；参数缺失、异常或不可处理时返回 `memory.supply.error`。
-- 宿主按 `requestId` 等待响应，默认短超时约 250ms，超时或错误时静默降级为空上下文。
+- 宿主发送 `memory.context.supply.request`。
+- Memory 插件返回 `memory.context.supply.response`。
+- 参数缺失、异常或不可处理时返回 `memory.context.supply.error`。
+- 宿主按 `requestId` 等待响应，默认短超时，超时或错误时降级为空上下文。
+
+当前代码中的 Memory supply 业务字段仍以顶层 DTO 兼容形式生成；完全迁移到 envelope `payload` 是 S08-25 的剩余标准化工作。以下旧 `memory.supply.*` 示例仅作历史记录：
 
 请求示例：
 
@@ -168,9 +224,13 @@
 
 ## 当前实现落点
 
-- `WebSocketServerService`：维护 internal feed 路径、connected/subscribe/subscribed/error 控制消息和订阅客户端集合
-- `WebSocketConversationFeedRelayService`：订阅 EventHub Conversation 事件并广播 `event` 消息
-- `WebSocketJsonContext`：提供 feed 消息与 Conversation 事件参数的 AOT JSON 源生成支持
-- `LongMemoryContextProvider`：在宿主构建主智能体上下文前请求长期记忆供应包并注入 `AIContext.Instructions`
-- `MemoryIngestService` / `MemorySupplyControlHandler`：在 Memory 插件内接收 `memory.supply.request` 并返回供应包或错误
+- `WebSocketPluginBusServerService`：维护 `/internal` PluginBus、连接、心跳、订阅、路由和长期记忆供应。
+- `PluginBusSubscriptionRegistry`：维护 topic 订阅。
+- `PluginBusConversationHistoryDispatcher`：处理 `conversation.history.replay`、`conversation.history.batch`、`conversation.history.completed`。
+- `PluginBusMemorySupplyDispatcher`：管理 memory supply pending 生命周期。
+- `PluginBusModelCapabilityDispatcher`：处理 `model.capability.request/response`。
+- `WebSocketConversationFeedRelayService`：名称保留旧语义，但实际广播到 PluginBus conversation topic。
+- `LongMemoryContextProvider`：在宿主构建主智能体上下文前请求长期记忆供应包并注入 `AIContext.Instructions`。
+- `MemoryIngestService` / `MemoryPluginBusConnection`：Memory 插件持久连接 PluginBus，断开后自动重连。
+- `MemoryPluginBusDispatcher` / `MemoryConversationEventHandler` / `MemorySupplyRequestHandler`：插件端按 `type/topic/op` 分发并处理 conversation、memory、model、ping/pong。
 

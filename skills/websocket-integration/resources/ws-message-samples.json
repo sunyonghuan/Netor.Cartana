@@ -1,36 +1,73 @@
 {
+  "endpoint": "ws://localhost:{pluginBusPort}/internal",
+  "protocol": "cortana.plugin-bus",
+  "version": "1.0.0",
   "clientMessages": [
     {
-      "type": "send",
-      "data": "帮我总结今天的待办"
+      "type": "subscribe",
+      "protocol": "cortana.plugin-bus",
+      "version": "1.0.0",
+      "topics": ["conversation"]
     },
     {
-      "type": "send",
-      "data": "描述这张图片",
-      "attachments": [
-        {
-          "path": "C:\\Photos\\img.jpg",
-          "name": "img.jpg",
-          "type": "image/jpeg"
-        }
-      ]
+      "type": "request",
+      "protocol": "cortana.plugin-bus",
+      "version": "1.0.0",
+      "topic": "conversation",
+      "op": "chat.message.send",
+      "payload": {
+        "type": "send",
+        "data": "text"
+      }
     },
     {
-      "type": "stop"
+      "type": "request",
+      "protocol": "cortana.plugin-bus",
+      "version": "1.0.0",
+      "topic": "conversation",
+      "op": "chat.generation.stop",
+      "payload": {
+        "type": "stop"
+      }
+    },
+    {
+      "type": "pong"
     }
   ],
   "serverMessages": [
     {
       "type": "connected",
-      "clientId": "client-001"
+      "protocol": "cortana.plugin-bus",
+      "version": "1.0.0"
     },
     {
-      "type": "token",
-      "data": "这是流式回复片段"
+      "type": "subscribed",
+      "protocol": "cortana.plugin-bus",
+      "version": "1.0.0"
     },
     {
-      "type": "done",
-      "sessionId": "session-001"
+      "type": "event",
+      "protocol": "cortana.plugin-bus",
+      "version": "1.0.0",
+      "topic": "conversation",
+      "op": "chat.token",
+      "payload": {
+        "type": "token",
+        "data": "text"
+      }
+    },
+    {
+      "type": "event",
+      "protocol": "cortana.plugin-bus",
+      "version": "1.0.0",
+      "topic": "conversation",
+      "op": "chat.done",
+      "payload": {
+        "type": "done"
+      }
+    },
+    {
+      "type": "ping"
     }
   ]
 }

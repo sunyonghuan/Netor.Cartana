@@ -10,7 +10,7 @@ namespace Netor.Cortana.Networks;
 /// 取代原来 AI 层直接调用 WebSocketServer.BroadcastAsync 的耦合方式。
 /// </summary>
 public sealed class WebSocketEventRelayService(
-    WebSocketInteractionServerService server,
+    IChatTransport transport,
     ISubscriber subscriber) : IHostedService
 {
     /// <summary>
@@ -38,52 +38,52 @@ public sealed class WebSocketEventRelayService(
         // STT
         subscriber.Subscribe<VoiceTextArgs>(Events.OnSttPartial, async (_, args) =>
         {
-            await server.BroadcastAsync("stt_partial", args.Text);
+            await transport.BroadcastAsync("stt_partial", args.Text);
             return false;
         });
 
         subscriber.Subscribe<VoiceTextArgs>(Events.OnSttFinal, async (_, args) =>
         {
-            await server.BroadcastAsync("stt_final", args.Text);
+            await transport.BroadcastAsync("stt_final", args.Text);
             return false;
         });
 
         subscriber.Subscribe<VoiceSignalArgs>(Events.OnSttStopped, async (_, _) =>
         {
-            await server.BroadcastAsync("stt_stopped", "");
+            await transport.BroadcastAsync("stt_stopped", "");
             return false;
         });
 
         // TTS
         subscriber.Subscribe<VoiceSignalArgs>(Events.OnTtsStarted, async (_, _) =>
         {
-            await server.BroadcastAsync("tts_started", "");
+            await transport.BroadcastAsync("tts_started", "");
             return false;
         });
 
         subscriber.Subscribe<VoiceTextArgs>(Events.OnTtsSubtitle, async (_, args) =>
         {
-            await server.BroadcastAsync("tts_subtitle", args.Text);
+            await transport.BroadcastAsync("tts_subtitle", args.Text);
             return false;
         });
 
         subscriber.Subscribe<VoiceSignalArgs>(Events.OnTtsCompleted, async (_, _) =>
         {
-            await server.BroadcastAsync("tts_completed", "");
+            await transport.BroadcastAsync("tts_completed", "");
             return false;
         });
 
         // Chat
         subscriber.Subscribe<VoiceSignalArgs>(Events.OnChatCompleted, async (_, _) =>
         {
-            await server.BroadcastAsync("chat_completed", "");
+            await transport.BroadcastAsync("chat_completed", "");
             return false;
         });
 
         // WakeWord
         subscriber.Subscribe<VoiceSignalArgs>(Events.OnWakeWordDetected, async (_, _) =>
         {
-            await server.BroadcastAsync("wakeword_detected", "");
+            await transport.BroadcastAsync("wakeword_detected", "");
             return false;
         });
     }
