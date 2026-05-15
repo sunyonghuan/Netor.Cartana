@@ -33,4 +33,22 @@ public sealed class WorkflowExecutorOptions
 
     /// <summary>Magentic 重规划次数上限。</summary>
     public int MaxReplans { get; init; } = 2;
+
+    /// <summary>
+    /// Magentic 最大重置（重规划）次数。SDK 默认 1，本项目设 3 给用户更多容错。
+    /// 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §4B.2。
+    /// </summary>
+    public int MagenticMaxResets { get; init; } = 3;
+
+    /// <summary>
+    /// Magentic 最大 stall 次数（连续无进展轮次）。SDK 默认 3。
+    /// 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §4B.2。
+    /// </summary>
+    public int MagenticMaxStalls { get; init; } = 3;
+
+    /// <summary>
+    /// Magentic 估算 token 倍率（用于 UI 成本提示）。
+    /// 阶段 4B 仅保留字段，UI 弹窗推到 5B 接入 HITL 一并实现（[04] §4B.6 / 决策 4B-J）。
+    /// </summary>
+    public int MagenticEstimatedTokenMultiplier { get; init; } = 5;
 }

@@ -12,6 +12,10 @@ using Netor.EventHub;
 
 using System.Collections.Concurrent;
 
+// SDK 的 Workflow 类型名与本项目 namespace `Netor.Cortana.AI.Workflow` 同名，
+// 编译器优先解析为命名空间，因此用类型别名消除歧义（与 GroupChatWorkflowFactory / MagenticWorkflowFactory 一致）。
+using SdkWorkflow = Microsoft.Agents.AI.Workflows.Workflow;
+
 namespace Netor.Cortana.AI.Workflow;
 
 /// <summary>
@@ -21,6 +25,10 @@ namespace Netor.Cortana.AI.Workflow;
 /// 阶段 3B 升级：
 /// - SubMode = "groupchat" 走 SDK 真实编排（<see cref="GroupChatWorkflowFactory"/> + <see cref="InProcessExecution"/>）
 /// - SubMode = 其他保留占位实现（推到阶段 4B 接入 magentic / parallelanalysis 等）
+/// 阶段 4B 升级：
+/// - SubMode = "magentic" 走 SDK <see cref="MagenticWorkflowFactory"/>（Manager 规划 + 团队执行 + 自动重规划）
+/// - SubMode = "parallelanalysis" 走 SDK <see cref="ParallelAnalysisWorkflowFactory"/>（并发执行 + Markdown 合并）
+/// - 真实编排白名单见 <see cref="IsRealWorkflowSubMode"/>；其他 SubMode 仍走占位路径
 /// - StartTaskAsync 立即返回 taskId，后台 Task.Run 启动执行循环
 /// - 任务运行期通过 <see cref="_runningTasks"/> 追踪，CancelTaskAsync 真实生效
 /// - StopAsync 取消所有运行中的任务，等待 5 秒后强制返回
@@ -46,7 +54,7 @@ public sealed class WorkflowExecutor(
 {
     /// <summary>
     /// 运行中任务追踪表。键 = taskId，值 = 任务运行期上下文。
-    /// 当 GroupChat 等真实编排子模式启动后台执行循环时，向此表插入条目；
+    /// 当 GroupChat / Magentic / ParallelAnalysis 等真实编排子模式启动后台执行循环时，向此表插入条目；
     /// 任务正常结束 / 异常 / 取消时从此表移除。
     /// </summary>
     private readonly ConcurrentDictionary<string, RunningTaskContext> _runningTasks = new();
@@ -154,30 +162,42 @@ public sealed class WorkflowExecutor(
         var participantIds = CollectParticipantIds(request);
         PublishTaskStarted(taskId, request, traceId, entity, participantIds, nowMs);
 
-        // 3. 按 SubMode 分流：groupchat 走真实异步编排，其他保留同步占位
-        if (string.Equals(request.SubMode, "groupchat", StringComparison.OrdinalIgnoreCase))
+        // 3. 按 SubMode 分流：白名单内的真实编排子模式走异步执行，其他走同步占位
+        var isReal = IsRealWorkflowSubMode(request.SubMode);
+        if (isReal)
         {
-            StartGroupChatBackground(taskId, request, traceId, entity, participantIds, nowMs, cancellationToken);
+            StartRealWorkflowBackground(taskId, request, traceId, entity, participantIds, nowMs, cancellationToken);
         }
         else
         {
-            // 阶段 4B 起接入 magentic / parallelanalysis；当前保留 2B 占位行为
+            // 未识别 SubMode：保留 2B 占位行为（即时完成 + 占位 FinalReport）
             CompletePlaceholderTask(taskId, request, traceId, entity, participantIds, nowMs);
         }
 
         logger.LogInformation(
             "Workflow 任务已创建：taskId={TaskId}, mode={Mode}, subMode={SubMode}, exec={ExecMode}",
             taskId, request.Mode, request.SubMode,
-            string.Equals(request.SubMode, "groupchat", StringComparison.OrdinalIgnoreCase) ? "groupchat-async" : "placeholder-sync");
+            isReal ? $"{request.SubMode}-async" : "placeholder-sync");
 
         return Task.FromResult(taskId);
     }
+
+    /// <summary>
+    /// 真实编排子模式白名单。仅以下 SubMode 走 SDK 异步执行路径，其他 SubMode 走占位。
+    /// 比对忽略大小写，与 <see cref="StartRealWorkflowBackground"/> 内的 switch 子模式串保持小写一致。
+    /// </summary>
+    private static bool IsRealWorkflowSubMode(string? subMode)
+        => subMode?.Trim().ToLowerInvariant() switch
+        {
+            "groupchat" or "magentic" or "parallelanalysis" => true,
+            _ => false,
+        };
 
     public Task<bool> CancelTaskAsync(string taskId, CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(taskId)) return Task.FromResult(false);
 
-        // 1. 优先取消运行中任务的 CTS（GroupChat 异步路径）
+        // 1. 优先取消运行中任务的 CTS（GroupChat / Magentic / ParallelAnalysis 等真实编排异步路径）
         if (_runningTasks.TryGetValue(taskId, out var ctx))
         {
             try { ctx.Cts.Cancel(); }
@@ -434,7 +454,8 @@ public sealed class WorkflowExecutor(
 
     /// <summary>
     /// 阶段 2B 占位完成路径：立即 UPDATE Completed + 发 task.completed。
-    /// 阶段 4B 接入 magentic / parallelanalysis 后，相关分支会切换到独立的异步执行路径。
+    /// 阶段 3B 接入 GroupChat、阶段 4B 接入 Magentic / ParallelAnalysis 之后，
+    /// 该方法仅用于 SubMode 不在白名单内（<see cref="IsRealWorkflowSubMode"/>）的未来扩展 / 错误配置 / 兼容场景。
     /// </summary>
     private void CompletePlaceholderTask(
         string taskId,
@@ -445,8 +466,8 @@ public sealed class WorkflowExecutor(
         long startedMs)
     {
         const string placeholderReport =
-            "[阶段 3B 占位] 该子模式尚未接入真实编排，本任务仅打通基础设施。\n\n" +
-            "GroupChat 子模式已在阶段 3B 接入；Magentic / ParallelAnalysis 等将在阶段 4B 起接入。";
+            "[占位] 该 SubMode 未被任何真实编排工厂支持，本任务仅打通基础设施。\n\n" +
+            "当前已接入：GroupChat（3B）、Magentic / ParallelAnalysis（4B）；其他 SubMode 需要在 IsRealWorkflowSubMode 白名单内显式注册并提供对应工厂。";
 
         var completedAtMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         taskRepo.UpdateCompleted(
@@ -482,13 +503,15 @@ public sealed class WorkflowExecutor(
     }
 
     // ──────────────────────────────────────────────────────────────
-    //  GroupChat 真实异步执行（阶段 3B 新增）
+    //  真实编排异步执行（阶段 3B 引入 GroupChat；阶段 4B 扩展 Magentic / ParallelAnalysis）
     // ──────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// 启动 GroupChat 后台执行循环。立即返回（不等待），任务进入 _runningTasks 表。
+    /// 启动真实 Workflow 后台执行循环。立即返回（不等待），任务进入 <see cref="_runningTasks"/> 表。
+    /// 支持 GroupChat / Magentic / ParallelAnalysis 等 SubMode（白名单见 <see cref="IsRealWorkflowSubMode"/>），
+    /// 具体 SDK Workflow 在 <see cref="RunWorkflowAsync"/> 内按 SubMode 选择工厂构建。
     /// </summary>
-    private void StartGroupChatBackground(
+    private void StartRealWorkflowBackground(
         string taskId,
         WorkflowTaskRequest request,
         string traceId,
@@ -504,7 +527,7 @@ public sealed class WorkflowExecutor(
         {
             try
             {
-                await RunGroupChatAsync(taskId, request, traceId, entity, participantIds, startedMs, cts.Token);
+                await RunWorkflowAsync(taskId, request, traceId, entity, participantIds, startedMs, cts.Token);
             }
             catch (OperationCanceledException)
             {
@@ -512,7 +535,7 @@ public sealed class WorkflowExecutor(
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "GroupChat 任务 {TaskId} 执行失败", taskId);
+                logger.LogError(ex, "Workflow 任务 {TaskId} (SubMode={SubMode}) 执行失败", taskId, request.SubMode);
                 HandleTaskFailed(taskId, request, traceId, entity, participantIds, startedMs, ex);
             }
             finally
@@ -528,9 +551,10 @@ public sealed class WorkflowExecutor(
     }
 
     /// <summary>
-    /// GroupChat 任务执行主循环：构建 workflow → 启动 → 消费事件 → 写库 + 发事件。
+    /// 真实编排任务执行主循环：构建 workflow → 启动 → 消费事件 → 写库 + 发事件。
+    /// SubMode 决定使用哪个工厂构建 SDK <see cref="SdkWorkflow"/>，事件循环对所有子模式一致。
     /// </summary>
-    private async Task RunGroupChatAsync(
+    private async Task RunWorkflowAsync(
         string taskId,
         WorkflowTaskRequest request,
         string traceId,
@@ -544,12 +568,20 @@ public sealed class WorkflowExecutor(
         if (participants.Count == 0)
         {
             HandleTaskFailed(taskId, request, traceId, entity, participantIds, startedMs,
-                new InvalidOperationException("GroupChat 任务无有效参与者，请检查 ManagerAgentId / MemberAgentIds 配置"));
+                new InvalidOperationException(
+                    $"Workflow 任务（SubMode={request.SubMode}）无有效参与者，请检查 ManagerAgentId / MemberAgentIds 配置"));
             return;
         }
 
-        // 2. 构建 SDK Workflow
-        var workflow = GroupChatWorkflowFactory.Build(participants, taskId, options, logger);
+        // 2. 按 SubMode 选择工厂构建 SDK Workflow（白名单已在 IsRealWorkflowSubMode 内确认）
+        SdkWorkflow workflow = request.SubMode?.Trim().ToLowerInvariant() switch
+        {
+            "groupchat"        => GroupChatWorkflowFactory.Build(participants, taskId, options, logger),
+            "magentic"         => MagenticWorkflowFactory.Build(participants, taskId, options, logger),
+            "parallelanalysis" => ParallelAnalysisWorkflowFactory.Build(participants, taskId, logger),
+            _ => throw new InvalidOperationException(
+                $"未知 SubMode：{request.SubMode}（已通过白名单但未匹配工厂分支，疑似 IsRealWorkflowSubMode 与 switch 不一致）"),
+        };
 
         // 3. 启动并消费事件流。input 为 List<ChatMessage>（参考 SDK GroupChatToolApproval sample）。
         var input = new List<ChatMessage> { new(ChatRole.User, request.InitialInput) };
@@ -729,7 +761,7 @@ public sealed class WorkflowExecutor(
     {
         var completedAtMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var report = string.IsNullOrEmpty(finalReport)
-            ? "[GroupChat 已完成，但未产出最终回复]"
+            ? $"[{request.SubMode} 已完成，但未产出最终回复]"
             : finalReport;
 
         taskRepo.UpdateCompleted(
@@ -771,7 +803,7 @@ public sealed class WorkflowExecutor(
                 }
                 catch (Exception ex)
                 {
-                    logger.LogWarning(ex, "GroupChat 任务 {TaskId} 标题兜底生成失败", taskId);
+                    logger.LogWarning(ex, "Workflow 任务 {TaskId} (SubMode={SubMode}) 标题兜底生成失败", taskId, request.SubMode);
                 }
             }, CancellationToken.None);
         }

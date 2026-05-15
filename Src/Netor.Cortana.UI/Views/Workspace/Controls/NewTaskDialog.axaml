@@ -98,8 +98,8 @@
                       SelectedIndex="0"
                       SelectionChanged="OnSubModeChanged">
                 <ComboBoxItem Content="GroupChat（讨论 / 轮询发言）" Tag="groupchat" />
-                <ComboBoxItem Content="Magentic（计划-执行，阶段 4B+）" Tag="magentic" IsEnabled="False" />
-                <ComboBoxItem Content="ParallelAnalysis（并行分析，阶段 4B+）" Tag="parallelanalysis" IsEnabled="False" />
+                <ComboBoxItem Content="Magentic（计划-执行 / 自动重规划）" Tag="magentic" />
+                <ComboBoxItem Content="ParallelAnalysis（并行分析 / 报告合并）" Tag="parallelanalysis" />
             </ComboBox>
             <TextBlock Classes="field-hint" Text="阶段 3B 仅 GroupChat 接入真实编排，其他子模式将在 4B 起逐步开放。" />
         </StackPanel>

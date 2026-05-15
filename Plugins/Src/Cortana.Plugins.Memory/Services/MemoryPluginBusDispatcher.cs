@@ -10,6 +10,7 @@ namespace Cortana.Plugins.Memory.Services;
 public sealed class MemoryPluginBusDispatcher(
     MemoryPluginBusConnection pluginBus,
     MemoryConversationEventHandler conversationHandler,
+    MemoryWorkflowEventHandler workflowHandler,
     MemorySupplyRequestHandler supplyRequestHandler)
 {
     /// <summary>
@@ -24,6 +25,7 @@ public sealed class MemoryPluginBusDispatcher(
         var root = doc.RootElement;
         var type = root.TryGetProperty("type", out var typeElement) ? typeElement.GetString() : null;
         var op = root.TryGetProperty("op", out var opElement) ? opElement.GetString() : null;
+        var topic = root.TryGetProperty("topic", out var topicElement) ? topicElement.GetString() : null;
 
         if (string.Equals(type, "ping", StringComparison.Ordinal))
         {
@@ -42,6 +44,15 @@ public sealed class MemoryPluginBusDispatcher(
             && string.Equals(op, MemoryContextSupplyProtocol.SupplyRequestOperation, StringComparison.Ordinal))
         {
             await supplyRequestHandler.HandleAsync(text, cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+
+        // 阶段 4B 引入 workflow 路由（决策 4-A / 决策 5-B，详见 04-实施阶段.md §4B.5）
+        // 优先按 topic == "workflow" 路由；若 topic 缺失则回退按 eventType / op 前缀判断
+        if ((string.Equals(type, "event", StringComparison.Ordinal) || string.Equals(type, "response", StringComparison.Ordinal))
+            && string.Equals(topic, "workflow", StringComparison.Ordinal)
+            && workflowHandler.TryHandle(root, op))
+        {
             return true;
         }
 

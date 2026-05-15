@@ -100,10 +100,12 @@ public sealed class MemoryIngestService(
         }
 
         // 2) 发送 subscribe
+        //    阶段 4B：新增 workflow topic（决策 5-B / 决策 4-A）
+        //    详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §4B.5
         var sub = new PluginBusSubscribeFrame
         {
             Type = "subscribe",
-            Topics = ["conversation", "memory", "model"],
+            Topics = ["conversation", "memory", "model", "workflow"],
             Protocol = MemoryContextSupplyProtocol.Protocol,
             Version = "1.0.0"
         };

@@ -45,6 +45,7 @@ public static partial class Startup
         services.AddSingleton<IMemoryWriteToolHandler, MemoryWriteToolHandler>();
         services.AddSingleton<MemoryPluginBusConnection>();
         services.AddSingleton<MemoryConversationEventHandler>();
+        services.AddSingleton<MemoryWorkflowEventHandler>();
         services.AddSingleton<MemorySupplyRequestHandler>();
         services.AddSingleton<MemoryPluginBusDispatcher>();
         services.AddSingleton<HostModelCapabilityClient>();
