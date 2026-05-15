@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 
 using Netor.Cortana.AI.Drivers;
 using Netor.Cortana.AI.Memory;
+using Netor.Cortana.AI.Orchestration;
 using Netor.Cortana.AI.Providers;
 using Netor.Cortana.Entitys;
 using Netor.Cortana.AI.Proxys;
@@ -55,6 +56,10 @@ public static class AIServiceExtensions
         services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<AiChatHostedService>());
         services.AddSingleton<IAiChatEngine>(sp => sp.GetRequiredService<AiChatHostedService>());
         services.AddTransient<AiModelFetcherService>();
+
+        // 阶段 2A：Chat 模式编排器（None / ToolDelegation / HandoffChat）
+        services.AddSingleton(new AgentOrchestratorOptions());
+        services.AddSingleton<IAgentOrchestrator, AgentOrchestrator>();
 
         // Proxy 独立外部调用通道：不复用主聊天会话。
         services.AddSingleton<ProxyUsageTracker>();

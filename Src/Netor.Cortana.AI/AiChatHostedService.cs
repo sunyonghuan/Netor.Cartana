@@ -35,6 +35,7 @@ public sealed class AiChatHostedService(
     IRealtimeProcessOutput? realtimeOutput,
     IPublisher publisher,
     ISubscriber subscriber,
+    Orchestration.IAgentOrchestrator orchestrator,
     ILogger<AiChatHostedService> logger) : IAiChatEngine, IHostedService, IDisposable
 {
     private AIAgent? _agent;
@@ -211,17 +212,24 @@ public sealed class AiChatHostedService(
             return;
         }
 
-        // 确保 Agent 和 Session 已初始化
-        if (mentions is { Count: > 0 })
+        // 阶段 2A：通过 IAgentOrchestrator 解析编排模式并构建 Agent。
+        // mentions==0 时复用现有 _agent（与现状一致）；其它情况按 Mode 重新构建。
+        // 参见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §2A.3 / §2A.4。
+        var safeMentions = (IReadOnlyList<AgentMention>)(mentions ?? []);
+
+        if (safeMentions.Count > 0 || _agent is null)
         {
-            // 有 @智能体 提及时，临时构建带子智能体工具的主 Agent
-            _agent = factory.BuildWithSubAgents(
-                _currentAgent, _currentProvider, _currentModel,
-                mentions, providerService, modelService);
-        }
-        else
-        {
-            _agent ??= factory.Build(_currentAgent, _currentProvider, _currentModel);
+            var orchestrationRequest = new Orchestration.AgentOrchestrationRequest
+            {
+                MainAgent = _currentAgent,
+                MainProvider = _currentProvider,
+                MainModel = _currentModel,
+                Mentions = safeMentions,
+                Mode = Orchestration.AgentOrchestrator.ResolveMode(safeMentions),
+                Strategy = Orchestration.AgentExecutionStrategy.Sequential,
+                SessionId = string.IsNullOrEmpty(_sessionId) ? null : _sessionId,
+            };
+            _agent = await orchestrator.BuildAgentAsync(orchestrationRequest, cancellationToken);
         }
 
         if (_session is null)
@@ -977,6 +985,8 @@ public sealed class AiChatHostedService(
 
     /// <summary>
     /// 重新构建 Agent 实例（当提供商、模型或智能体通过前端手动切换时调用）。
+    /// 阶段 2A 起：仅清空 _agent / _session 缓存，实际重建在下一次 SendMessageAsync 通过
+    /// IAgentOrchestrator 完成（统一编排入口，避免在此处直接调用 factory）。
     /// </summary>
     private void RebuildAgent()
     {
@@ -985,7 +995,7 @@ public sealed class AiChatHostedService(
             return;
         }
 
-        _agent = factory.Build(_currentAgent, _currentProvider, _currentModel);
+        _agent = null;
         _session = null;
 
         // 模型/Provider/Agent 已切换，旧的 LastInputTokens 与新的 MaxContextTokens 不匹配
