@@ -108,6 +108,52 @@ public partial class WorkspaceTab : UserControl
         }
     }
 
+    // ──── 阶段 5B：HITL 批准卡片操作 ────
+
+    private async void OnApprovalApproveClick(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var ok = await _vm.Detail.Approval.ApproveAsync(CancellationToken.None);
+            if (!ok) ShowError("批准失败：任务不在等待状态或 RequestId 不匹配");
+        }
+        catch (Exception ex)
+        {
+            ShowError($"批准失败：{ex.Message}");
+        }
+    }
+
+    private async void OnApprovalReviseClick(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_vm.Detail.Approval.RevisionInput))
+            {
+                ShowError("请先在文本框输入修改建议再点击[提交修改]");
+                return;
+            }
+            var ok = await _vm.Detail.Approval.SubmitRevisionAsync(CancellationToken.None);
+            if (!ok) ShowError("提交修改失败：任务不在等待状态或 RequestId 不匹配");
+        }
+        catch (Exception ex)
+        {
+            ShowError($"提交修改失败：{ex.Message}");
+        }
+    }
+
+    private async void OnApprovalRejectClick(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var ok = await _vm.Detail.Approval.RejectAsync(CancellationToken.None);
+            if (!ok) ShowError("取消任务失败：任务不在等待状态或 RequestId 不匹配");
+        }
+        catch (Exception ex)
+        {
+            ShowError($"取消任务失败：{ex.Message}");
+        }
+    }
+
     // ──── 右键菜单 ────
 
     private async void OnRenameClick(object? sender, RoutedEventArgs e)

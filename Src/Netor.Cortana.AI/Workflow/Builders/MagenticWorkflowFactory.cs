@@ -19,12 +19,14 @@ namespace Netor.Cortana.AI.Workflow.Builders;
 /// - <see cref="MagenticWorkflowBuilder.WithMaxResets"/> = <see cref="WorkflowExecutorOptions.MagenticMaxResets"/>（默认 3）。
 /// - <see cref="MagenticWorkflowBuilder.WithMaxStalls"/> = <see cref="WorkflowExecutorOptions.MagenticMaxStalls"/>（默认 3）。
 /// - <see cref="MagenticWorkflowBuilder.RequirePlanSignoff"/> = <see cref="WorkflowExecutorOptions.MagenticRequirePlanSignoff"/>
-///   阶段 4B 强制锁定为 <c>false</c>，避免无 HITL UI 时死锁（[04] §4B.7）。
+///   阶段 4B 强制锁定为 <c>false</c>（无 HITL UI 时会死锁，[04] §4B.7）；
+///   阶段 5B 起 HITL UI 已就绪，<c>WorkflowExecutor.HandleHitlRequestAsync</c> 会处理 RequestInfoEvent，
+///   配置可经 SystemSettings 改 <c>true</c>（决策 5B-G：默认仍 false，用户主动开启）。
 ///
 /// SDK 标记 <c>MAAIW001</c> 为 <see cref="System.Diagnostics.CodeAnalysis.ExperimentalAttribute"/>，
 /// 整段调用链上下文用 <c>#pragma</c> 抑制以避免 CS9204 警告污染（与 SDK sample 一致做法）。
 ///
-/// 详见：docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §阶段 4B.2 / §4B.7 / §4B.9。
+/// 详见：docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §阶段 4B.2 / §4B.7 / §4B.9 / §5B.1。
 /// </summary>
 internal static class MagenticWorkflowFactory
 {
@@ -64,7 +66,7 @@ internal static class MagenticWorkflowFactory
             .WithMaxRounds(options.MaxRounds)
             .WithMaxResets(options.MagenticMaxResets)
             .WithMaxStalls(options.MagenticMaxStalls)
-            .RequirePlanSignoff(options.MagenticRequirePlanSignoff) // 阶段 4B 强制 false（[04] §4B.7）
+            .RequirePlanSignoff(options.MagenticRequirePlanSignoff) // 默认 false；阶段 5B HITL UI 就绪后可经 SystemSettings 改 true
             .Build();
 #pragma warning restore MAAIW001
 

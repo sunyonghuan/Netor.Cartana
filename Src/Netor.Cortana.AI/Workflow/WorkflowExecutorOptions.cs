@@ -23,8 +23,11 @@ public sealed class WorkflowExecutorOptions
     public TimeSpan TaskTimeout { get; init; } = TimeSpan.FromMinutes(30);
 
     /// <summary>
-    /// 是否要求 Magentic 计划必须人工签字才能继续执行（阶段 5B+ HITL 节点）。
-    /// 阶段 2B 占位实现不接入。
+    /// 是否要求 Magentic 计划必须人工签字才能继续执行（HITL 节点）。
+    /// 阶段 4B 因无 HITL UI 强制锁定为 false；
+    /// 阶段 5B 起 HITL UI 已就绪，<see cref="WorkflowExecutor"/> 的 RequestInfoEvent 处理已实装，
+    /// 默认仍为 false，用户可经 SystemSettings 主动改为 true 启用计划批准流程（决策 5B-G）。
+    /// 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §5B.1。
     /// </summary>
     public bool MagenticRequirePlanSignoff { get; init; } = false;
 

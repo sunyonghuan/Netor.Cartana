@@ -74,6 +74,25 @@ public sealed class WebSocketWorkflowFeedRelayService(
                 WebSocketJsonContext.Default.WorkflowTaskTitleUpdatedArgs);
             return false;
         });
+
+        // 阶段 5B 新增：HITL 暂停 / 恢复事件转发（详见 [04] §5B.1 / [07] §3.4）
+        subscriber.Subscribe<WorkflowTaskPausedArgs>(Events.OnWorkflowTaskPaused, async (_, args) =>
+        {
+            await BroadcastWorkflowEventAsync(
+                Events.OnWorkflowTaskPaused.Eventid,
+                args,
+                WebSocketJsonContext.Default.WorkflowTaskPausedArgs);
+            return false;
+        });
+
+        subscriber.Subscribe<WorkflowTaskResumedArgs>(Events.OnWorkflowTaskResumed, async (_, args) =>
+        {
+            await BroadcastWorkflowEventAsync(
+                Events.OnWorkflowTaskResumed.Eventid,
+                args,
+                WebSocketJsonContext.Default.WorkflowTaskResumedArgs);
+            return false;
+        });
     }
 
     private Task BroadcastWorkflowEventAsync<TArgs>(

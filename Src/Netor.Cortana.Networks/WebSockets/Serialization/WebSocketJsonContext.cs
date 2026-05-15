@@ -33,6 +33,8 @@ namespace Netor.Cortana.Networks;
 [JsonSerializable(typeof(WorkflowTaskCompletedArgs))]
 [JsonSerializable(typeof(WorkflowTaskFailedArgs))]
 [JsonSerializable(typeof(WorkflowTaskTitleUpdatedArgs))]
+[JsonSerializable(typeof(WorkflowTaskPausedArgs))]
+[JsonSerializable(typeof(WorkflowTaskResumedArgs))]
 [JsonSerializable(typeof(WorkflowExportBatch))]
 [JsonSerializable(typeof(WorkflowExportRecord))]
 [JsonSerializable(typeof(WorkflowHistoryCompletedPayload))]

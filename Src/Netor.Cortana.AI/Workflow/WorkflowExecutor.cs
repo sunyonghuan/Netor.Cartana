@@ -11,6 +11,7 @@ using Netor.Cortana.Entitys.Services;
 using Netor.EventHub;
 
 using System.Collections.Concurrent;
+using System.Text.Json;
 
 // SDK 的 Workflow 类型名与本项目 namespace `Netor.Cortana.AI.Workflow` 同名，
 // 编译器优先解析为命名空间，因此用类型别名消除歧义（与 GroupChatWorkflowFactory / MagenticWorkflowFactory 一致）。
@@ -58,6 +59,14 @@ public sealed class WorkflowExecutor(
     /// 任务正常结束 / 异常 / 取消时从此表移除。
     /// </summary>
     private readonly ConcurrentDictionary<string, RunningTaskContext> _runningTasks = new();
+
+    /// <summary>
+    /// HITL（人在回路）暂停任务追踪表。键 = taskId，值 = HITL 等待上下文。
+    /// 事件循环收到 <see cref="RequestInfoEvent"/> → 写入此表 → 阻塞等待 <c>Tcs</c>；
+    /// 外部调用 <c>ResumeAsync</c> 解锁 Tcs → 事件循环恢复 → 从此表移除。
+    /// 阶段 5B 引入（决策 5B-A）。
+    /// </summary>
+    private readonly ConcurrentDictionary<string, PendingHitlContext> _pausedTasks = new();
 
     // ──── IHostedService：启动孤儿清理（决策 9-A） + 关闭时取消运行中任务 ────
 
@@ -612,6 +621,12 @@ public sealed class WorkflowExecutor(
                     // 兜底：尝试从 Output 里提取
                     finalReport = ExtractFinalReportFromOutput(output);
                     break;
+
+                case RequestInfoEvent requestInfo:
+                    // 阶段 5B：HITL（人在回路）。Magentic RequirePlanSignoff(true) 触发；
+                    // 阻塞等待用户通过 ResumeAsync 解锁后回写 ExternalResponse 给 SDK。
+                    await HandleHitlRequestAsync(taskId, request, traceId, entity, run, requestInfo, ct);
+                    break;
             }
         }
 
@@ -807,6 +822,184 @@ public sealed class WorkflowExecutor(
                 }
             }, CancellationToken.None);
         }
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    //  HITL（人在回路）暂停 / 恢复（阶段 5B 新增）
+    // ──────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// 处理 SDK <see cref="RequestInfoEvent"/>：把 RequestInfo 转译为 paused 事件 + 阻塞等待用户响应 + 回写 SDK。
+    /// 调用方为 <see cref="RunWorkflowAsync"/> 的 switch 分支。
+    /// 用户响应通过 <see cref="ResumeAsync"/> 解锁 Tcs。
+    /// </summary>
+    private async Task HandleHitlRequestAsync(
+        string taskId,
+        WorkflowTaskRequest request,
+        string traceId,
+        OrchestrationTaskEntity entity,
+        StreamingRun run,
+        RequestInfoEvent requestInfo,
+        CancellationToken ct)
+    {
+        var requestId = requestInfo.Request.RequestId;
+        var tcs = new TaskCompletionSource<ExternalResponse?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var pausedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+        var ctx = new PendingHitlContext(taskId, requestId, requestInfo.Request, run, tcs, DateTimeOffset.UtcNow);
+        _pausedTasks[taskId] = ctx;
+
+        // 1) 序列化 RequestInfo payload（用于 UI 渲染计划详情）。
+        //    Magentic RequirePlanSignoff(true) 触发的 payload 类型是 MagenticPlanReviewRequest；
+        //    其他扩展类型走通用 fallback：序列化为简化 JSON 对象。
+        //    注意：SDK 的 WorkflowsJsonUtilities 是 internal 不可访问，因此手动构造 JSON。
+        string? requestPayloadJson = null;
+        string pauseReason;
+        if (requestInfo.Request.TryGetDataAs<MagenticPlanReviewRequest>(out var planReview))
+        {
+            pauseReason = "magentic.plan.signoff";
+            try
+            {
+                // 手动构造 JSON：UI 只需 plan text + isStalled + 可选 progress 摘要
+                using var ms = new MemoryStream();
+                using (var writer = new Utf8JsonWriter(ms))
+                {
+                    writer.WriteStartObject();
+                    writer.WriteString("plan", planReview.Plan?.Text ?? string.Empty);
+                    writer.WriteBoolean("isStalled", planReview.IsStalled);
+                    if (planReview.CurrentProgress is { } progress)
+                    {
+                        writer.WriteBoolean("isStarted", progress.IsStarted);
+                        writer.WriteBoolean("isRequestSatisfied", progress.IsRequestSatisfied);
+                        writer.WriteBoolean("isInLoop", progress.IsInLoop);
+                        writer.WriteBoolean("isProgressBeingMade", progress.IsProgressBeingMade);
+                        writer.WriteString("nextSpeaker", progress.NextSpeaker ?? string.Empty);
+                        writer.WriteString("instructionOrQuestion", progress.InstructionOrQuestion ?? string.Empty);
+                    }
+                    writer.WriteEndObject();
+                }
+                requestPayloadJson = System.Text.Encoding.UTF8.GetString(ms.ToArray());
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Workflow 任务 {TaskId} 序列化 MagenticPlanReviewRequest 失败", taskId);
+                requestPayloadJson = $"{{\"plan\":\"{planReview.Plan?.Text ?? "(empty)"}\",\"isStalled\":{(planReview.IsStalled ? "true" : "false")}}}";
+            }
+        }
+        else
+        {
+            pauseReason = "external.request";
+            requestPayloadJson = null;
+        }
+
+        // 2) 落库 Paused + 发 OnWorkflowTaskPaused 事件
+        taskRepo.UpdatePaused(taskId, pausedAt);
+
+        publisher.Publish(Events.OnWorkflowTaskPaused, new WorkflowTaskPausedArgs(
+            TaskId: taskId,
+            SourceSessionId: request.SourceSessionId,
+            TraceId: traceId,
+            WorkspaceId: request.WorkspaceId,
+            Mode: request.Mode,
+            SubMode: request.SubMode,
+            OccurredAt: DateTimeOffset.UtcNow,
+            Title: entity.Title,
+            PauseReason: pauseReason,
+            RequestId: requestId,
+            RequestPayloadJson: requestPayloadJson,
+            PausedAt: pausedAt));
+
+        logger.LogInformation(
+            "Workflow 任务 {TaskId} 进入 HITL 暂停：reason={Reason}, requestId={RequestId}",
+            taskId, pauseReason, requestId);
+
+        // 3) 阻塞等待用户响应（外部 ResumeAsync 调用 Tcs.SetResult；超时由 RunWorkflowAsync 的 ct 兜底）
+        ExternalResponse? response;
+        try
+        {
+            response = await tcs.Task.WaitAsync(ct);
+        }
+        finally
+        {
+            _pausedTasks.TryRemove(taskId, out _);
+        }
+
+        if (response is null)
+        {
+            // 用户拒绝 / 超时 → 抛 OperationCanceledException 走 HandleTaskCancelled 路径
+            throw new OperationCanceledException($"HITL 任务 {taskId} 被用户拒绝或超时");
+        }
+
+        // 4) 回写响应到 SDK，事件循环继续
+        await run.SendResponseAsync(response);
+
+        var resumedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        taskRepo.UpdateRunning(taskId, resumedAt);
+
+        publisher.Publish(Events.OnWorkflowTaskResumed, new WorkflowTaskResumedArgs(
+            TaskId: taskId,
+            SourceSessionId: request.SourceSessionId,
+            TraceId: traceId,
+            WorkspaceId: request.WorkspaceId,
+            Mode: request.Mode,
+            SubMode: request.SubMode,
+            OccurredAt: DateTimeOffset.UtcNow,
+            Title: entity.Title,
+            RequestId: requestId,
+            ResumeAction: response.TryGetDataAs<MagenticPlanReviewResponse>(out var planResp) && planResp.Review.Count == 0
+                ? "approved"
+                : "revised",
+            RevisionPayloadJson: null,
+            ResumedAt: resumedAt));
+
+        logger.LogInformation("Workflow 任务 {TaskId} 已恢复执行", taskId);
+    }
+
+    /// <summary>
+    /// <see cref="IWorkflowExecutor.ResumeAsync"/> 实现：把用户响应解锁到事件循环。
+    /// 详见 <see cref="HandleHitlRequestAsync"/>。
+    /// </summary>
+    public Task<bool> ResumeAsync(
+        string taskId,
+        string requestId,
+        string action,
+        IReadOnlyList<ChatMessage>? revisionMessages,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(taskId) || string.IsNullOrEmpty(requestId))
+        {
+            return Task.FromResult(false);
+        }
+
+        if (!_pausedTasks.TryGetValue(taskId, out var ctx))
+        {
+            logger.LogWarning("ResumeAsync：任务 {TaskId} 不在 paused 状态", taskId);
+            return Task.FromResult(false);
+        }
+
+        if (!string.Equals(ctx.RequestId, requestId, StringComparison.Ordinal))
+        {
+            logger.LogWarning(
+                "ResumeAsync：requestId 不配对（任务 {TaskId} 当前 {Current}，传入 {Incoming}），拒绝响应",
+                taskId, ctx.RequestId, requestId);
+            return Task.FromResult(false);
+        }
+
+        ExternalResponse? response = action?.ToLowerInvariant() switch
+        {
+            "approved" => ctx.Request.CreateResponse(new MagenticPlanReviewResponse([])),
+            "revised" => ctx.Request.CreateResponse(new MagenticPlanReviewResponse(
+                revisionMessages?.ToList() ?? [])),
+            "rejected" => null,   // null 触发 OperationCanceledException 走 HandleTaskCancelled
+            _ => null
+        };
+
+        var ok = ctx.Tcs.TrySetResult(response);
+        if (!ok)
+        {
+            logger.LogWarning("ResumeAsync：TaskCompletionSource 已完成，重复响应被忽略 ({TaskId})", taskId);
+        }
+        return Task.FromResult(ok);
     }
 
     private void HandleTaskCancelled(

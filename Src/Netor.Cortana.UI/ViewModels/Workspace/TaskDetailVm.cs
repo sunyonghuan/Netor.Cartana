@@ -43,9 +43,17 @@ public sealed class TaskDetailVm : INotifyPropertyChanged
     {
         _executor = App.Services.GetRequiredService<IWorkflowExecutor>();
         _subscriber = App.Services.GetRequiredService<ISubscriber>();
+        Approval = new WorkflowTaskApprovalVm();
 
         SubscribeEvents();
     }
+
+    /// <summary>
+    /// HITL 批准卡片 ViewModel（阶段 5B 新增）。
+    /// 仅当 Status==Paused 且 RequestId 匹配当前任务时由 OnWorkflowTaskPaused 事件填充并显示。
+    /// 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §5B.1。
+    /// </summary>
+    public WorkflowTaskApprovalVm Approval { get; }
 
     /// <summary>当前展示的任务 ID。空字符串表示无选中。</summary>
     public string TaskId
@@ -77,6 +85,7 @@ public sealed class TaskDetailVm : INotifyPropertyChanged
             if (SetField(ref _status, value))
             {
                 OnPropertyChanged(nameof(IsRunning));
+                OnPropertyChanged(nameof(IsPaused));
                 OnPropertyChanged(nameof(IsCompleted));
                 OnPropertyChanged(nameof(IsFailed));
                 OnPropertyChanged(nameof(IsCancelled));
@@ -85,7 +94,8 @@ public sealed class TaskDetailVm : INotifyPropertyChanged
         }
     }
 
-    public bool IsRunning => _status is WorkflowTaskStatus.Running or WorkflowTaskStatus.Pending or WorkflowTaskStatus.Paused;
+    public bool IsRunning => _status is WorkflowTaskStatus.Running or WorkflowTaskStatus.Pending;
+    public bool IsPaused => _status == WorkflowTaskStatus.Paused;
     public bool IsCompleted => _status == WorkflowTaskStatus.Completed;
     public bool IsFailed => _status == WorkflowTaskStatus.Failed;
     public bool IsCancelled => _status == WorkflowTaskStatus.Cancelled;
@@ -208,6 +218,7 @@ public sealed class TaskDetailVm : INotifyPropertyChanged
         CompletedAt = null;
         Participants.Clear();
         Steps.Clear();
+        Approval.Clear();
     }
 
     private void ApplyDetail(OrchestrationTaskDetail detail)
@@ -276,6 +287,29 @@ public sealed class TaskDetailVm : INotifyPropertyChanged
             {
                 if (args.TaskId != _taskId) return;
                 Title = args.NewTitle;
+            });
+            return Task.FromResult(false);
+        });
+
+        // 阶段 5B 新增：HITL 暂停 / 恢复事件订阅（详见 04-实施阶段.md §5B.1）
+        _subscriber.Subscribe<WorkflowTaskPausedArgs>(Events.OnWorkflowTaskPaused, (_, args) =>
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (args.TaskId != _taskId) return;
+                Status = WorkflowTaskStatus.Paused;
+                Approval.Load(args);   // 显示 ApprovalCard
+            });
+            return Task.FromResult(false);
+        });
+
+        _subscriber.Subscribe<WorkflowTaskResumedArgs>(Events.OnWorkflowTaskResumed, (_, args) =>
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (args.TaskId != _taskId) return;
+                Status = WorkflowTaskStatus.Running;
+                Approval.Clear();      // 隐藏 ApprovalCard
             });
             return Task.FromResult(false);
         });
