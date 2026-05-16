@@ -295,7 +295,8 @@ public sealed class WorkflowExecutor(
             query.Statuses,
             query.Limit,
             query.Offset,
-            query.Keyword);   // 阶段 6 Phase 3：标题搜索关键词透传
+            query.Keyword,   // 阶段 6 Phase 3：标题搜索关键词透传
+            query.SubModes); // P1 群聊真实化：SubMode 过滤透传（收尾决策 DT-9）
         return Task.FromResult<IReadOnlyList<OrchestrationTaskEntity>>(list);
     }
 

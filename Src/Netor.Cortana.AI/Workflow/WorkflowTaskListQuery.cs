@@ -27,4 +27,13 @@ public sealed record WorkflowTaskListQuery
     /// 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §阶段 6 #3。
     /// </summary>
     public string? Keyword { get; init; }
+
+    /// <summary>
+    /// P1 群聊真实化：子模式过滤（收尾决策 DT-9，2026-05-16 落地）。
+    /// null 或空集合 = 不过滤；非空 = 仅返回 SubMode 在该列表中的任务。
+    /// - 「工作流」tab 传 ["magentic", "parallelanalysis"]
+    /// - 「群聊」tab 传 ["groupchat"]
+    /// 详见 Docs/未来版本策划/界面重设计/05-阶段总结.md §3.1（DT-9）+ §6.2 中期遗留事项。
+    /// </summary>
+    public IReadOnlyList<string>? SubModes { get; init; }
 }

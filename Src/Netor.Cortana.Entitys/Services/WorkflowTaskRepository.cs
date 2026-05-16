@@ -83,13 +83,20 @@ namespace Netor.Cortana.Entitys.Services
         /// 一期不引入 FTS5（推到阶段 7+），少量数据 LIKE 性能可接受。
         /// 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §阶段 6 #3。
         /// </param>
+        /// <param name="subModes">
+        /// P1 群聊真实化新增：子模式过滤（收尾决策 DT-9，2026-05-16 落地）。
+        /// null 或空集合表示不过滤；非空时按 SubMode IN (...) 匹配。
+        /// 「工作流」tab 传 ["magentic", "parallelanalysis"]；「群聊」tab 传 ["groupchat"]。
+        /// 详见 Docs/未来版本策划/界面重设计/05-阶段总结.md §3.1 + §6.2。
+        /// </param>
         public List<OrchestrationTaskEntity> ListByWorkspace(
             string workspaceId,
             bool includeArchived = false,
             IReadOnlyList<string>? statuses = null,
             int limit = 30,
             int offset = 0,
-            string? keyword = null)
+            string? keyword = null,
+            IReadOnlyList<string>? subModes = null)
         {
             var sql = "SELECT * FROM OrchestrationTask WHERE 1=1";
             if (!string.IsNullOrEmpty(workspaceId)) sql += " AND WorkspaceId = @WorkspaceId";
@@ -110,6 +117,16 @@ namespace Netor.Cortana.Entitys.Services
                 sql += $" AND Status IN ({string.Join(", ", statusParamNames)})";
             }
 
+            // P1 群聊真实化：SubMode 过滤（参数化拼接，与状态过滤同款风格）
+            string[] subModeParamNames = [];
+            if (subModes is { Count: > 0 })
+            {
+                subModeParamNames = new string[subModes.Count];
+                for (var i = 0; i < subModes.Count; i++)
+                    subModeParamNames[i] = "@SubMode" + i;
+                sql += $" AND SubMode IN ({string.Join(", ", subModeParamNames)})";
+            }
+
             sql += " ORDER BY IsPinned DESC, LastActiveTimestamp DESC LIMIT @Limit OFFSET @Offset";
 
             return _db.Query(sql, ReadEntity, cmd =>
@@ -123,6 +140,11 @@ namespace Netor.Cortana.Entitys.Services
                 if (statuses is { Count: > 0 })
                     for (var i = 0; i < statuses.Count; i++)
                         cmd.Parameters.AddWithValue(statusParamNames[i], statuses[i]);
+
+                // P1 群聊真实化：SubMode 参数绑定
+                if (subModes is { Count: > 0 })
+                    for (var i = 0; i < subModes.Count; i++)
+                        cmd.Parameters.AddWithValue(subModeParamNames[i], subModes[i]);
 
                 cmd.Parameters.AddWithValue("@Limit", limit);
                 cmd.Parameters.AddWithValue("@Offset", offset);

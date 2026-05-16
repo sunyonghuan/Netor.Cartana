@@ -43,6 +43,14 @@ public sealed class WorkflowTaskListVm : INotifyPropertyChanged
     private string _keyword = string.Empty;
     private DispatcherTimer? _searchDebounceTimer;
 
+    // P1 群聊真实化：SubMode 过滤（收尾决策 DT-9，2026-05-16 落地）。
+    // _subModeFilter null 或空集合 = 不过滤；非空 = 仅显示 SubMode 在该列表中的任务。
+    // 由 WorkspaceTabVm.OnAttachedAsync 在 tab 切换时设置：
+    // - 「工作流」tab → ["magentic", "parallelanalysis"]
+    // - 「群聊」tab → ["groupchat"]
+    // 详见 Docs/未来版本策划/界面重设计/05-阶段总结.md §3.1 + §6.2。
+    private IReadOnlyList<string>? _subModeFilter;
+
     /// <summary>构造时立即订阅 workflow 事件流；列表通过 <see cref="LoadAsync"/> 触发首次加载。</summary>
     public WorkflowTaskListVm()
     {
@@ -88,6 +96,37 @@ public sealed class WorkflowTaskListVm : INotifyPropertyChanged
     public string Keyword => _keyword;
 
     /// <summary>
+    /// P1 群聊真实化：当前 SubMode 过滤（收尾决策 DT-9，2026-05-16 落地）。
+    /// null 或空集合 = 不过滤；非空 = 仅显示 SubMode 在该列表中的任务。
+    /// 切换 SubMode 时立即清空选中项 + 重新加载列表（保证用户切 tab 看到的是干净的 fresh 列表）。
+    /// 由 <see cref="WorkspaceTabVm.OnAttachedAsync"/> 在 tab 切换时设置：
+    /// - 「工作流」tab → ["magentic", "parallelanalysis"]
+    /// - 「群聊」tab → ["groupchat"]
+    /// 详见 Docs/未来版本策划/界面重设计/05-阶段总结.md §3.1 + §6.2。
+    /// </summary>
+    public IReadOnlyList<string>? SubModeFilter
+    {
+        get => _subModeFilter;
+        set
+        {
+            // 引用比较 + 内容比较（避免传入新数组但内容相同时无谓重载）
+            if (ReferenceEquals(_subModeFilter, value)) return;
+            if (_subModeFilter is { } a && value is { } b
+                && a.Count == b.Count
+                && a.SequenceEqual(b, StringComparer.OrdinalIgnoreCase))
+            {
+                _subModeFilter = value;   // 同步引用但不触发 reload
+                return;
+            }
+            _subModeFilter = value;
+            // 切换 SubMode 时清空选中项（避免详情区显示其他 tab 的任务）
+            _selectedItem = null;
+            OnPropertyChanged(nameof(SelectedItem));
+            _ = LoadAsync();
+        }
+    }
+
+    /// <summary>
     /// 阶段 6 Phase 3：接收 View 层搜索框文字变化（带 200ms 防抖）。
     /// 在用户停止输入 200ms 后，更新 _keyword 并触发 LoadAsync 重新过滤列表。
     /// </summary>
@@ -130,6 +169,7 @@ public sealed class WorkflowTaskListVm : INotifyPropertyChanged
                 Limit = 30,
                 Offset = 0,
                 Keyword = string.IsNullOrEmpty(_keyword) ? null : _keyword,   // 阶段 6 Phase 3
+                SubModes = _subModeFilter,   // P1 群聊真实化：SubMode 过滤透传（收尾决策 DT-9）
             };
             var rows = await _executor.ListTasksAsync(query, CancellationToken.None);
 
@@ -193,6 +233,8 @@ public sealed class WorkflowTaskListVm : INotifyPropertyChanged
     {
         // 当前工作区过滤
         if (!IsCurrentWorkspace(args.WorkspaceId)) return;
+        // P1 群聊真实化：SubMode 过滤（防止其他 SubMode 任务串到当前 tab 的列表）
+        if (!IsMatchingSubMode(args.SubMode)) return;
         // 已存在则跳过（防重）
         if (Items.Any(x => x.TaskId == args.TaskId)) return;
 
@@ -242,6 +284,19 @@ public sealed class WorkflowTaskListVm : INotifyPropertyChanged
 
     private bool IsCurrentWorkspace(string workspaceId)
         => string.IsNullOrEmpty(_workspaceId) || _workspaceId == workspaceId;
+
+    /// <summary>
+    /// P1 群聊真实化：检查事件携带的 SubMode 是否在当前过滤集合中（收尾决策 DT-9）。
+    /// _subModeFilter null 或空 = 不过滤（兼容启动时未指定 SubMode 的场景）。
+    /// 注：仅 <see cref="OnTaskStarted"/> 需要校验（决定是否往列表 Insert）；
+    /// 其他事件（Completed/Failed/TitleUpdated/StepCompleted）都先 FirstOrDefault 查 Items，
+    /// 任务不在列表内自然 no-op，无需重复校验 SubMode。
+    /// </summary>
+    private bool IsMatchingSubMode(string subMode)
+    {
+        if (_subModeFilter is null || _subModeFilter.Count == 0) return true;
+        return _subModeFilter.Contains(subMode, StringComparer.OrdinalIgnoreCase);
+    }
 
     // ──── INotifyPropertyChanged ────
 

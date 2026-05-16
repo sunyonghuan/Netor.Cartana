@@ -76,6 +76,18 @@ public partial class MainWindow : Window
     private readonly Netor.Cortana.UI.ViewModels.Workspace.WorkspaceTabVm _workspaceTabVm =
         App.Services.GetRequiredService<Netor.Cortana.UI.ViewModels.Workspace.WorkspaceTabVm>();
 
+    /// <summary>
+    /// P1 群聊真实化（收尾决策 DT-9，2026-05-16 落地）：「工作流」tab 包含的 SubMode 集合。
+    /// 在 <see cref="ApplyModeToUI"/> / tab 切换 / suggestion accept 三处调用 <see cref="WorkspaceTabVm.OnAttachedAsync"/> 时传入。
+    /// 详见 Docs/未来版本策划/界面重设计/05-阶段总结.md §3.1 + §6.2。
+    /// </summary>
+    private static readonly IReadOnlyList<string> WorkflowSubModes = ["magentic", "parallelanalysis"];
+
+    /// <summary>
+    /// P1 群聊真实化：「群聊」tab 包含的 SubMode 集合（仅 groupchat）。
+    /// </summary>
+    private static readonly IReadOnlyList<string> GroupChatSubModes = ["groupchat"];
+
     public MainWindow()
     {
         InitializeComponent();
@@ -132,10 +144,15 @@ public partial class MainWindow : Window
         {
             ApplyModeToUI(_mainVm.CurrentMode);
 
-            // 工作流模式：触发 WorkflowTab 数据加载（C4：改为直接调 DI Singleton VM）
+            // 工作流 / 群聊模式：触发 WorkspaceTab 数据加载（C4 改为直接调 DI Singleton VM）。
+            // P1 群聊真实化（收尾决策 DT-9）：按当前 WorkMode 传入对应的 SubModes 过滤。
             if (_mainVm.CurrentMode == Netor.Cortana.UI.Models.WorkMode.Workflow)
             {
-                _ = _workspaceTabVm.OnAttachedAsync(workspaceId: string.Empty);
+                _ = _workspaceTabVm.OnAttachedAsync(workspaceId: string.Empty, WorkflowSubModes);
+            }
+            else if (_mainVm.CurrentMode == Netor.Cortana.UI.Models.WorkMode.GroupChat)
+            {
+                _ = _workspaceTabVm.OnAttachedAsync(workspaceId: string.Empty, GroupChatSubModes);
             }
         }
 
@@ -568,17 +585,31 @@ public partial class MainWindow : Window
 
         if (targetMode == Netor.Cortana.UI.Models.WorkMode.Workflow)
         {
-            // 通知 WorkflowTab 拉取最新列表（C4：改为直接调 DI Singleton VM；workspaceId 简化版传空字符串）
+            // 通知 WorkspaceTab 拉取最新列表（C4：改为直接调 DI Singleton VM；workspaceId 简化版传空字符串）
+            // P1 群聊真实化（收尾决策 DT-9）：传入 WorkflowSubModes 仅过滤 magentic / parallelanalysis 任务
             try
             {
-                await _workspaceTabVm.OnAttachedAsync(workspaceId: string.Empty);
+                await _workspaceTabVm.OnAttachedAsync(workspaceId: string.Empty, WorkflowSubModes);
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[MainWindow] WorkflowTab attach error: {ex.Message}");
             }
         }
-        // GroupChat 模式：C2 阶段仅显示 EmptyState 占位，无 OnAttached 逻辑（C4 拆分时补全）。
+        else if (targetMode == Netor.Cortana.UI.Models.WorkMode.GroupChat)
+        {
+            // P1 群聊真实化（收尾决策 DT-9）：群聊 tab 与工作流 tab 共用 WorkspaceTabVm，
+            // 但传入 GroupChatSubModes 仅过滤 groupchat 任务，让两个 tab 看到的列表互相隔离。
+            // 之前 C4 时这里没有 OnAttachedAsync 调用（占位实现），P1 补全。
+            try
+            {
+                await _workspaceTabVm.OnAttachedAsync(workspaceId: string.Empty, GroupChatSubModes);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[MainWindow] GroupChatTab attach error: {ex.Message}");
+            }
+        }
     }
 
     // ──────── 阶段 5B Phase 3：Chat→Workflow 启发式建议 banner ────────
@@ -613,7 +644,9 @@ public partial class MainWindow : Window
 
                 try
                 {
-                    await _workspaceTabVm.OnAttachedAsync(workspaceId: string.Empty);
+                    // P1 群聊真实化（收尾决策 DT-9）：用户点 banner "切到工作模式" 明确意图是 Workflow，
+                    // 传入 WorkflowSubModes 仅过滤 magentic / parallelanalysis 任务。
+                    await _workspaceTabVm.OnAttachedAsync(workspaceId: string.Empty, WorkflowSubModes);
                 }
                 catch (Exception innerEx)
                 {
