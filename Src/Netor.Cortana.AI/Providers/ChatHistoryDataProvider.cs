@@ -253,6 +253,111 @@ public sealed class ChatHistoryDataProvider(
     }
 
     /// <summary>
+    /// 阶段 5B Phase 3：把 Workflow 任务的 FinalReport 作为 assistant 消息回灌到目标 Chat 会话。
+    /// 走完整 ChatMessages + Conversation 事件链路，方便 Memory 插件做去重并保留来源溯源。
+    ///
+    /// 决策（详见 Phase 3 §4.2.2）：
+    /// - 不发 user 消息（避免 Chat 历史里多一条幽灵 user 行）
+    /// - 仅发 <see cref="Events.OnConversationTurnCompleted"/>，UserInput 留空、AssistantResponse 即回灌内容
+    /// - <paramref name="sourceTaskId"/> 不写入消息正文，但会写到事件 TraceId 字段（待 Memory handler 解析）
+    /// - <see cref="ConversationEventArgs.AssistantMessageId"/> 即本次写入消息的主键（messageId 去重保证）
+    ///
+    /// 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §5B.3 / Phase 3 实施计划 §4.2。
+    /// </summary>
+    /// <param name="sessionId">目标会话 ID。</param>
+    /// <param name="content">回灌的正文（通常是 Workflow.FinalReport 加上来源描述）。</param>
+    /// <param name="agentId">回灌时使用的 agent ID（一般是 Workflow 的 ManagerAgentId，可空）。</param>
+    /// <param name="agentName">回灌时使用的 agent 名称（一般是 Workflow 的 ManagerAgentName，可空）。</param>
+    /// <param name="sourceTaskId">来源 Workflow 任务 ID（写入事件 TraceId，下游可据此关联）。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>新写入的 assistant 消息 ID。</returns>
+    public Task<string> AppendAssistantMessageAsync(
+        string sessionId,
+        string content,
+        string? agentId,
+        string? agentName,
+        string? sourceTaskId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(sessionId);
+        ArgumentException.ThrowIfNullOrEmpty(content);
+
+        try
+        {
+            var safeAgentId = agentId ?? string.Empty;
+            var safeAgentName = agentName ?? "Workflow";
+            var contents = new List<AIContent> { new TextContent(content) };
+            var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var messageId = Guid.NewGuid().ToString("N");
+
+            var message = new ChatMessageEntity
+            {
+                Id = messageId,
+                SessionId = sessionId,
+                Role = ChatRole.Assistant.ToString(),
+                Content = ChatMessageExtensions.BuildPersistedContent(content, contents),
+                ContentsJson = ChatMessageExtensions.BuildContentsJson(contents),
+                AuthorName = GetChatRoleText(ChatRole.Assistant, safeAgentName),
+                CreatedAt = DateTimeOffset.UtcNow,
+                CreatedTimestamp = DateTimeOffset.UtcNow.ToLocalTime().ToUnixTimeMilliseconds(),
+                UpdatedTimestamp = nowMs,
+                ModelName = "workflow.backflow",
+                AgentId = safeAgentId,
+                AgentName = safeAgentName,
+            };
+
+            // 1) 写库
+            dbContext.ExecuteInTransaction(conn =>
+            {
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = """
+                    INSERT OR REPLACE INTO ChatMessages
+                        (Id, CreatedTimestamp, UpdatedTimestamp, SessionId, Role, AuthorName, Content, ContentsJson, TokenCount, ModelName, CreatedAt, AgentId, AgentName)
+                    VALUES
+                        (@Id, @CreatedTimestamp, @UpdatedTimestamp, @SessionId, @Role, @AuthorName, @Content, @ContentsJson, @TokenCount, @ModelName, @CreatedAt, @AgentId, @AgentName)
+                    """;
+                ChatMessageService.BindEntity(cmd, message);
+                cmd.ExecuteNonQuery();
+            });
+
+            // 2) 发 OnConversationTurnCompleted（不发 user 消息），让 Memory 插件自然去重
+            var publisher = services.GetRequiredService<IPublisher>();
+            publisher.Publish(Events.OnConversationTurnCompleted, new ConversationTurnCompletedArgs(
+                SessionId: sessionId,
+                TurnId: Guid.NewGuid().ToString("N"),
+                TraceId: sourceTaskId ?? string.Empty,   // 用 TraceId 携带来源 taskId，方便下游关联
+                ProviderId: string.Empty,
+                ProviderName: "workflow.backflow",
+                AgentId: safeAgentId,
+                AgentName: safeAgentName,
+                ModelId: string.Empty,
+                ModelName: "workflow.backflow",
+                UserMessageId: string.Empty,
+                AssistantMessageId: messageId,
+                OccurredAt: DateTimeOffset.UtcNow,
+                Status: ConversationTurnStatus.Succeeded,
+                UserInput: string.Empty,
+                AssistantResponse: content,
+                ErrorMessage: null,
+                AssistantDeltaCount: 0,
+                AttachmentCount: 0));
+
+            logger.LogInformation(
+                "Workflow→Chat 回灌完成：sessionId={SessionId}, messageId={MessageId}, sourceTaskId={SourceTaskId}, length={Length}",
+                sessionId, messageId, sourceTaskId ?? "-", content.Length);
+
+            return Task.FromResult(messageId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "Workflow→Chat 回灌失败：sessionId={SessionId}, sourceTaskId={SourceTaskId}",
+                sessionId, sourceTaskId ?? "-");
+            throw;
+        }
+    }
+
+    /// <summary>
     /// 返回指定会话的聊天历史记录，供 Agent 上下文使用。
     /// 优先加载压缩段落摘要 + 尾部原始消息，兼容老版 CompactedContext 缓存。
     /// </summary>

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 using Netor.Cortana.AI.Providers;
+using Netor.Cortana.AI.Workflow.Bridges;
 using Netor.Cortana.Entitys;
 using Netor.Cortana.Entitys.Extensions;
 using Netor.Cortana.Entitys.Services;
@@ -36,6 +37,7 @@ public sealed class AiChatHostedService(
     IPublisher publisher,
     ISubscriber subscriber,
     Orchestration.IAgentOrchestrator orchestrator,
+    WorkflowSuggestionDetector suggestionDetector,
     ILogger<AiChatHostedService> logger) : IAiChatEngine, IHostedService, IDisposable
 {
     private AIAgent? _agent;
@@ -216,6 +218,23 @@ public sealed class AiChatHostedService(
         // mentions==0 时复用现有 _agent（与现状一致）；其它情况按 Mode 重新构建。
         // 参见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §2A.3 / §2A.4。
         var safeMentions = (IReadOnlyList<AgentMention>)(mentions ?? []);
+
+        // 阶段 5B Phase 3：Chat→Workflow 启发式建议（决策：发到 conversation topic，不阻塞 chat）
+        // 仅当 user 未 @ 任何子 agent 且 input 命中复杂任务关键词时发 banner，UI 端订阅展示。
+        // 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §5B.3 / Phase 3 §4.1.2。
+        if (safeMentions.Count == 0
+            && !string.IsNullOrWhiteSpace(userInput)
+            && suggestionDetector.IsLikelyComplexTask(userInput))
+        {
+            publisher.Publish(Events.OnWorkflowSuggestion, new WorkflowSuggestionArgs(
+                SourceSessionId: _sessionId ?? string.Empty,
+                TraceId: Guid.NewGuid().ToString("N"),
+                OriginalInput: userInput,
+                SuggestedSubMode: "Magentic",
+                Reason: "这看起来是一个复杂任务，是否切到工作模式？",
+                OccurredAt: DateTimeOffset.UtcNow));
+            logger.LogDebug("Chat→Workflow 启发式建议已发布（input 长度={Len}）", userInput.Length);
+        }
 
         if (safeMentions.Count > 0 || _agent is null)
         {

@@ -143,6 +143,16 @@ public static class Events
 
     /// <summary>Workflow 任务从 HITL 暂停状态恢复执行。</summary>
     public static WorkflowTaskResumedEvent OnWorkflowTaskResumed = new("workflow.task.resumed");
+
+    // ──────── 阶段 5B Phase 3：Chat↔Workflow 桥接 ────────
+
+    /// <summary>
+    /// Chat 端基于启发式检测到当前 user input 像是复杂任务，建议切到 Workflow 工作模式。
+    /// 由 <c>AiChatHostedService.SendMessageAsync</c> 在 <c>mentions.Count==0</c> 分支发布；
+    /// UI 端订阅后在 Chat 输入框上方展示 banner，用户点击 [切到工作模式] 跳转工作台 Tab。
+    /// 走 conversation topic（不是 workflow topic），因为这是 chat 端的提示。
+    /// </summary>
+    public static WorkflowSuggestionEvent OnWorkflowSuggestion = new("conversation.workflow.suggestion");
 }
 
 // ──────── AI 配置变更事件类型 ────────
@@ -220,6 +230,12 @@ public record WorkflowTaskPausedEvent(string Eventid) : EventID<WorkflowTaskPaus
 
 /// <summary>Workflow 任务 HITL 恢复事件（task.resumed，阶段 5B 新增）</summary>
 public record WorkflowTaskResumedEvent(string Eventid) : EventID<WorkflowTaskResumedArgs>(Eventid);
+
+/// <summary>
+/// Chat→Workflow 启发式建议事件（conversation.workflow.suggestion，阶段 5B Phase 3 新增）。
+/// 由 <c>AiChatHostedService</c> 在 user input 命中"复杂任务"启发式时发布，UI 端弹 banner 引导切到工作模式。
+/// </summary>
+public record WorkflowSuggestionEvent(string Eventid) : EventID<WorkflowSuggestionArgs>(Eventid);
 
 // ──────── 事件参数类型 ────────
 
@@ -693,6 +709,26 @@ public record WorkflowTaskResumedArgs(
         Mode,
         SubMode,
         OccurredAt);
+
+/// <summary>
+/// 阶段 5B Phase 3 新增：Chat→Workflow 启发式建议参数。
+/// 由 <c>AiChatHostedService.SendMessageAsync</c> 在 <c>mentions.Count==0</c> 且 user input 命中复杂任务关键词时发布。
+/// 走 conversation topic（不是 workflow topic），由 UI Banner 订阅展示，用户点击后跳工作台 + 预填 NewTaskDialog。
+/// 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §5B.3 / Phase 3 实施计划 §4.1。
+/// </summary>
+/// <param name="SourceSessionId">触发建议的 chat 会话 ID（用户点[切到工作模式]后会作为 NewTaskDialog 的 SourceSessionId 字段）。</param>
+/// <param name="TraceId">分布式追踪 ID。</param>
+/// <param name="OriginalInput">触发建议的 user input 全文（点击后预填到 NewTaskDialog.InitialInput）。</param>
+/// <param name="SuggestedSubMode">推荐的 Workflow 子模式：当前一期固定为 "Magentic"（最通用），后续可按关键词分流。</param>
+/// <param name="Reason">展示给用户的说明文本（中文，可由 UI 直接渲染）。</param>
+/// <param name="OccurredAt">建议生成时间。</param>
+public record WorkflowSuggestionArgs(
+    string SourceSessionId,
+    string TraceId,
+    string OriginalInput,
+    string SuggestedSubMode,
+    string Reason,
+    DateTimeOffset OccurredAt) : EventArgs;
 
 /// <summary>
 /// 模型变更类型

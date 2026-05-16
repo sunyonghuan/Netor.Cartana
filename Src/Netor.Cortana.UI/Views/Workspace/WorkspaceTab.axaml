@@ -250,6 +250,12 @@
                                            FontSize="16" FontWeight="SemiBold"
                                            TextTrimming="CharacterEllipsis" />
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="0">
+                                    <Button x:Name="AttachToConversationButton"
+                                            Classes="detail-action-btn"
+                                            Content="附加到对话"
+                                            Click="OnAttachToConversationClick"
+                                            IsVisible="{Binding Detail.IsCompleted}"
+                                            ToolTip.Tip="把任务的最终报告作为助手消息追加到来源 Chat 会话" />
                                     <Button x:Name="CancelButton"
                                             Classes="detail-action-btn detail-action-btn-cancel"
                                             Content="取消任务"

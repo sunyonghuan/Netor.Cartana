@@ -30,6 +30,32 @@ public partial class NewTaskDialog : Window
         set => _vm.WorkspaceId = value;
     }
 
+    /// <summary>
+    /// 阶段 5B Phase 3：调用方可在显示对话框前预填初始输入文本（用于 Chat→Workflow 桥接）。
+    /// 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §5B.3。
+    /// </summary>
+    public string InitialInput
+    {
+        get => _vm.InitialInput;
+        set => _vm.InitialInput = value ?? string.Empty;
+    }
+
+    /// <summary>
+    /// 阶段 5B Phase 3：调用方可在显示对话框前预填子模式（"Magentic" / "GroupChat" / "ParallelAnalysis"）。
+    /// 必须与 UI ComboBox 的 Tag 取值一致；非法值时由 VM 自身忽略。
+    /// </summary>
+    public string SubMode
+    {
+        get => _vm.SubMode;
+        set
+        {
+            if (!string.IsNullOrEmpty(value))
+            {
+                _vm.SubMode = value;
+            }
+        }
+    }
+
     /// <summary>提交成功后返回的 taskId（关闭后调用方读取）。</summary>
     public string? CreatedTaskId { get; private set; }
 

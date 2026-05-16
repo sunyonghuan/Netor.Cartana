@@ -228,6 +228,51 @@
 						BorderBrush="#252526" BorderThickness="0,1,0,0"
 						Padding="6,6,6,0">
 					<StackPanel Spacing="0,0,0,2">
+						<!-- 阶段 5B Phase 3：Chat→Workflow 启发式建议 banner -->
+						<!-- 默认隐藏，由 OnWorkflowSuggestion 事件订阅在 IsLikelyComplexTask 时显示 -->
+						<Border x:Name="WorkflowSuggestionBanner"
+								Background="#1f3a4d"
+								BorderBrush="#0e7c8c"
+								BorderThickness="1"
+								CornerRadius="4"
+								Padding="10,8"
+								Margin="4,0,4,4"
+								IsVisible="False">
+							<Grid ColumnDefinitions="Auto,*,Auto,Auto">
+								<TextBlock Grid.Column="0" Text="💡"
+										   FontSize="14"
+										   VerticalAlignment="Center"
+										   Margin="0,0,8,0" />
+								<StackPanel Grid.Column="1" Orientation="Vertical" Spacing="2"
+											VerticalAlignment="Center">
+									<TextBlock x:Name="WorkflowSuggestionReason"
+											   Text="这看起来是一个复杂任务，是否切到工作模式？"
+											   Foreground="#cccccc" FontSize="12"
+											   TextWrapping="Wrap" />
+									<TextBlock x:Name="WorkflowSuggestionInputPreview"
+											   Foreground="#858585" FontSize="11"
+											   FontStyle="Italic"
+											   TextTrimming="CharacterEllipsis" />
+								</StackPanel>
+								<Button Grid.Column="2"
+										Background="#0e639c" Foreground="#ffffff"
+										Padding="10,4" CornerRadius="3"
+										FontSize="12" Cursor="Hand"
+										BorderThickness="0"
+										Margin="8,0,4,0"
+										Content="切到工作模式"
+										Click="OnWorkflowSuggestionAcceptClick" />
+								<Button Grid.Column="3"
+										Background="Transparent" Foreground="#858585"
+										Padding="6,4" CornerRadius="3"
+										FontSize="12" Cursor="Hand"
+										BorderThickness="0"
+										Content="✕"
+										ToolTip.Tip="忽略本次建议"
+										Click="OnWorkflowSuggestionDismissClick" />
+							</Grid>
+						</Border>
+
 						<!-- 附件预览区 -->
 						<ItemsControl x:Name="AttachmentList" Margin="4,0">
 							<ItemsControl.ItemsPanel>

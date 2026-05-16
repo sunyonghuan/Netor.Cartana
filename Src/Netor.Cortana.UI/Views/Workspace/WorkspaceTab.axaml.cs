@@ -8,6 +8,7 @@ using Avalonia.Threading;
 using Microsoft.Extensions.DependencyInjection;
 
 using Netor.Cortana.AI.Workflow;
+using Netor.Cortana.AI.Workflow.Bridges;
 using Netor.Cortana.UI.ViewModels.Workspace;
 
 namespace Netor.Cortana.UI.Views.Workspace;
@@ -26,12 +27,14 @@ public partial class WorkspaceTab : UserControl
 {
     private readonly WorkspaceTabVm _vm;
     private readonly IWorkflowExecutor _executor;
+    private readonly WorkflowToChatBackflowService _backflowService;
 
     public WorkspaceTab()
     {
         InitializeComponent();
         _vm = new WorkspaceTabVm();
         _executor = App.Services.GetRequiredService<IWorkflowExecutor>();
+        _backflowService = App.Services.GetRequiredService<WorkflowToChatBackflowService>();
         DataContext = _vm;
     }
 
@@ -151,6 +154,41 @@ public partial class WorkspaceTab : UserControl
         catch (Exception ex)
         {
             ShowError($"取消任务失败：{ex.Message}");
+        }
+    }
+
+    // ──── 阶段 5B Phase 3：Workflow→Chat 回灌 ────
+
+    /// <summary>
+    /// 点击 [附加到对话] 按钮：调用 <see cref="WorkflowToChatBackflowService"/>
+    /// 把当前任务的最终报告作为助手消息追加到来源 Chat 会话。
+    ///
+    /// 一期实现：targetSessionId 为 null，让 service 回退到 task.SourceSessionId；
+    /// 阶段 6 可升级为弹 ComboBox 让用户选目标 session。
+    /// 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §5B.3 / Phase 3 §4.2.3。
+    /// </summary>
+    private async void OnAttachToConversationClick(object? sender, RoutedEventArgs e)
+    {
+        var taskId = _vm.Detail.TaskId;
+        if (string.IsNullOrEmpty(taskId))
+        {
+            ShowError("未选中任务");
+            return;
+        }
+
+        try
+        {
+            var sessionId = await _backflowService.AttachToConversationAsync(
+                taskId, targetSessionId: null, CancellationToken.None);
+            ShowError($"已附加到会话 {sessionId[..Math.Min(8, sessionId.Length)]}…");
+        }
+        catch (InvalidOperationException ex)
+        {
+            ShowError($"附加失败：{ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            ShowError($"附加到对话失败：{ex.Message}");
         }
     }
 

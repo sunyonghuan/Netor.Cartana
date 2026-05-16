@@ -83,6 +83,12 @@ public static class AIServiceExtensions
         services.AddSingleton<IWorkflowExecutor>(sp => sp.GetRequiredService<WorkflowExecutor>());
         services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<WorkflowExecutor>());
 
+        // 阶段 5B Phase 3：Chat↔Workflow 桥接（详见 04-实施阶段.md §5B.3）
+        // - SuggestionDetector：启发式判断复杂任务，由 AiChatHostedService 调用
+        // - BackflowService：把 Workflow FinalReport 回灌到 Chat 会话，由 WorkspaceTab UI 调用
+        services.AddSingleton<Workflow.Bridges.WorkflowSuggestionDetector>();
+        services.AddSingleton<Workflow.Bridges.WorkflowToChatBackflowService>();
+
         // Proxy 独立外部调用通道：不复用主聊天会话。
         services.AddSingleton<ProxyUsageTracker>();
         services.AddSingleton<IAiProxyAgentBackend, CortanaOllamaProxyAgentBackend>();

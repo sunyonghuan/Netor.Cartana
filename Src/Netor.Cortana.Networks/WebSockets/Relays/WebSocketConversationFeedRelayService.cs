@@ -63,6 +63,17 @@ public sealed class WebSocketConversationFeedRelayService(
                 WebSocketJsonContext.Default.ConversationTurnCompletedArgs);
             return false;
         });
+
+        // 阶段 5B Phase 3 新增：Chat→Workflow 启发式建议转发（决策：走 conversation topic，不是 workflow topic）
+        // 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §5B.3。
+        subscriber.Subscribe<WorkflowSuggestionArgs>(Events.OnWorkflowSuggestion, async (_, args) =>
+        {
+            await BroadcastConversationEventAsync(
+                Events.OnWorkflowSuggestion.Eventid,
+                args,
+                WebSocketJsonContext.Default.WorkflowSuggestionArgs);
+            return false;
+        });
     }
 
     private Task BroadcastConversationEventAsync<TArgs>(

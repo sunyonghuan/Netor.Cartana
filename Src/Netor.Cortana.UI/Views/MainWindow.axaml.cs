@@ -6,6 +6,7 @@ using Avalonia.Threading;
 
 using Netor.Cortana.Entitys;
 using Netor.Cortana.Entitys.Services;
+using Netor.Cortana.UI.Views.Workspace.Controls;
 using Netor.EventHub;
 
 using System.Globalization;
@@ -38,6 +39,11 @@ public partial class MainWindow : Window
 #if DEBUG
     private bool _debugSystemNoticeShown;
 #endif
+
+    // 阶段 5B Phase 3：当前展示中的 Workflow 建议数据（用于"切到工作模式"按钮预填 NewTaskDialog）
+    // 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §5B.3。
+    private string? _pendingSuggestionInput;
+    private string? _pendingSuggestionSubMode;
 
     private readonly IAiChatEngine chatEngine = App.Services.GetRequiredService<IAiChatEngine>();
 
@@ -297,6 +303,27 @@ public partial class MainWindow : Window
             });
             return Task.FromResult(false);
         });
+
+        // 阶段 5B Phase 3：订阅 Chat→Workflow 启发式建议事件，UI 端弹 banner
+        // 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §5B.3
+        _subscriber.Subscribe<WorkflowSuggestionArgs>(Events.OnWorkflowSuggestion, (_, args) =>
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                _pendingSuggestionInput = args.OriginalInput;
+                _pendingSuggestionSubMode = args.SuggestedSubMode;
+
+                WorkflowSuggestionReason.Text = args.Reason;
+                // input preview 截断到 80 字符方便单行展示
+                var preview = args.OriginalInput.Length > 80
+                    ? args.OriginalInput[..80] + "…"
+                    : args.OriginalInput;
+                WorkflowSuggestionInputPreview.Text = preview;
+
+                WorkflowSuggestionBanner.IsVisible = true;
+            });
+            return Task.FromResult(false);
+        });
     }
 
     // ──────── 设置 / 关闭 ────────
@@ -440,5 +467,71 @@ public partial class MainWindow : Window
                 System.Diagnostics.Debug.WriteLine($"[MainWindow] WorkspaceTab attach error: {ex.Message}");
             }
         }
+    }
+
+    // ──────── 阶段 5B Phase 3：Chat→Workflow 启发式建议 banner ────────
+
+    /// <summary>
+    /// 用户点击 [切到工作模式]：跳转到工作台 Tab + 弹 NewTaskDialog 预填 InitialInput / SubMode。
+    /// 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §5B.3。
+    /// </summary>
+    private async void OnWorkflowSuggestionAcceptClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        var input = _pendingSuggestionInput ?? string.Empty;
+        var subMode = _pendingSuggestionSubMode ?? "Magentic";
+
+        // 1) 隐藏 banner（无论后续步骤是否成功）
+        WorkflowSuggestionBanner.IsVisible = false;
+        _pendingSuggestionInput = null;
+        _pendingSuggestionSubMode = null;
+
+        try
+        {
+            // 2) 切到工作台 Tab（复用 OnTabSwitchClick 的逻辑：直接改 IsVisible + 让 WorkspaceTab 加载列表）
+            if (_currentTab != "workspace")
+            {
+                _currentTab = "workspace";
+                ChatTabContent.IsVisible = false;
+                WorkspaceTabContent.IsVisible = true;
+                ChatTabButton.Classes.Set("tab-btn-active", false);
+                WorkspaceTabButton.Classes.Set("tab-btn-active", true);
+
+                if (HistoryPopup?.IsOpen == true) HistoryPopup.IsOpen = false;
+
+                try
+                {
+                    await WorkspaceTabContent.OnAttachedAsync(workspaceId: string.Empty);
+                }
+                catch (Exception innerEx)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[MainWindow] WorkspaceTab attach error: {innerEx.Message}");
+                }
+            }
+
+            // 3) 弹 NewTaskDialog 并预填 InitialInput / SubMode
+            var dialog = new NewTaskDialog
+            {
+                WorkspaceId = string.Empty,
+                InitialInput = input,
+                SubMode = subMode,
+            };
+            await dialog.ShowDialog(this);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[MainWindow] OnWorkflowSuggestionAcceptClick error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 用户点击 [✕] 忽略本次建议：仅隐藏 banner，不影响下次触发判断。
+    /// </summary>
+    private void OnWorkflowSuggestionDismissClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        WorkflowSuggestionBanner.IsVisible = false;
+        _pendingSuggestionInput = null;
+        _pendingSuggestionSubMode = null;
     }
 }
