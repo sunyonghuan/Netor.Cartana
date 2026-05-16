@@ -235,6 +235,9 @@ public partial class App : Application
             // 详见 Docs/未来版本策划/界面重设计/04-实施阶段.md §2.2。
             .AddSingleton<Services.ChatDraftService>()
             .AddSingleton<ViewModels.MainWindowVm>()
+            // 界面重设计 C3：左侧面板 VM（决策 UI-1 L2 + UI-9）。Singleton 与 LeftPanel 单例对齐。
+            // 详见 Docs/未来版本策划/界面重设计/04-实施阶段.md §3。
+            .AddSingleton<ViewModels.LeftPanelVm>()
             // 数据库
             .AddSingleton<CortanaDbContext>()
             .AddTransient<SystemSettingsService>()

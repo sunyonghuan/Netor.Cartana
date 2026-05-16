@@ -140,11 +140,14 @@
 				<ColumnDefinition Width="0" MinWidth="0" MaxWidth="600" />
 			</Grid.ColumnDefinitions>
 
-			<!-- Col 0: 工作台面板（负边距齐平标题栏） -->
+			<!-- Col 0: 左侧面板（界面重设计 C3：替代原 WorkspaceExplorer 直挂载，引入底部 Tab 切换）。
+			     原 WorkspaceExplorer 内部的 36px 标题栏占位 hack 已剥离（详见 04-实施阶段.md §3.4），
+			     由 LeftPanel.axaml 的 Grid.Row[0]=36px 显式占位 + 本节点保留 Margin="0,-36,0,0" 上移贴顶。
+			     详见 Docs/未来版本策划/界面重设计/04-实施阶段.md §3.5 + 01-布局规格.md §3。 -->
 			<Border Grid.Column="0" Margin="0,-36,0,0"
 			        BorderBrush="#3c3c3c" BorderThickness="0,0,1,0"
 			        Background="#1e1e1e">
-				<controls:WorkspaceExplorer x:Name="WorkspacePanel" />
+				<controls:LeftPanel x:Name="LeftPanelHost" />
 			</Border>
 
 			<!-- Col 1: 拖拽分隔条 -->

@@ -93,9 +93,12 @@ public partial class MainWindow : Window
         // 隧道阶段拦截 Enter 发送，优先于 TextBox 自身的 AcceptsReturn 处理
         InputBox.AddHandler(KeyDownEvent, OnInputKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
 
-        // 工作台面板初始化
-        WorkspacePanel.WorkspaceDirectory = App.WorkspaceDirectory;
-        WorkspacePanel.AttachmentRequested += OnWorkspaceAttachmentRequested;
+        // 界面重设计 C3：左侧面板初始化（替代原 WorkspacePanel，引入底部 Tab 切换 + L2 联动）。
+        // DataContext = LeftPanelVm（DI Singleton，与 MainWindowVm 共享 PropertyChanged 联动）。
+        // 详见 Docs/未来版本策划/界面重设计/04-实施阶段.md §3。
+        LeftPanelHost.DataContext = App.Services.GetRequiredService<Netor.Cortana.UI.ViewModels.LeftPanelVm>();
+        LeftPanelHost.WorkspaceDirectory = App.WorkspaceDirectory;
+        LeftPanelHost.AttachmentRequested += OnWorkspaceAttachmentRequested;
 
         // 历史记录面板初始化
         HistoryPanel.SessionSelected += OnHistoryPanelSessionSelected;
@@ -309,7 +312,7 @@ public partial class MainWindow : Window
         {
             Dispatcher.UIThread.Post(() =>
             {
-                WorkspacePanel.WorkspaceDirectory = args.Path;
+                LeftPanelHost.WorkspaceDirectory = args.Path;
                 LoadSessions();
 
                 // 刷新历史记录面板
