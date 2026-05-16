@@ -144,11 +144,22 @@
                 </StackPanel>
 
                 <!-- 开关选项 -->
-                <StackPanel Orientation="Horizontal" Spacing="24">
-                    <CheckBox x:Name="ChkEnabled" Content="启用" IsChecked="True"
-                              Foreground="{StaticResource TextBrush}" />
-                    <CheckBox x:Name="ChkDefault" Content="设为默认"
-                              Foreground="{StaticResource TextBrush}" />
+                <StackPanel Spacing="8">
+                    <StackPanel Orientation="Horizontal" Spacing="24">
+                        <CheckBox x:Name="ChkEnabled" Content="启用" IsChecked="True"
+                                  Foreground="{StaticResource TextBrush}" />
+                        <CheckBox x:Name="ChkDefault" Content="设为默认"
+                                  Foreground="{StaticResource TextBrush}" />
+                    </StackPanel>
+                    <!-- 阶段 6 Phase 4：长期记忆 owner 控制（决策 6-4-A/B/C）。
+                         默认勾选（AllowWorkflowMemory=true 向后兼容）。
+                         取消勾选后该智能体作为 Workflow 任务 Manager 完成时不会把 FinalReport 写入长期记忆。
+                         详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §阶段 6 #5。 -->
+                    <CheckBox x:Name="ChkAllowWorkflowMemory"
+                              Content="允许 Workflow 任务结果进入此智能体的长期记忆"
+                              IsChecked="True"
+                              Foreground="{StaticResource TextBrush}"
+                              ToolTip.Tip="该智能体作为 Workflow 任务 Manager 完成时，是否把 FinalReport 写入长期记忆。取消后仅本任务结果不入库，不影响其他智能体。" />
                 </StackPanel>
 
                 <!-- 操作按钮 -->

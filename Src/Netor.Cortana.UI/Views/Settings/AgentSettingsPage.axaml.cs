@@ -162,6 +162,8 @@ public partial class AgentSettingsPage : UserControl
         NudMaxHistory.Value = 0;
         ChkEnabled.IsChecked = true;
         ChkDefault.IsChecked = false;
+        // 阶段 6 Phase 4：default true 向后兼容（决策 6-4-B），新建 Agent 默认允许 Workflow 入长期记忆
+        ChkAllowWorkflowMemory.IsChecked = true;
         BtnDelete.IsVisible = false;
 
         _avatarPath = string.Empty;
@@ -196,6 +198,8 @@ public partial class AgentSettingsPage : UserControl
         NudMaxHistory.Value = entity.MaxHistoryMessages;
         ChkEnabled.IsChecked = entity.IsEnabled;
         ChkDefault.IsChecked = entity.IsDefault;
+        // 阶段 6 Phase 4：长期记忆 owner 控制（决策 6-4-A/B/C）
+        ChkAllowWorkflowMemory.IsChecked = entity.AllowWorkflowMemory;
         BtnDelete.IsVisible = true;
 
         _avatarPath = entity.Avatar;
@@ -230,6 +234,8 @@ public partial class AgentSettingsPage : UserControl
             entity.MaxHistoryMessages = (int)(NudMaxHistory.Value ?? 0);
             entity.IsEnabled = ChkEnabled.IsChecked ?? true;
             entity.IsDefault = ChkDefault.IsChecked ?? false;
+            // 阶段 6 Phase 4：长期记忆 owner 控制（决策 6-4-A/B/C）
+            entity.AllowWorkflowMemory = ChkAllowWorkflowMemory.IsChecked ?? true;
             entity.DefaultProviderId = GetSelectedProviderId();
             entity.DefaultModelId = GetSelectedModelId();
             AgentService.Update(entity);
@@ -253,6 +259,8 @@ public partial class AgentSettingsPage : UserControl
                 MaxHistoryMessages = (int)(NudMaxHistory.Value ?? 0),
                 IsEnabled = ChkEnabled.IsChecked ?? true,
                 IsDefault = ChkDefault.IsChecked ?? false,
+                // 阶段 6 Phase 4：长期记忆 owner 控制（决策 6-4-A/B/C）
+                AllowWorkflowMemory = ChkAllowWorkflowMemory.IsChecked ?? true,
                 DefaultProviderId = GetSelectedProviderId(),
                 DefaultModelId = GetSelectedModelId(),
             };

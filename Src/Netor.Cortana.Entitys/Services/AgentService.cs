@@ -91,7 +91,8 @@ namespace Netor.Cortana.Entitys.Services
                     FrequencyPenalty = @FrequencyPenalty, PresencePenalty = @PresencePenalty,
                     MaxHistoryMessages = @MaxHistoryMessages,
                     IsDefault = @IsDefault, IsEnabled = @IsEnabled, SortOrder = @SortOrder,
-                    EnabledPluginIds = @EnabledPluginIds, EnabledMcpServerIds = @EnabledMcpServerIds
+                    EnabledPluginIds = @EnabledPluginIds, EnabledMcpServerIds = @EnabledMcpServerIds,
+                    AllowWorkflowMemory = @AllowWorkflowMemory
                 WHERE Id = @Id
                 """,
                 cmd => BindEntity(cmd, entity));
@@ -135,11 +136,11 @@ namespace Netor.Cortana.Entitys.Services
             INSERT INTO Agents (Id, CreatedTimestamp, UpdatedTimestamp, Name, Instructions, Description, Image,
                 Avatar, DefaultProviderId, DefaultModelId,
                 Temperature, MaxTokens, TopP, FrequencyPenalty, PresencePenalty, MaxHistoryMessages,
-                IsDefault, IsEnabled, SortOrder, EnabledPluginIds, EnabledMcpServerIds)
+                IsDefault, IsEnabled, SortOrder, EnabledPluginIds, EnabledMcpServerIds, AllowWorkflowMemory)
             VALUES (@Id, @CreatedTimestamp, @UpdatedTimestamp, @Name, @Instructions, @Description, @Image,
                 @Avatar, @DefaultProviderId, @DefaultModelId,
                 @Temperature, @MaxTokens, @TopP, @FrequencyPenalty, @PresencePenalty, @MaxHistoryMessages,
-                @IsDefault, @IsEnabled, @SortOrder, @EnabledPluginIds, @EnabledMcpServerIds)
+                @IsDefault, @IsEnabled, @SortOrder, @EnabledPluginIds, @EnabledMcpServerIds, @AllowWorkflowMemory)
             """;
 
         private static AgentEntity ReadEntity(SqliteDataReader r) => new()
@@ -164,7 +165,9 @@ namespace Netor.Cortana.Entitys.Services
             IsEnabled = r.GetBoolean(r.GetOrdinal("IsEnabled")),
             SortOrder = r.GetInt32(r.GetOrdinal("SortOrder")),
             EnabledPluginIds = JsonSerializer.Deserialize(r.GetString(r.GetOrdinal("EnabledPluginIds")), EntityJsonContext.Default.ListString) ?? [],
-            EnabledMcpServerIds = JsonSerializer.Deserialize(r.GetString(r.GetOrdinal("EnabledMcpServerIds")), EntityJsonContext.Default.ListString) ?? []
+            EnabledMcpServerIds = JsonSerializer.Deserialize(r.GetString(r.GetOrdinal("EnabledMcpServerIds")), EntityJsonContext.Default.ListString) ?? [],
+            // 阶段 6 Phase 4：长期记忆 owner 控制（决策 6-4-B：default true 向后兼容）
+            AllowWorkflowMemory = r.GetInt32(r.GetOrdinal("AllowWorkflowMemory")) != 0
         };
 
         private static void BindEntity(SqliteCommand cmd, AgentEntity e)
@@ -190,6 +193,8 @@ namespace Netor.Cortana.Entitys.Services
             cmd.Parameters.AddWithValue("@SortOrder", e.SortOrder);
             cmd.Parameters.AddWithValue("@EnabledPluginIds", JsonSerializer.Serialize(e.EnabledPluginIds, EntityJsonContext.Default.ListString));
             cmd.Parameters.AddWithValue("@EnabledMcpServerIds", JsonSerializer.Serialize(e.EnabledMcpServerIds, EntityJsonContext.Default.ListString));
+            // 阶段 6 Phase 4：长期记忆 owner 控制（决策 6-4-A/B/C）
+            cmd.Parameters.AddWithValue("@AllowWorkflowMemory", e.AllowWorkflowMemory ? 1 : 0);
         }
     }
 }

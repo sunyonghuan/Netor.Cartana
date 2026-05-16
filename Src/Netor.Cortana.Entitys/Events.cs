@@ -577,6 +577,10 @@ public record WorkflowStepCompletedArgs(
 
 /// <summary>
 /// Workflow 任务完成事件参数（workflow.task.completed）。FinalReport 可用。
+/// 阶段 6 Phase 4：新增 <see cref="AllowMemoryIngest"/> 字段（决策 6-4-A 修订）。
+/// host 端在发布事件前查 <c>AgentService.GetById(ManagerAgentId).AllowWorkflowMemory</c> 填充该字段；
+/// Memory 插件 <c>MemoryWorkflowEventHandler</c> 检查 false 时跳过入库（事件正常发，仅丢弃 ingest 副作用）。
+/// 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §阶段 6 #5。
 /// </summary>
 public record WorkflowTaskCompletedArgs(
     string TaskId,
@@ -595,7 +599,8 @@ public record WorkflowTaskCompletedArgs(
     long TotalTokenInputCount,
     long TotalTokenOutputCount,
     IReadOnlyList<string> ParticipantAgentIds,
-    long CompletedAt) : WorkflowEventArgs(
+    long CompletedAt,
+    bool AllowMemoryIngest = true) : WorkflowEventArgs(
         TaskId,
         SourceSessionId,
         TraceId,

@@ -76,6 +76,7 @@ public sealed class MemoryWorkflowEventHandler(
 
         var count = 0;
         var skipped = 0;
+        var skippedByOwner = 0;
         var list = new List<ObservationRecord>();
         foreach (var it in items.EnumerateArray())
         {
@@ -83,6 +84,15 @@ public sealed class MemoryWorkflowEventHandler(
             if (!string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase))
             {
                 skipped++;
+                continue;
+            }
+
+            // 阶段 6 Phase 4：历史回放也检查 owner 配置位（决策 6-4-A 修订）。
+            // 历史导出记录可能由旧版本生成（无 AllowMemoryIngest 字段），IsMemoryIngestAllowed 默认返回 true
+            // 保持向后兼容（决策 6-4-B：default true）。
+            if (!IsMemoryIngestAllowed(it))
+            {
+                skippedByOwner++;
                 continue;
             }
 
@@ -98,7 +108,9 @@ public sealed class MemoryWorkflowEventHandler(
         {
             store.BulkInsertObservations(list);
         }
-        logger.LogInformation("Workflow 历史批次：入库 {Count} 条，跳过 {Skipped} 条（非 completed）", count, skipped);
+        logger.LogInformation(
+            "Workflow 历史批次：入库 {Count} 条，跳过 {Skipped} 条（非 completed），跳过 {SkippedByOwner} 条（owner 不允许）",
+            count, skipped, skippedByOwner);
     }
 
     /// <summary>
@@ -127,6 +139,18 @@ public sealed class MemoryWorkflowEventHandler(
             && !string.Equals(statusFromPayload, "completed", StringComparison.OrdinalIgnoreCase))
         {
             logger.LogDebug("Workflow 事件 task.completed 但 payload.Status={Status}，跳过入库", statusFromPayload);
+            return true;
+        }
+
+        // 阶段 6 Phase 4：检查 owner 长期记忆 ingest 开关（决策 6-4-A 修订）。
+        // host 端在发布事件前已查 Manager.AllowWorkflowMemory 填充 AllowMemoryIngest；
+        // false 时本插件丢弃 ingest 副作用（事件正常发，其他订阅者如 UI 任务列表 / 详情面板 / PluginBus relay 不受影响）。
+        // 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §阶段 6 #5。
+        if (!IsMemoryIngestAllowed(live))
+        {
+            logger.LogDebug(
+                "Workflow 事件 task.completed 被 owner 配置阻止入长期记忆：TaskId={TaskId}（Agent.AllowWorkflowMemory=false）",
+                GetString(live, "taskId", "TaskId"));
             return true;
         }
 
@@ -189,6 +213,28 @@ public sealed class MemoryWorkflowEventHandler(
     // 与 MemoryConversationEventHandler 对称的工具方法（小型重复，保持手感一致；
     // 阶段 5B+ 若引入 IMemoryEventHandlerBase 抽象时再抽公共基类）
     // ────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// 阶段 6 Phase 4：判断 task.completed 事件 payload 中 owner 是否允许该结果入长期记忆（决策 6-4-A 修订）。
+    /// 字段名兼容 PascalCase（CLR record 默认） + camelCase（JSON 规范化），缺失时默认 true（决策 6-4-B 向后兼容）。
+    /// 历史 export 记录可能由旧版本生成无该字段，返回 true 避免破坏既有入库行为。
+    /// </summary>
+    private static bool IsMemoryIngestAllowed(JsonElement payload)
+    {
+        foreach (var name in new[] { "allowMemoryIngest", "AllowMemoryIngest" })
+        {
+            if (!payload.TryGetProperty(name, out var v)) continue;
+            return v.ValueKind switch
+            {
+                JsonValueKind.True => true,
+                JsonValueKind.False => false,
+                JsonValueKind.String when bool.TryParse(v.GetString(), out var b) => b,
+                JsonValueKind.Number when v.TryGetInt32(out var n) => n != 0,
+                _ => true,
+            };
+        }
+        return true;   // 决策 6-4-B：字段缺失 → 默认允许（旧版本 / 4B 入库行为）
+    }
 
     private string? ResolveWorkspaceId(JsonElement el)
     {
