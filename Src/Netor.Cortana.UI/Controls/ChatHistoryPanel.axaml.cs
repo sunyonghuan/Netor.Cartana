@@ -23,6 +23,12 @@ public partial class ChatHistoryPanel : UserControl
     private readonly List<ChatSessionEntity> _loadedSessions = [];
     private readonly HashSet<string> _selectedIds = new(StringComparer.OrdinalIgnoreCase);
 
+    // 阶段 6 Phase 3：会话搜索（决策 6-3-A 标题前缀/子串 LIKE 匹配，不引入 FTS5）。
+    // _searchKeyword 是当前生效的过滤词；_searchDebounceTimer 做 200ms 防抖避免逐字符 hammering DB。
+    // 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §阶段 6 #3。
+    private string _searchKeyword = string.Empty;
+    private DispatcherTimer? _searchDebounceTimer;
+
     /// <summary>
     /// 点击某条历史记录时触发，参数为 (sessionId, title)。
     /// </summary>
@@ -84,14 +90,23 @@ public partial class ChatHistoryPanel : UserControl
             var categorize = App.WorkspaceDirectory.Md5Encrypt();
             var offset = _currentPage * PageSize;
 
+            // 阶段 6 Phase 3：搜索关键词非空时，加 Title LIKE @kw 过滤（决策 6-3-A）。
+            // 用 % 包裹做子串匹配；OrdinalIgnoreCase 由 SQLite 默认 BINARY 比较 + LOWER() 处理。
+            var hasSearch = !string.IsNullOrEmpty(_searchKeyword);
+            var sql = hasSearch
+                ? "SELECT * FROM ChatSessions WHERE IsArchived = 0 AND Categorize = @cat AND LOWER(Title) LIKE LOWER(@kw) ORDER BY IsPinned DESC, LastActiveTimestamp DESC LIMIT @limit OFFSET @offset"
+                : "SELECT * FROM ChatSessions WHERE IsArchived = 0 AND Categorize = @cat ORDER BY IsPinned DESC, LastActiveTimestamp DESC LIMIT @limit OFFSET @offset";
+
             var sessions = db.Query(
-                "SELECT * FROM ChatSessions WHERE IsArchived = 0 AND Categorize = @cat ORDER BY IsPinned DESC, LastActiveTimestamp DESC LIMIT @limit OFFSET @offset",
+                sql,
                 ReadSessionEntity,
                 cmd =>
                 {
                     cmd.Parameters.AddWithValue("@cat", categorize);
                     cmd.Parameters.AddWithValue("@limit", PageSize);
                     cmd.Parameters.AddWithValue("@offset", offset);
+                    if (hasSearch)
+                        cmd.Parameters.AddWithValue("@kw", $"%{_searchKeyword}%");
                 });
 
             if (sessions.Count < PageSize)
@@ -114,6 +129,35 @@ public partial class ChatHistoryPanel : UserControl
         {
             _isLoading = false;
         }
+    }
+
+    /// <summary>
+    /// 阶段 6 Phase 3：搜索框文本变化处理（200ms 防抖，避免逐字符 hammering DB）。
+    /// 在用户停止输入 200ms 后触发 Reload，重新按关键词加载第一页。
+    /// 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §阶段 6 #3。
+    /// </summary>
+    private void OnSearchTextChanged(object? sender, TextChangedEventArgs e)
+    {
+        if (sender is not TextBox tb) return;
+
+        // 取消上一次未触发的防抖定时器
+        _searchDebounceTimer?.Stop();
+        _searchDebounceTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(200),
+        };
+        _searchDebounceTimer.Tick += (_, _) =>
+        {
+            _searchDebounceTimer?.Stop();
+            _searchDebounceTimer = null;
+
+            var newKeyword = (tb.Text ?? string.Empty).Trim();
+            if (string.Equals(newKeyword, _searchKeyword, StringComparison.Ordinal)) return;
+
+            _searchKeyword = newKeyword;
+            Reload();
+        };
+        _searchDebounceTimer.Start();
     }
 
     private Border CreateSessionItem(ChatSessionEntity session)

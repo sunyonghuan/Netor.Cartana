@@ -192,10 +192,11 @@
 
         <!-- 阶段 5B Phase 4：Magentic 成本警告 banner（决策 [04] §4B.6）-->
         <!-- 仅在 SubMode=magentic 且预估 token ≥ Workflow.Magentic.CostWarningThreshold 时显示 -->
+        <!-- 阶段 6 Phase 3：加"知道了"关闭按钮（决策 6-3-B：30 分钟内不重复打扰） -->
         <Border Background="#3a2f1f" BorderBrush="#8c6e1c" BorderThickness="1"
                 CornerRadius="3" Padding="10"
                 IsVisible="{Binding IsCostWarningVisible}">
-            <Grid ColumnDefinitions="Auto,*">
+            <Grid ColumnDefinitions="Auto,*,Auto">
                 <TextBlock Grid.Column="0" Text="⚠"
                            Foreground="#e0c074" FontSize="14"
                            VerticalAlignment="Center" Margin="0,0,8,0" />
@@ -206,6 +207,13 @@
                     <TextBlock Text="估算公式 = MaxRounds × 单轮 token 系数 × 参与者数（可在系统设置 → 工作模式中调整阈值与系数）。"
                                Foreground="#bba87a" FontSize="11" TextWrapping="Wrap" />
                 </StackPanel>
+                <!-- 阶段 6 Phase 3：30 分钟抑制按钮（决策 6-3-B：跨会话持久化到 SystemSettings） -->
+                <Button Grid.Column="2" Content="知道了"
+                        Click="OnDismissCostWarningClick"
+                        Background="#5a4a2a" Foreground="#e0c074" BorderThickness="0"
+                        CornerRadius="3" Padding="8,3" FontSize="11" Cursor="Hand"
+                        VerticalAlignment="Center" Margin="8,0,0,0"
+                        ToolTip.Tip="30 分钟内不再显示此预警（在系统设置中可重新启用）" />
             </Grid>
         </Border>
 

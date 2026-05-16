@@ -294,7 +294,8 @@ public sealed class WorkflowExecutor(
             query.IncludeArchived,
             query.Statuses,
             query.Limit,
-            query.Offset);
+            query.Offset,
+            query.Keyword);   // 阶段 6 Phase 3：标题搜索关键词透传
         return Task.FromResult<IReadOnlyList<OrchestrationTaskEntity>>(list);
     }
 

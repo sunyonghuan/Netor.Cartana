@@ -70,6 +70,19 @@
 			</Grid>
 		</Border>
 
+		<!-- 阶段 6 Phase 3：搜索框（按标题过滤）。
+		     决策 6-3-A：标题前缀 / 子串 LIKE 匹配；不引入 FTS5（推到阶段 7+）。
+		     输入后 200ms 防抖再触发 SQL，避免逐字符 hammering DB。
+		     详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §阶段 6 #3。 -->
+		<Border DockPanel.Dock="Top" Background="#1e1e1e" Padding="8,4"
+		        BorderBrush="#252526" BorderThickness="0,0,0,1">
+			<TextBox x:Name="SearchBox"
+			         PlaceholderText="搜索会话标题..."
+			         Background="#252526" Foreground="#cccccc" BorderBrush="#3c3c3c"
+			         BorderThickness="1" CornerRadius="3" Padding="8,4" FontSize="12"
+			         TextChanged="OnSearchTextChanged" />
+		</Border>
+
 		<!-- 历史记录列表 -->
 		<ScrollViewer x:Name="HistoryScroller"
 		              VerticalScrollBarVisibility="Auto"

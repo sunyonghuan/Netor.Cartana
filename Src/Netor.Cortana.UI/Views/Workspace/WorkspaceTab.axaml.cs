@@ -99,6 +99,17 @@ public partial class WorkspaceTab : UserControl
         }
     }
 
+    /// <summary>
+    /// 阶段 6 Phase 3：任务搜索框文字变化处理（决策 6-3-A 子串 LIKE 匹配 + 200ms 防抖）。
+    /// 仅转发给 VM.List.ApplySearch，业务逻辑（防抖 + LoadAsync）下沉到 ViewModel。
+    /// 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §阶段 6 #3。
+    /// </summary>
+    private void OnTaskSearchTextChanged(object? sender, TextChangedEventArgs e)
+    {
+        if (sender is not TextBox tb) return;
+        _vm.List.ApplySearch(tb.Text);
+    }
+
     private async void OnCancelTaskClick(object? sender, RoutedEventArgs e)
     {
         try

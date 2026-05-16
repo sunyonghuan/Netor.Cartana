@@ -50,6 +50,15 @@
 			<Setter Property="Foreground" Value="#cccccc" />
 		</Style>
 
+		<!-- 阶段 6 Phase 3：StopButton 专用 hover 警示色（与 Workspace CancelButton 语义统一）。
+		     决策 6-3-D：保留 titlebar-btn 的 class 复用，仅叠加 titlebar-btn-warn 让 StopButton hover 变红，
+		     避免改 titlebar-btn 全局样式影响其他历史/设置/新建会话等按钮。
+		     详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §阶段 6 #3。 -->
+		<Style Selector="Button.titlebar-btn-warn:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+			<Setter Property="Background" Value="#3a1f1f" />
+			<Setter Property="Foreground" Value="#d85050" />
+		</Style>
+
 		<!-- ── 拖拽分隔条 ── -->
 		<Style Selector="GridSplitter">
 			<Setter Property="Background" Value="Transparent" />
@@ -303,8 +312,8 @@
 											<Image Source="avares://Cortana/Assets/send.png" Width="14" Height="14" />
 										</Button>
 										<!-- 旋转加载按钮（发送中显示，点击可取消） -->
-										<Button x:Name="StopButton" Classes="titlebar-btn"
-												ToolTip.Tip="取消" IsVisible="False" Click="OnStopClick">
+										<Button x:Name="StopButton" Classes="titlebar-btn titlebar-btn-warn"
+												ToolTip.Tip="停止当前对话" IsVisible="False" Click="OnStopClick">
 											<Image x:Name="SpinnerIcon"
 												   Source="avares://Cortana/Assets/refresh.png"
 												   Width="14" Height="14"

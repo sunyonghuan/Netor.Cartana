@@ -67,8 +67,12 @@
         <Style Selector="Button.detail-action-btn-cancel">
             <Setter Property="Background" Value="#6e2828" />
         </Style>
+        <!-- 阶段 6 Phase 3：hover 色减弱（#8a3838 → #7a3030），与 Chat StopButton 警示风格对齐。
+             原 hover 比 normal 更亮（变红），改后 hover 略暗于 normal（"按下去"的视觉），
+             与 Chat 的 hover 警示反馈节奏统一（鼠标停在取消按钮上时按钮不上跳更稳）。
+             详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §阶段 6 #3。 -->
         <Style Selector="Button.detail-action-btn-cancel:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="#8a3838" />
+            <Setter Property="Background" Value="#7a3030" />
         </Style>
 
         <!-- 占位标题灰色 -->
@@ -155,6 +159,14 @@
                         </Grid>
                         <Button Classes="new-task-btn" Content="+ 新建任务"
                                 Click="OnNewTaskClick" />
+                        <!-- 阶段 6 Phase 3：搜索框（决策 6-3-A 子串 LIKE 匹配，200ms 防抖）。
+                             与 ChatHistoryPanel 搜索框风格统一，让 Chat / Workflow 两边搜索体验一致。
+                             详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §阶段 6 #3。 -->
+                        <TextBox x:Name="TaskSearchBox"
+                                 PlaceholderText="搜索任务标题..."
+                                 Background="#252526" Foreground="#cccccc" BorderBrush="#3c3c3c"
+                                 BorderThickness="1" CornerRadius="3" Padding="8,4" FontSize="12"
+                                 TextChanged="OnTaskSearchTextChanged" />
                     </StackPanel>
                 </Border>
 
@@ -244,11 +256,23 @@
                             Padding="16,12">
                         <StackPanel Spacing="6">
                             <Grid ColumnDefinitions="*,Auto">
-                                <TextBlock Grid.Column="0"
-                                           Text="{Binding Detail.Title}"
-                                           Foreground="#cccccc"
-                                           FontSize="16" FontWeight="SemiBold"
-                                           TextTrimming="CharacterEllipsis" />
+                                <!-- 阶段 6 Phase 3：标题 + HITL 暂停徽章并排（仅 IsPaused 状态显示徽章）。
+                                     与 NewTaskDialog 成本警告 banner 同样的橙色调（#3a2f1f / #8c6e1c / #f4a83a），
+                                     用户在任务列表外快速识别哪个任务在等批准。
+                                     详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §阶段 6 #3。 -->
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Text="{Binding Detail.Title}"
+                                               Foreground="#cccccc"
+                                               FontSize="16" FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis"
+                                               VerticalAlignment="Center" />
+                                    <Border Background="#3a2f1f" BorderBrush="#8c6e1c" BorderThickness="1"
+                                            CornerRadius="3" Padding="6,2" VerticalAlignment="Center"
+                                            IsVisible="{Binding Detail.IsPaused}">
+                                        <TextBlock Text="⏸ 等待批准"
+                                                   Foreground="#f4a83a" FontSize="11" FontWeight="SemiBold" />
+                                    </Border>
+                                </StackPanel>
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="0">
                                     <Button x:Name="AttachToConversationButton"
                                             Classes="detail-action-btn"

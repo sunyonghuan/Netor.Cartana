@@ -117,4 +117,14 @@ public partial class NewTaskDialog : Window
         CreatedTaskId = null;
         Close();
     }
+
+    /// <summary>
+    /// 阶段 6 Phase 3：用户点"知道了"按钮关闭成本警告 Banner。
+    /// 决策 6-3-B：30 分钟内不重复显示同一阈值的警告（跨会话持久化到 SystemSettings）。
+    /// 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §阶段 6 #3。
+    /// </summary>
+    private void OnDismissCostWarningClick(object? sender, RoutedEventArgs e)
+    {
+        _vm.DismissCostWarning();
+    }
 }

@@ -20,4 +20,11 @@ public sealed record WorkflowTaskListQuery
 
     /// <summary>分页偏移，默认 0。</summary>
     public int Offset { get; init; }
+
+    /// <summary>
+    /// 阶段 6 Phase 3：标题搜索关键词（决策 6-3-A 子串 LIKE 匹配）。
+    /// null 或空字符串表示不过滤。
+    /// 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §阶段 6 #3。
+    /// </summary>
+    public string? Keyword { get; init; }
 }

@@ -37,6 +37,12 @@ public sealed class WorkflowTaskListVm : INotifyPropertyChanged
     private bool _isLoading;
     private WorkflowTaskItemVm? _selectedItem;
 
+    // 阶段 6 Phase 3：任务列表搜索（决策 6-3-A 子串 LIKE 匹配）
+    // _keyword 是当前生效的过滤词；_searchDebounceTimer 做 200ms 防抖避免逐字符 hammering DB。
+    // 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §阶段 6 #3。
+    private string _keyword = string.Empty;
+    private DispatcherTimer? _searchDebounceTimer;
+
     /// <summary>构造时立即订阅 workflow 事件流；列表通过 <see cref="LoadAsync"/> 触发首次加载。</summary>
     public WorkflowTaskListVm()
     {
@@ -74,6 +80,38 @@ public sealed class WorkflowTaskListVm : INotifyPropertyChanged
         }
     }
 
+    /// <summary>
+    /// 阶段 6 Phase 3：当前搜索关键词（决策 6-3-A 子串 LIKE 匹配，不引入 FTS5）。
+    /// 由 View 层 OnSearchTextChanged → ApplySearch 200ms 防抖后写入；空字符串表示不过滤。
+    /// 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §阶段 6 #3。
+    /// </summary>
+    public string Keyword => _keyword;
+
+    /// <summary>
+    /// 阶段 6 Phase 3：接收 View 层搜索框文字变化（带 200ms 防抖）。
+    /// 在用户停止输入 200ms 后，更新 _keyword 并触发 LoadAsync 重新过滤列表。
+    /// </summary>
+    public void ApplySearch(string? input)
+    {
+        var newKeyword = (input ?? string.Empty).Trim();
+        _searchDebounceTimer?.Stop();
+        _searchDebounceTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(200),
+        };
+        _searchDebounceTimer.Tick += (_, _) =>
+        {
+            _searchDebounceTimer?.Stop();
+            _searchDebounceTimer = null;
+
+            if (string.Equals(newKeyword, _keyword, StringComparison.Ordinal)) return;
+
+            _keyword = newKeyword;
+            _ = LoadAsync();
+        };
+        _searchDebounceTimer.Start();
+    }
+
     // ──── 列表加载与刷新 ────
 
     /// <summary>
@@ -91,6 +129,7 @@ public sealed class WorkflowTaskListVm : INotifyPropertyChanged
                 Statuses = null,
                 Limit = 30,
                 Offset = 0,
+                Keyword = string.IsNullOrEmpty(_keyword) ? null : _keyword,   // 阶段 6 Phase 3
             };
             var rows = await _executor.ListTasksAsync(query, CancellationToken.None);
 

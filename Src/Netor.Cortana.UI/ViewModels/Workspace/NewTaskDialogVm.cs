@@ -83,6 +83,14 @@ public sealed class NewTaskDialogVm : INotifyPropertyChanged
     private bool _isSubmitting;
     private string? _validationError;
 
+    // 阶段 6 Phase 3：成本警告 Banner 频率限制（决策 6-3-B：30 分钟内同一阈值不重复显示）。
+    // 用户点"知道了"后写入 SystemSettings.Workflow.Magentic.CostWarningSnoozeUntilMs（Unix ms 时间戳），
+    // IsCostWarningVisible 检查 now < snoozeUntil 时强制 false。
+    // 跨会话持久化（避免每次重启又弹出），不引入新表。
+    // 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §阶段 6 #3。
+    private const string CostWarningSnoozeKey = "Workflow.Magentic.CostWarningSnoozeUntilMs";
+    private const int CostWarningSnoozeMinutes = 30;
+
     public NewTaskDialogVm()
     {
         _agentService = App.Services.GetRequiredService<AgentService>();
@@ -271,14 +279,33 @@ public sealed class NewTaskDialogVm : INotifyPropertyChanged
     /// <summary>
     /// 是否显示成本警告 banner：仅当 magentic 子模式 + 参与者已选 + 估算值 ≥ 阈值。
     /// 阈值 0 表示禁用警告（用户在 SystemSettings 中显式关闭）。
+    /// 阶段 6 Phase 3：检查 SystemSettings.Workflow.Magentic.CostWarningSnoozeUntilMs，
+    /// 当 now &lt; snoozeUntil 时强制 false（决策 6-3-B：30 分钟内不重复打扰）。
     /// </summary>
     public bool IsCostWarningVisible
     {
         get
         {
             if (_magenticCostWarningThreshold <= 0) return false;
-            return EstimatedCost >= _magenticCostWarningThreshold;
+            if (EstimatedCost < _magenticCostWarningThreshold) return false;
+
+            // 阶段 6 Phase 3：检查 30 分钟抑制窗口
+            var snoozeUntilMs = _systemSettings.GetValue(CostWarningSnoozeKey, 0L);
+            var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            return nowMs >= snoozeUntilMs;
         }
+    }
+
+    /// <summary>
+    /// 阶段 6 Phase 3：用户点"知道了"按钮关闭成本警告 Banner（决策 6-3-B 30 分钟频率限制）。
+    /// 把 now + 30min 写入 SystemSettings.Workflow.Magentic.CostWarningSnoozeUntilMs，
+    /// 跨会话持久化抑制时间戳（避免每次重启又弹出，不引入新表）。
+    /// </summary>
+    public void DismissCostWarning()
+    {
+        var snoozeUntilMs = DateTimeOffset.UtcNow.AddMinutes(CostWarningSnoozeMinutes).ToUnixTimeMilliseconds();
+        _systemSettings.SetValue(CostWarningSnoozeKey, snoozeUntilMs.ToString());
+        OnPropertyChanged(nameof(IsCostWarningVisible));
     }
 
     // ──── 加载/提交 ────

@@ -77,16 +77,28 @@ namespace Netor.Cortana.Entitys.Services
         /// <param name="statuses">状态过滤（可空，传 null 表示不过滤）。</param>
         /// <param name="limit">每页数量。</param>
         /// <param name="offset">分页偏移。</param>
+        /// <param name="keyword">
+        /// 阶段 6 Phase 3 新增：标题搜索关键词（决策 6-3-A 子串 LIKE 匹配）。
+        /// null 或空字符串表示不过滤；非空时按 LOWER(Title) LIKE LOWER('%keyword%') 匹配。
+        /// 一期不引入 FTS5（推到阶段 7+），少量数据 LIKE 性能可接受。
+        /// 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §阶段 6 #3。
+        /// </param>
         public List<OrchestrationTaskEntity> ListByWorkspace(
             string workspaceId,
             bool includeArchived = false,
             IReadOnlyList<string>? statuses = null,
             int limit = 30,
-            int offset = 0)
+            int offset = 0,
+            string? keyword = null)
         {
             var sql = "SELECT * FROM OrchestrationTask WHERE 1=1";
             if (!string.IsNullOrEmpty(workspaceId)) sql += " AND WorkspaceId = @WorkspaceId";
             if (!includeArchived) sql += " AND IsArchived = 0";
+
+            // 阶段 6 Phase 3：标题关键词过滤（子串 LIKE 匹配，大小写不敏感）
+            var hasKeyword = !string.IsNullOrWhiteSpace(keyword);
+            if (hasKeyword)
+                sql += " AND LOWER(Title) LIKE LOWER(@Keyword)";
 
             // 状态过滤：参数化拼接（数量受调用方控制，无 SQL 注入风险）
             string[] statusParamNames = [];
@@ -104,6 +116,9 @@ namespace Netor.Cortana.Entitys.Services
             {
                 if (!string.IsNullOrEmpty(workspaceId))
                     cmd.Parameters.AddWithValue("@WorkspaceId", workspaceId);
+
+                if (hasKeyword)
+                    cmd.Parameters.AddWithValue("@Keyword", $"%{keyword!.Trim()}%");
 
                 if (statuses is { Count: > 0 })
                     for (var i = 0; i < statuses.Count; i++)
