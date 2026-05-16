@@ -79,6 +79,30 @@ public sealed class AIAgentFactory(
         }, enableReasoning, appPaths);
     }
 
+    /// <summary>
+    /// 阶段 6 Phase 1：为 sub-agent / Workflow 参与者构建轻量级 <see cref="TokenTrackingChatClient"/>。
+    /// 与主 <see cref="CreateTrackingClient"/> 的区别：
+    /// <list type="bullet">
+    /// <item><b>不</b>写主对话的 <c>_lastInputTokens</c> / <c>_maxContextTokens</c>（避免子 agent 用量覆盖主 Chat 顶栏进度条）；</item>
+    /// <item>仍然触发 <see cref="TokenUsageChanged"/> 让 UI 知道 token 在动（决策 6-1-C：复用现有事件，不引入新事件类型）；</item>
+    /// <item>tracker 本身仍提供 <see cref="TokenTrackingChatClient.LastInputTokens"/> / <see cref="TokenTrackingChatClient.TotalOutputTokens"/>，
+    /// 供 <see cref="Workflow.WorkflowExecutor"/> 在 step 完成时取数。</item>
+    /// </list>
+    /// 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §阶段 6 #2。
+    /// </summary>
+    private TokenTrackingChatClient CreateSubAgentTrackingClient(IChatClient inner, long maxContextTokens, bool enableReasoning)
+    {
+        var normalizedMax = maxContextTokens <= 0 ? 128_000 : maxContextTokens;
+        return new TokenTrackingChatClient(inner, normalizedMax, _ =>
+        {
+            try { TokenUsageChanged?.Invoke(); }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "TokenUsageChanged 事件订阅者抛出异常（sub-agent）");
+            }
+        }, enableReasoning, appPaths);
+    }
+
     /// <summary>重置 token 统计（新建会话或切换工作区时调用）。</summary>
     public void ResetTokenStats()
     {
@@ -441,13 +465,20 @@ public sealed class AIAgentFactory(
     /// <param name="fallbackModel">兜底模型；当参与者自身未配置 DefaultModelId 时跟随此值。</param>
     /// <param name="providerService">用于解析参与者自身厂商。</param>
     /// <param name="modelService">用于解析参与者自身模型。</param>
+    /// <param name="trackerByAgentId">
+    /// 阶段 6 Phase 1 新增：可选输出字典；非 null 时按 agent.Id 填充对应参与者的 <see cref="TokenTrackingChatClient"/>。
+    /// Workflow 端在 step 完成时据此字典反查 tracker 取 token 数据。
+    /// 调用前由调用方初始化（如 <c>new Dictionary&lt;string, TokenTrackingChatClient&gt;()</c>），方法仅写入。
+    /// 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §阶段 6 #2。
+    /// </param>
     /// <returns>参与者 AIAgent 集合，按入参顺序保留；解析失败的参与者会被过滤掉。</returns>
     public IReadOnlyList<AIAgent> BuildWorkflowParticipants(
         IReadOnlyList<AgentEntity> participantEntities,
         AiProviderEntity fallbackProvider,
         AiModelEntity fallbackModel,
         AiProviderService providerService,
-        AiModelService modelService)
+        AiModelService modelService,
+        IDictionary<string, TokenTrackingChatClient>? trackerByAgentId = null)
     {
         ArgumentNullException.ThrowIfNull(participantEntities);
         ArgumentNullException.ThrowIfNull(fallbackProvider);
@@ -477,8 +508,14 @@ public sealed class AIAgentFactory(
                 continue;
             }
 
-            var participant = BuildSubAgent(participantEntity, provider, model);
+            var participant = BuildSubAgent(participantEntity, provider, model, out var tracker);
             participants.Add(participant);
+
+            // 阶段 6 Phase 1：把 tracker 按 agent.Id 注册到字典，让 Workflow 在 step 完成时反查
+            if (trackerByAgentId is not null && !string.IsNullOrEmpty(participantEntity.Id))
+            {
+                trackerByAgentId[participantEntity.Id] = tracker;
+            }
         }
 
         return participants;
@@ -488,6 +525,18 @@ public sealed class AIAgentFactory(
     /// 构建子智能体（轻量）：仅携带 instructions + plugins + MCP，不带历史/memory/skills。
     /// </summary>
     private AIAgent BuildSubAgent(AgentEntity agent, AiProviderEntity provider, AiModelEntity model)
+        => BuildSubAgent(agent, provider, model, out _);
+
+    /// <summary>
+    /// 阶段 6 Phase 1：构建子智能体（轻量），并通过 out 参数回传其 <see cref="TokenTrackingChatClient"/>，
+    /// 让调用方（如 Workflow）在 step 完成时取 token 数据持久化到 OrchestrationStep。
+    /// 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §阶段 6 #2。
+    /// </summary>
+    private AIAgent BuildSubAgent(
+        AgentEntity agent,
+        AiProviderEntity provider,
+        AiModelEntity model,
+        out TokenTrackingChatClient tracker)
     {
         var driver = driverRegistry.Resolve(provider);
 
@@ -502,10 +551,13 @@ public sealed class AIAgentFactory(
             logger.LogInformation("子智能体模型 {Model} 未启用函数调用，跳过工具配送。", model.Name);
         }
 
-        var chatClient = driver.CreateChatClient(provider, model);
+        var enableReasoning = model.InteractionCapabilities.HasFlag(InteractionCapabilities.Reasoning);
+        // 阶段 6 Phase 1：sub-agent ChatClient 必须包装 TokenTrackingChatClient，
+        // 让 Workflow step 完成时能取到真实 token 数据（之前直接 driver.CreateChatClient 没有 tracking）。
+        tracker = CreateSubAgentTrackingClient(driver.CreateChatClient(provider, model), model.ContextLength, enableReasoning);
 
 #pragma warning disable MAAI001
-        return chatClient
+        return tracker
             .AsBuilder()
             .BuildAIAgent(new ChatClientAgentOptions
             {

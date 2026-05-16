@@ -37,6 +37,7 @@ public sealed class TaskDetailVm : INotifyPropertyChanged
     private string? _errorMessage;
     private long _startedAt;
     private long? _completedAt;
+    private long _totalTokens;   // 阶段 6 Phase 1：累计 token（input + output）
     private bool _isLoading;
 
     public TaskDetailVm()
@@ -161,6 +162,32 @@ public sealed class TaskDetailVm : INotifyPropertyChanged
         }
     }
 
+    /// <summary>
+    /// 阶段 6 Phase 1：累计 token 总数（input + output），从 OrchestrationTask.TotalTokenCount 或
+    /// step 事件中累加得到。详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §阶段 6 #2。
+    /// </summary>
+    public long TotalTokens
+    {
+        get => _totalTokens;
+        set
+        {
+            if (SetField(ref _totalTokens, value))
+                OnPropertyChanged(nameof(TotalTokensText));
+        }
+    }
+
+    /// <summary>UI 友好的 token 展示文本（如 "12.3k tokens" / "850 tokens"）。空字符串表示无数据。</summary>
+    public string TotalTokensText
+    {
+        get
+        {
+            if (_totalTokens <= 0) return string.Empty;
+            return _totalTokens >= 1000
+                ? $"{_totalTokens / 1000.0:F1}k tokens"
+                : $"{_totalTokens} tokens";
+        }
+    }
+
     /// <summary>是否正在加载详情。</summary>
     public bool IsLoading
     {
@@ -216,6 +243,7 @@ public sealed class TaskDetailVm : INotifyPropertyChanged
         ErrorMessage = null;
         StartedAt = 0;
         CompletedAt = null;
+        TotalTokens = 0;
         Participants.Clear();
         Steps.Clear();
         Approval.Clear();
@@ -232,6 +260,12 @@ public sealed class TaskDetailVm : INotifyPropertyChanged
         ErrorMessage = task.ErrorMessage;
         StartedAt = task.StartedAt;
         CompletedAt = task.CompletedAt;
+
+        // 阶段 6 Phase 1：从已持久化的 OrchestrationTask.TotalTokenCount 读取（任务完成后写入）；
+        // 进行中任务则从 step 集合 SUM 求和（运行期 step 事件订阅会进一步增量更新）
+        TotalTokens = task.TotalTokenCount > 0
+            ? task.TotalTokenCount
+            : detail.Steps.Sum(s => (long)((s.TokenInputCount ?? 0) + (s.TokenOutputCount ?? 0)));
 
         Participants.Clear();
         foreach (var p in detail.Participants) Participants.Add(p);
@@ -251,6 +285,9 @@ public sealed class TaskDetailVm : INotifyPropertyChanged
                 if (args.TaskId != _taskId) return;
                 if (Steps.Any(x => x.StepId == args.StepId)) return;
                 Steps.Add(new StepItemVm(args));
+                // 阶段 6 Phase 1：实时增量累加 token，让 UI 在任务运行中持续刷新
+                // TokenInputCount / TokenOutputCount 在 args 中为 int?（兼容旧事件），用 ?? 0 安全降级
+                TotalTokens += (args.TokenInputCount ?? 0) + (args.TokenOutputCount ?? 0);
             });
             return Task.FromResult(false);
         });

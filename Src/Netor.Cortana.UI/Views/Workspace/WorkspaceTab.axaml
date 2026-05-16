@@ -263,13 +263,19 @@
                                             IsVisible="{Binding Detail.IsRunning}" />
                                 </StackPanel>
                             </Grid>
-                            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto" RowDefinitions="Auto">
+                            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" RowDefinitions="Auto">
                                 <TextBlock Grid.Column="0" Text="状态：" Foreground="#858585" FontSize="12" VerticalAlignment="Center" />
                                 <TextBlock Grid.Column="1" Text="{Binding Detail.StatusText}"
                                            Foreground="#cccccc" FontSize="12" VerticalAlignment="Center" Margin="0,0,16,0" />
                                 <TextBlock Grid.Column="2" Text="耗时：" Foreground="#858585" FontSize="12" VerticalAlignment="Center" />
                                 <TextBlock Grid.Column="3" Text="{Binding Detail.DurationText}"
-                                           Foreground="#cccccc" FontSize="12" VerticalAlignment="Center" />
+                                           Foreground="#cccccc" FontSize="12" VerticalAlignment="Center" Margin="0,0,16,0" />
+                                <!-- 阶段 6 Phase 1：累计 token 显示（与 ChatSession.TotalTokenCount 对齐，无数据时隐藏） -->
+                                <TextBlock Grid.Column="4" Text="累计：" Foreground="#858585" FontSize="12" VerticalAlignment="Center"
+                                           IsVisible="{Binding Detail.TotalTokensText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                <TextBlock Grid.Column="5" Text="{Binding Detail.TotalTokensText}"
+                                           Foreground="#cccccc" FontSize="12" VerticalAlignment="Center"
+                                           IsVisible="{Binding Detail.TotalTokensText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                             </Grid>
                             <Grid ColumnDefinitions="Auto,Auto" RowDefinitions="Auto">
                                 <TextBlock Grid.Column="0" Text="子模式：" Foreground="#858585" FontSize="12" />

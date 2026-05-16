@@ -4,6 +4,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
+using Netor.Cortana.AI.Providers;
 using Netor.Cortana.AI.Workflow.Builders;
 using Netor.Cortana.AI.Workflow.Title;
 using Netor.Cortana.Entitys;
@@ -51,6 +52,7 @@ public sealed class WorkflowExecutor(
     AgentService agentService,
     AiProviderService providerService,
     AiModelService modelService,
+    SystemSettingsService systemSettings,
     CheckpointManager checkpointManager,
     IPublisher publisher,
     ILogger<WorkflowExecutor> logger) : IWorkflowExecutor, IHostedService
@@ -594,7 +596,11 @@ public sealed class WorkflowExecutor(
         CancellationToken ct)
     {
         // 1. 加载并构建参与者（Manager + Members 全部走轻量路径）
-        var participants = LoadAndBuildParticipants(request);
+        // 阶段 6 Phase 1：维护 trackers 字典让 PersistAndPublishStep 在 step 完成时反查 token；
+        // outputSnapshot 字典记录每个 agent 的累计输出快照，用于计算 step 级 output 增量。
+        var trackers = new Dictionary<string, TokenTrackingChatClient>(StringComparer.OrdinalIgnoreCase);
+        var outputSnapshot = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        var participants = LoadAndBuildParticipants(request, trackers);
         if (participants.Count == 0)
         {
             HandleTaskFailed(taskId, request, traceId, entity, participantIds, startedMs,
@@ -623,6 +629,7 @@ public sealed class WorkflowExecutor(
 
         var stepIndex = 0;
         var stepCount = 0;
+        long totalTokens = 0;   // 阶段 6 Phase 1：累计任务 token（input + output）
         string? finalReport = null;
 
         await foreach (var evt in run.WatchStreamAsync(ct))
@@ -633,7 +640,8 @@ public sealed class WorkflowExecutor(
             {
                 case ExecutorCompletedEvent completed:
                     stepCount++;
-                    PersistAndPublishStep(taskId, request, traceId, completed, ++stepIndex);
+                    var (stepIn, stepOut) = PersistAndPublishStep(taskId, request, traceId, completed, ++stepIndex, trackers, outputSnapshot);
+                    totalTokens += stepIn + stepOut;
                     break;
 
                 case AgentResponseEvent agentResponse:
@@ -656,13 +664,16 @@ public sealed class WorkflowExecutor(
 
         // 4. 完成：写库 + 发 task.completed + 异步触发标题兜底
         // 传第一个 participant 作为标题生成参考 agent（用于解析压缩模型 ChatClient）
-        HandleTaskCompleted(taskId, request, traceId, entity, participantIds, startedMs, stepCount, finalReport, participants[0]);
+        HandleTaskCompleted(taskId, request, traceId, entity, participantIds, startedMs, stepCount, totalTokens, finalReport, participants[0]);
     }
 
     /// <summary>
     /// 加载 request 中的 ManagerAgent + Member Agents 并构建为 AIAgent。
+    /// 阶段 6 Phase 1：可选输出 trackerByAgentId 字典，让调用方在 step 完成时取 token 数据。
     /// </summary>
-    private IReadOnlyList<AIAgent> LoadAndBuildParticipants(WorkflowTaskRequest request)
+    private IReadOnlyList<AIAgent> LoadAndBuildParticipants(
+        WorkflowTaskRequest request,
+        IDictionary<string, TokenTrackingChatClient>? trackerByAgentId = null)
     {
         var entities = new List<AgentEntity>();
 
@@ -704,7 +715,7 @@ public sealed class WorkflowExecutor(
         if (fallbackModel is null) return [];
 
         return factory.BuildWorkflowParticipants(
-            entities, fallbackProvider, fallbackModel, providerService, modelService);
+            entities, fallbackProvider, fallbackModel, providerService, modelService, trackerByAgentId);
     }
 
     /// <summary>
@@ -724,16 +735,39 @@ public sealed class WorkflowExecutor(
     /// <summary>
     /// 写一条 OrchestrationStep 记录 + 发 step.completed 事件。
     /// </summary>
-    private void PersistAndPublishStep(
+    /// <summary>
+    /// 阶段 6 Phase 1：返回本步骤的 (input, output) token 数，让 RunWorkflowAsync 累加成 task 级 TotalTokenCount。
+    /// </summary>
+    private (int InputTokens, int OutputTokens) PersistAndPublishStep(
         string taskId,
         WorkflowTaskRequest request,
         string traceId,
         ExecutorCompletedEvent completed,
-        int sequence)
+        int sequence,
+        IReadOnlyDictionary<string, TokenTrackingChatClient> trackers,
+        IDictionary<string, long> outputSnapshot)
     {
         var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var stepId = Guid.NewGuid().ToString("N");
         var resultText = completed.Data?.ToString() ?? string.Empty;
+
+        // 阶段 6 Phase 1：从对应 agent 的 TokenTrackingChatClient 读取 token 数据。
+        // - LastInputTokens 直接是本步骤调用的输入 token（每次 LLM 调用都被覆盖）
+        // - TotalOutputTokens 是累计输出，需要减去上一次快照得到本步骤的输出增量
+        // 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §阶段 6 #2。
+        var stepInputTokens = 0;
+        var stepOutputTokens = 0;
+        if (!string.IsNullOrEmpty(completed.ExecutorId)
+            && trackers.TryGetValue(completed.ExecutorId, out var tracker))
+        {
+            stepInputTokens = (int)Math.Min(int.MaxValue, tracker.LastInputTokens);
+
+            var currentOutput = tracker.TotalOutputTokens;
+            var previousOutput = outputSnapshot.TryGetValue(completed.ExecutorId, out var snap) ? snap : 0L;
+            var deltaOutput = Math.Max(0, currentOutput - previousOutput);
+            stepOutputTokens = (int)Math.Min(int.MaxValue, deltaOutput);
+            outputSnapshot[completed.ExecutorId] = currentOutput;
+        }
 
         var stepEntity = new OrchestrationStepEntity
         {
@@ -748,8 +782,8 @@ public sealed class WorkflowExecutor(
             StartedAt = nowMs,
             CompletedAt = nowMs,
             DurationMs = 0,
-            TokenInputCount = 0,
-            TokenOutputCount = 0,
+            TokenInputCount = stepInputTokens,
+            TokenOutputCount = stepOutputTokens,
             ErrorMessage = null,
             SummaryJson = resultText,
         };
@@ -781,10 +815,13 @@ public sealed class WorkflowExecutor(
             StartedAt: nowMs,
             CompletedAt: nowMs,
             DurationMs: 0,
-            TokenInputCount: 0,
-            TokenOutputCount: 0,
+            TokenInputCount: stepInputTokens,
+            TokenOutputCount: stepOutputTokens,
             ErrorMessage: null,
             SummaryJson: resultText));
+
+        // 阶段 6 Phase 1：返回 step 级 token 让 RunWorkflowAsync 累加到 task 级 TotalTokenCount
+        return (stepInputTokens, stepOutputTokens);
     }
 
     private void HandleTaskCompleted(
@@ -795,6 +832,7 @@ public sealed class WorkflowExecutor(
         List<string> participantIds,
         long startedMs,
         int stepCount,
+        long totalTokens,
         string? finalReport,
         AIAgent referenceAgent)
     {
@@ -809,7 +847,8 @@ public sealed class WorkflowExecutor(
             finalReport: report,
             errorMessage: null,
             completedAt: completedAtMs,
-            lastActiveTimestamp: completedAtMs);
+            lastActiveTimestamp: completedAtMs,
+            totalTokenCount: totalTokens);
 
         publisher.Publish(Events.OnWorkflowTaskCompleted, new WorkflowTaskCompletedArgs(
             TaskId: taskId,
@@ -847,8 +886,63 @@ public sealed class WorkflowExecutor(
             }, CancellationToken.None);
         }
 
+        // 阶段 6 Phase 1：Magentic 实际 token 反馈校准（移动平均权重 7:1，决策 6-1-B）
+        // 用真实数据修正 EstimatedTokenMultiplier 默认值（NewTaskDialog 成本警告会读取此值估算）
+        TryUpdateMagenticTokenMultiplier(request.SubMode, totalTokens, participantIds.Count);
+
         // 阶段 5B：任务正常完成 → 清理 Checkpoint BLOB（避免长期堆积）
         TryCleanupCheckpoints(taskId, "completed");
+    }
+
+    /// <summary>
+    /// 阶段 6 Phase 1：Magentic 任务完成时，用实际 token 数据校准 Workflow.Magentic.EstimatedTokenMultiplier。
+    /// 移动平均权重 7:1：newMultiplier = (oldMultiplier * 7 + sampleMultiplier) / 8
+    /// 优点：保守校准，单次任务异常值（如工具调用爆炸）不会污染默认值
+    /// 触发条件：
+    /// - SubMode 必须为 magentic（不规范化大小写问题，因为 request.SubMode 已是规范化值）
+    /// - actualTokens &gt; 0（有真实数据）
+    /// - participantCount &gt; 0（避免除零）
+    /// - oldMultiplier 在合理区间 [100, 50000]（避免历史脏数据破坏）
+    /// 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §阶段 6 #2 / 5B Phase 4 §5.1。
+    /// </summary>
+    private void TryUpdateMagenticTokenMultiplier(string subMode, long actualTokens, int participantCount)
+    {
+        if (!string.Equals(subMode?.Trim().ToLowerInvariant(), "magentic", StringComparison.Ordinal))
+            return;
+        if (actualTokens <= 0 || participantCount <= 0)
+            return;
+
+        try
+        {
+            var maxRounds = options.MaxRounds;
+            if (maxRounds <= 0) return;
+
+            // 实际样本：actualTokens / (MaxRounds × participantCount) = 平均每参与者每轮 token
+            var sampleMultiplier = actualTokens / ((long)maxRounds * participantCount);
+            if (sampleMultiplier <= 0) return;
+
+            var oldMultiplier = systemSettings.GetValue("Workflow.Magentic.EstimatedTokenMultiplier", 2000);
+            // 合理区间防御（避免一次脏数据永久污染默认值）
+            if (oldMultiplier < 100 || oldMultiplier > 50000)
+            {
+                logger.LogDebug(
+                    "Magentic token multiplier 越界 ({Old})，跳过校准；本次样本 = {Sample}", oldMultiplier, sampleMultiplier);
+                return;
+            }
+
+            var newMultiplier = (int)Math.Clamp((oldMultiplier * 7L + sampleMultiplier) / 8L, 100, 50000);
+            systemSettings.SetValue("Workflow.Magentic.EstimatedTokenMultiplier", newMultiplier.ToString());
+
+            logger.LogInformation(
+                "Magentic token multiplier 校准：old={Old} → new={New}（sample={Sample}, actualTokens={Tokens}, rounds={Rounds}, participants={Participants}）",
+                oldMultiplier, newMultiplier, sampleMultiplier, actualTokens, maxRounds, participantCount);
+        }
+        catch (Exception ex)
+        {
+            // 校准失败仅 warn，不影响主流程
+            logger.LogWarning(ex, "Magentic token multiplier 校准失败（actualTokens={Tokens}, participants={Participants}）",
+                actualTokens, participantCount);
+        }
     }
 
     /// <summary>
