@@ -70,6 +70,15 @@ public static class AIServiceExtensions
         services.AddSingleton<WorkflowStepRepository>();
         services.AddSingleton<IWorkflowTitleGenerator, WorkflowTitleGenerator>();
         services.AddSingleton(new WorkflowExecutorOptions());
+
+        // 阶段 5B Phase 2：Checkpoint 持久化（SDK CheckpointManager 注入到 WorkflowExecutor）
+        // 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §5B.2
+        services.AddSingleton<WorkflowCheckpointRepository>();
+        services.AddSingleton<Workflow.Checkpointing.SqliteCheckpointStore>();
+        services.AddSingleton<Microsoft.Agents.AI.Workflows.CheckpointManager>(sp =>
+            Microsoft.Agents.AI.Workflows.CheckpointManager.CreateJson(
+                sp.GetRequiredService<Workflow.Checkpointing.SqliteCheckpointStore>()));
+
         services.AddSingleton<WorkflowExecutor>();
         services.AddSingleton<IWorkflowExecutor>(sp => sp.GetRequiredService<WorkflowExecutor>());
         services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<WorkflowExecutor>());

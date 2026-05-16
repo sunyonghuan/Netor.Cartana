@@ -44,12 +44,14 @@ namespace Netor.Cortana.AI.Workflow;
 public sealed class WorkflowExecutor(
     WorkflowTaskRepository taskRepo,
     WorkflowStepRepository stepRepo,
+    WorkflowCheckpointRepository checkpointRepo,
     WorkflowExecutorOptions options,
     IWorkflowTitleGenerator titleGenerator,
     AIAgentFactory factory,
     AgentService agentService,
     AiProviderService providerService,
     AiModelService modelService,
+    CheckpointManager checkpointManager,
     IPublisher publisher,
     ILogger<WorkflowExecutor> logger) : IWorkflowExecutor, IHostedService
 {
@@ -87,8 +89,25 @@ public sealed class WorkflowExecutor(
             }
 
             var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var checkpointCleanedCount = 0;
             foreach (var orphan in orphans)
             {
+                // 阶段 5B：跨进程 Checkpoint 恢复延后到下一阶段（[04] §5B.2 注解：仅支持宿主进程内重启）。
+                // 当前实现：mark failed + 清理该任务的 Checkpoint BLOB（避免长期堆积，决策 5B-C）。
+                try
+                {
+                    var deleted = checkpointRepo.DeleteByTaskId(orphan.Id);
+                    if (deleted > 0)
+                    {
+                        checkpointCleanedCount += deleted;
+                        logger.LogDebug("孤儿任务 {TaskId} 清理 {Count} 个 Checkpoint", orphan.Id, deleted);
+                    }
+                }
+                catch (Exception cpEx)
+                {
+                    logger.LogWarning(cpEx, "孤儿任务 {TaskId} Checkpoint 清理失败（不影响 mark failed）", orphan.Id);
+                }
+
                 taskRepo.UpdateCompleted(
                     orphan.Id,
                     status: WorkflowTaskStatus.Failed.ToDbValue(),
@@ -119,7 +138,9 @@ public sealed class WorkflowExecutor(
                 Source: "WorkflowExecutor",
                 CreatedAt: DateTimeOffset.Now));
 
-            logger.LogWarning("WorkflowExecutor 启动孤儿扫描：清理 {Count} 个遗留任务。", orphans.Count);
+            logger.LogWarning(
+                "WorkflowExecutor 启动孤儿扫描：清理 {Count} 个遗留任务，{CpCount} 个 Checkpoint。",
+                orphans.Count, checkpointCleanedCount);
         }
         catch (Exception ex)
         {
@@ -593,8 +614,11 @@ public sealed class WorkflowExecutor(
         };
 
         // 3. 启动并消费事件流。input 为 List<ChatMessage>（参考 SDK GroupChatToolApproval sample）。
+        //    阶段 5B 起注入 CheckpointManager + sessionId=taskId（决策 5B-C），SDK 在 superstep 边界自动写 Checkpoint，
+        //    供 StartAsync 启动孤儿扫描尝试 RestoreCheckpoint 恢复（详见 §5B.2）。
         var input = new List<ChatMessage> { new(ChatRole.User, request.InitialInput) };
-        await using var run = await InProcessExecution.RunStreamingAsync(workflow, input, sessionId: null, ct);
+        await using var run = await InProcessExecution.RunStreamingAsync(
+            workflow, input, checkpointManager, sessionId: taskId, ct);
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
         var stepIndex = 0;
@@ -822,6 +846,33 @@ public sealed class WorkflowExecutor(
                 }
             }, CancellationToken.None);
         }
+
+        // 阶段 5B：任务正常完成 → 清理 Checkpoint BLOB（避免长期堆积）
+        TryCleanupCheckpoints(taskId, "completed");
+    }
+
+    /// <summary>
+    /// 阶段 5B：清理某任务的全部 Checkpoint BLOB。在 task completed/failed/cancelled 时调用。
+    /// 失败仅 LogWarning，不抛出异常（不影响主流程）。
+    /// </summary>
+    private void TryCleanupCheckpoints(string taskId, string reason)
+    {
+        try
+        {
+            var deleted = checkpointRepo.DeleteByTaskId(taskId);
+            if (deleted > 0)
+            {
+                logger.LogDebug(
+                    "Workflow 任务 {TaskId} 已清理 {Count} 个 Checkpoint（原因={Reason}）",
+                    taskId, deleted, reason);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex,
+                "Workflow 任务 {TaskId} 清理 Checkpoint 失败（原因={Reason}），可能导致 BLOB 堆积",
+                taskId, reason);
+        }
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -1034,6 +1085,9 @@ public sealed class WorkflowExecutor(
 
         _ = participantIds;
         _ = startedMs;
+
+        // 阶段 5B：任务被取消 → 清理 Checkpoint BLOB
+        TryCleanupCheckpoints(taskId, "cancelled");
     }
 
     private void HandleTaskFailed(
@@ -1069,5 +1123,8 @@ public sealed class WorkflowExecutor(
 
         _ = participantIds;
         _ = startedMs;
+
+        // 阶段 5B：任务异常失败 → 清理 Checkpoint BLOB
+        TryCleanupCheckpoints(taskId, "failed");
     }
 }

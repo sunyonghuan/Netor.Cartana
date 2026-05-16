@@ -421,6 +421,25 @@ namespace Netor.Cortana.Entitys
             Execute("CREATE INDEX IF NOT EXISTS IX_OrchestrationStep_Status ON OrchestrationStep(Status);");
             Execute("CREATE INDEX IF NOT EXISTS IX_OrchestrationMessage_TaskId_Sequence ON OrchestrationMessage(TaskId, Sequence);");
             Execute("CREATE INDEX IF NOT EXISTS IX_OrchestrationMessage_StepId ON OrchestrationMessage(StepId);");
+
+            // ========================================
+            // 阶段 5B 新增：Workflow Checkpoint 表
+            // 用于 SDK ICheckpointManager 的 CommitCheckpointAsync / LookupCheckpointAsync 持久化。
+            // 每个 paused 任务的 HITL 交互前后会产生 1 个 Checkpoint，宿主进程内重启时通过
+            // RestoreCheckpointAsync 恢复（决策 5B-C：与 OrchestrationTask 同事务边界）。
+            // 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §5B.2。
+            // ========================================
+            Execute("""
+                CREATE TABLE IF NOT EXISTS WorkflowCheckpoints (
+                    TaskId TEXT NOT NULL,
+                    CheckpointId TEXT NOT NULL,
+                    Payload BLOB NOT NULL,
+                    CreatedAt INTEGER NOT NULL,
+                    PRIMARY KEY (TaskId, CheckpointId),
+                    FOREIGN KEY (TaskId) REFERENCES OrchestrationTask(Id) ON DELETE CASCADE
+                );
+                """);
+            Execute("CREATE INDEX IF NOT EXISTS IX_WorkflowCheckpoints_TaskId_CreatedAt ON WorkflowCheckpoints(TaskId, CreatedAt DESC);");
         }
 
         /// <summary>
