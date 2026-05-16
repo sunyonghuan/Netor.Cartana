@@ -229,6 +229,12 @@ public partial class App : Application
             .AddSingleton<SettingsWindow>()
             .AddSingleton<ProxyViewModel>()
             .AddSingleton<ProxyWindow>()
+            // 界面重设计 C2：主窗口 VM + 草稿暂存服务（决策 UI-3 + UI-7）。
+            // ChatDraftService 必须 Singleton（跨模式切换时复用同一实例）。
+            // MainWindowVm 也 Singleton（与 MainWindow 单例对齐）。
+            // 详见 Docs/未来版本策划/界面重设计/04-实施阶段.md §2.2。
+            .AddSingleton<Services.ChatDraftService>()
+            .AddSingleton<ViewModels.MainWindowVm>()
             // 数据库
             .AddSingleton<CortanaDbContext>()
             .AddTransient<SystemSettingsService>()

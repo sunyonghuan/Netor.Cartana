@@ -6,6 +6,7 @@ using Avalonia.Threading;
 
 using Netor.Cortana.Entitys;
 using Netor.Cortana.Entitys.Services;
+using Netor.Cortana.UI.Models;
 using Netor.Cortana.UI.Views.Workspace.Controls;
 using Netor.EventHub;
 
@@ -47,6 +48,24 @@ public partial class MainWindow : Window
 
     private readonly IAiChatEngine chatEngine = App.Services.GetRequiredService<IAiChatEngine>();
 
+    // ──── 界面重设计 C2：MVVM 第一步 + 切换守卫 ────
+    // 详见 Docs/未来版本策划/界面重设计/04-实施阶段.md §2.4。
+
+    /// <summary>
+    /// 主窗口 ViewModel（C2 引入）：承载 CurrentMode 状态 + SystemSettings 持久化（决策 DT-3）。
+    /// 本期仅承载模式状态，InputBox / HistoryLabel 等内容控件仍为 code-behind 操作，
+    /// C5 收尾时再考虑 Chat 全面 MVVM 化。
+    /// </summary>
+    private readonly Netor.Cortana.UI.ViewModels.MainWindowVm _mainVm =
+        App.Services.GetRequiredService<Netor.Cortana.UI.ViewModels.MainWindowVm>();
+
+    /// <summary>
+    /// 对话草稿暂存服务（C2 引入，决策 UI-7 D2 "保留内容" 分支用）。
+    /// 内存级单例，进程退出即丢失（不入数据库）。
+    /// </summary>
+    private readonly Netor.Cortana.UI.Services.ChatDraftService _draftService =
+        App.Services.GetRequiredService<Netor.Cortana.UI.Services.ChatDraftService>();
+
     public MainWindow()
     {
         InitializeComponent();
@@ -87,6 +106,23 @@ public partial class MainWindow : Window
         var factory = App.Services.GetRequiredService<AIAgentFactory>();
         factory.TokenUsageChanged += RefreshTokenProgress;
         RefreshTokenProgress();
+
+        // 界面重设计 C2：启动时按 _mainVm.CurrentMode 恢复 UI 状态（决策 DT-3）。
+        // _mainVm 构造函数已从 SystemSettings 恢复值，这里只需把 UI 同步到 VM。
+        // 注意：不能调用 _mainVm.CurrentMode = ... 触发 setter，因为那会触发持久化写一遍。
+        // 仅当 VM 恢复值非 Chat（默认）时才同步 UI，避免对已 active 的 ChatTab 反复重设。
+        // 详见 Docs/未来版本策划/界面重设计/04-实施阶段.md §2.4 + 03-交互细节.md §1.1。
+        if (_mainVm.CurrentMode != Netor.Cortana.UI.Models.WorkMode.Chat)
+        {
+            ApplyModeToUI(_mainVm.CurrentMode);
+
+            // 工作流模式：触发 WorkflowTab 数据加载
+            if (_mainVm.CurrentMode == Netor.Cortana.UI.Models.WorkMode.Workflow)
+            {
+                _ = WorkflowTabContent.OnAttachedAsync(workspaceId: string.Empty);
+            }
+        }
+
         ShowDebugSystemNotice();
     }
 
@@ -430,43 +466,121 @@ public partial class MainWindow : Window
 
     // ────────────────────────────────────────────────────────────
     // 阶段 3B：Chat / Workspace Tab 切换
+    // 界面重设计 C2：扩展为 3 tab（对话 / 工作流 / 群聊）+ 未保存确认守卫（决策 UI-3 + UI-7）
     // ────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// 当前激活的 tab 字符串（保留供 5B 阶段已有逻辑兼容；C2 起以 _mainVm.CurrentMode 为权威源）。
+    /// </summary>
     private string _currentTab = "chat";
 
     /// <summary>
-    /// 顶部 Tab 按钮点击：在 Chat / Workspace 之间切换主内容区。
-    /// 切换时仅修改 IsVisible 与按钮 active 样式，不卸载控件本身，保留 Chat Tab 焦点/输入历史。
+    /// 把 Models.WorkMode 映射到 axaml 控件可见性 + tab 按钮 active 样式 + _currentTab。
+    /// 注意：本方法只改 UI，不改 VM。VM 由调用方在合适时机设置以触发持久化（决策 DT-3）。
+    /// </summary>
+    private void ApplyModeToUI(Netor.Cortana.UI.Models.WorkMode mode)
+    {
+        var toChat = mode == Netor.Cortana.UI.Models.WorkMode.Chat;
+        var toWorkflow = mode == Netor.Cortana.UI.Models.WorkMode.Workflow;
+        var toGroupChat = mode == Netor.Cortana.UI.Models.WorkMode.GroupChat;
+
+        ChatTabContent.IsVisible = toChat;
+        WorkflowTabContent.IsVisible = toWorkflow;
+        GroupChatTabContent.IsVisible = toGroupChat;
+
+        ChatTabButton.Classes.Set("tab-btn-active", toChat);
+        WorkflowTabButton.Classes.Set("tab-btn-active", toWorkflow);
+        GroupChatTabButton.Classes.Set("tab-btn-active", toGroupChat);
+
+        _currentTab = mode.ToPersistenceString();
+    }
+
+    /// <summary>
+    /// 顶部 Tab 按钮点击：在 对话 / 工作流 / 群聊 之间切换主内容区。
+    ///
+    /// 界面重设计 C2 行为（决策 UI-7 D2）：
+    /// - 从 对话 → 工作流/群聊 且输入框 / 附件有未保存内容时，弹 Dialogs.UnsavedChangesDialog
+    /// - 用户选 取消：留在 对话 模式，不切换
+    /// - 用户选 保留内容：切换 + ChatDraftService.Save 暂存（IsVisible 切换自然保留 InputBox 状态）
+    /// - 用户选 丢弃并切换：清空 InputBox + 附件 + 切换
+    ///
+    /// 切换时仅修改 IsVisible 与按钮 active 样式，不卸载控件本身（决策 DT-5 A：保留 Chat Tab 状态）。
     /// </summary>
     private async void OnTabSwitchClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (sender is not Button btn || btn.Tag is not string tab) return;
         if (_currentTab == tab) return;
 
-        _currentTab = tab;
-        var toChat = tab == "chat";
+        var targetMode = Netor.Cortana.UI.Models.WorkModeExtensions.FromPersistenceString(tab);
 
-        ChatTabContent.IsVisible = toChat;
-        WorkspaceTabContent.IsVisible = !toChat;
-
-        ChatTabButton.Classes.Set("tab-btn-active", toChat);
-        WorkspaceTabButton.Classes.Set("tab-btn-active", !toChat);
-
-        if (!toChat)
+        // C2 守卫：仅当从 Chat → Workflow/GroupChat 且有未保存内容时弹确认对话框
+        if (_currentTab == "chat" && targetMode != Netor.Cortana.UI.Models.WorkMode.Chat)
         {
-            // 切到工作台：关闭 Chat Tab 的两个抽屉（避免主内容被遮挡）
-            if (HistoryPopup?.IsOpen == true) HistoryPopup.IsOpen = false;
+            var hasText = !string.IsNullOrWhiteSpace(InputBox?.Text);
+            var hasAttachments = _attachments.Count > 0;
+            if (hasText || hasAttachments)
+            {
+                try
+                {
+                    var preview = hasText ? InputBox!.Text! : string.Empty;
+                    if (preview.Length > 50) preview = string.Concat(preview.AsSpan(0, 50), "…");
 
-            // 通知 WorkspaceTab 拉取最新列表（workspaceId 从当前会话中取，3B 简化版传空字符串）
+                    var choice = await Netor.Cortana.UI.Views.Dialogs.UnsavedChangesDialog
+                        .ShowDialogAsync(this, preview, _attachments.Count);
+
+                    switch (choice)
+                    {
+                        case Netor.Cortana.UI.Views.Dialogs.UnsavedChoice.Cancel:
+                            return; // 用户取消 → 不切
+
+                        case Netor.Cortana.UI.Views.Dialogs.UnsavedChoice.Save:
+                            // 切走，通过 DraftService 暂存（IsVisible 切换自然保留 InputBox 状态；
+                            // Save 调用为 C5+ Chat 全面 MVVM 化后真正销毁/重建 ChatTab 时的铺路）。
+                            _draftService.Save(InputBox?.Text, _attachments);
+                            break;
+
+                        case Netor.Cortana.UI.Views.Dialogs.UnsavedChoice.Discard:
+                            // 切走，清空 InputBox + 附件
+                            if (InputBox is not null) InputBox.Text = string.Empty;
+                            _attachments.Clear();
+                            // 附件 UI 重绘由 AttachmentList ItemsSource 重新设置触发；
+                            // C2 阶段简化处理：用户切到工作流后再切回对话时附件 UI 可能仍残留旧 chip，
+                            // 这是已知小问题，留待 C5 收尾时附 attachment ItemsSource 绑定方案统一修复。
+                            break;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[MainWindow] UnsavedChangesDialog 异常：{ex.Message}");
+                    return; // 异常 fallback：不切（保守，避免静默丢失数据）
+                }
+            }
+        }
+
+        // 执行切换
+        ApplyModeToUI(targetMode);
+        _mainVm.CurrentMode = targetMode; // 触发 PropertyChanged + 持久化到 SystemSettings（决策 DT-3）
+
+        if (targetMode != Netor.Cortana.UI.Models.WorkMode.Chat)
+        {
+            // 切到非对话模式：关闭 Chat Tab 的历史下拉（避免主内容被遮挡）
+            if (HistoryPopup?.IsOpen == true) HistoryPopup.IsOpen = false;
+        }
+
+        if (targetMode == Netor.Cortana.UI.Models.WorkMode.Workflow)
+        {
+            // 通知 WorkflowTab 拉取最新列表（workspaceId 从当前会话中取，3B 简化版传空字符串）
             try
             {
-                await WorkspaceTabContent.OnAttachedAsync(workspaceId: string.Empty);
+                await WorkflowTabContent.OnAttachedAsync(workspaceId: string.Empty);
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[MainWindow] WorkspaceTab attach error: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[MainWindow] WorkflowTab attach error: {ex.Message}");
             }
         }
+        // GroupChat 模式：C2 阶段仅显示 EmptyState 占位，无 OnAttached 逻辑（C4 拆分时补全）。
     }
 
     // ──────── 阶段 5B Phase 3：Chat→Workflow 启发式建议 banner ────────
@@ -487,25 +601,25 @@ public partial class MainWindow : Window
 
         try
         {
-            // 2) 切到工作台 Tab（复用 OnTabSwitchClick 的逻辑：直接改 IsVisible + 让 WorkspaceTab 加载列表）
-            if (_currentTab != "workspace")
+            // 2) 切到工作流 Tab（界面重设计 C2：复用 ApplyModeToUI + VM 设值，与 OnTabSwitchClick 一致）
+            //    注意：本路径无需弹未保存确认对话框，因为入口是用户主动点 Banner "切到工作模式"，
+            //          已隐含了"我要切走"的意图，且 input 已被 _pendingSuggestionInput 持有，
+            //          后续会预填到 NewTaskDialog（不依赖 InputBox 文本）。
+            if (_currentTab != "workflow")
             {
-                _currentTab = "workspace";
-                ChatTabContent.IsVisible = false;
-                WorkspaceTabContent.IsVisible = true;
-                ChatTabButton.Classes.Set("tab-btn-active", false);
-                WorkspaceTabButton.Classes.Set("tab-btn-active", true);
+                ApplyModeToUI(Netor.Cortana.UI.Models.WorkMode.Workflow);
+                _mainVm.CurrentMode = Netor.Cortana.UI.Models.WorkMode.Workflow;
 
                 if (HistoryPopup?.IsOpen == true) HistoryPopup.IsOpen = false;
 
                 try
                 {
-                    await WorkspaceTabContent.OnAttachedAsync(workspaceId: string.Empty);
+                    await WorkflowTabContent.OnAttachedAsync(workspaceId: string.Empty);
                 }
                 catch (Exception innerEx)
                 {
                     System.Diagnostics.Debug.WriteLine(
-                        $"[MainWindow] WorkspaceTab attach error: {innerEx.Message}");
+                        $"[MainWindow] WorkflowTab attach error: {innerEx.Message}");
                 }
             }
 
