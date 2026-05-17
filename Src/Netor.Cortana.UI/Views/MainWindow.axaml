@@ -567,7 +567,7 @@
 
 				     详见 Docs/未来版本策划/界面重设计/04-实施阶段.md §4.3 + §4.5。 -->
 				<workspace:WorkflowDetailView x:Name="WorkflowTabContent" IsVisible="False" />
-				<workspace:WorkflowDetailView x:Name="GroupChatTabContent" IsVisible="False" />
+				<workspace:GroupChatDetailView x:Name="GroupChatTabContent" IsVisible="False" />
 				</Panel>
 			</DockPanel>
 		</Grid>

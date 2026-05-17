@@ -244,6 +244,12 @@ public partial class App : Application
             // 通过 DI 容器解析保证 SelectedItem 联动一致。
             // 详见 Docs/未来版本策划/界面重设计/04-实施阶段.md §4.2。
             .AddSingleton<ViewModels.Workspace.WorkspaceTabVm>()
+            // P2-1：聊天式输入框 VM（决策 TP-1 取代 NewTaskDialog 表单）。
+            // 与 WorkspaceTabVm 同源 Singleton，让 WorkflowDetailView / GroupChatDetailView
+            // 在切换 tab 时保留用户已输入的草稿和已选择的 Manager / Agents。
+            // 详见 Docs/未来版本策划/聊天式任务发起与动态智能体/01-P2方案设计.md §1.2。
+            .AddSingleton<ViewModels.Workspace.WorkflowInputVm>()
+            .AddSingleton<ViewModels.Workspace.GroupChatInputVm>()
             // 数据库
             .AddSingleton<CortanaDbContext>()
             .AddTransient<SystemSettingsService>()

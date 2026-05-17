@@ -6,6 +6,7 @@ using Avalonia.Animation;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
@@ -22,46 +23,38 @@ using Netor.EventHub;
 namespace Netor.Cortana.UI.Views.Workspace;
 
 /// <summary>
-/// P2-1：工作流任务详情视图（条款 1-12 重写版，2026-05-17）。
+/// P2-1：群聊任务详情视图（条款 1-12 重写版，2026-05-17）。
 ///
-/// 设计原则：完全复刻 Chat 输入框（MainWindow.axaml line 263-500）的视觉与交互。
-///
-/// 输入框区职责：
-/// - 6 个 Popup 动态渲染（子模式 / 子 Agent 数量 / 智能体 / 厂商 / 模型 / 工具屏蔽）
-/// - 走马灯霓虹边动画（条款 12，工作流橙色 #ff9c40）
-/// - 发送按钮旋转动画（条款 5，复刻 Chat 模式）
-/// - 订阅 task.completed / task.failed 事件复位 IsRunning
-/// - 监听 _inputVm.IsRunning 变化驱动动画启停
+/// 与 WorkflowDetailView 95% 相同：
+/// - 详情区（Row 0）100% 复用 WorkspaceTabVm.Detail（与 WorkflowDetailView / TaskListPanel 同源）
+/// - 输入框区（Row 1）差异：
+///   · 没有上方一行（不需要子模式 / 子 Agent 数量）
+///   · 没有厂商 / 模型按钮（用户澄清 A：每个 Agent 用自己的 Provider/Model，未设的用默认）
+///   · 智能体按钮 → 多选 Popup CheckListBox（条款 11，标签显示「已选 N 个智能体」）
+///   · 走马灯紫色 #b070ff（条款 12）
+///   · 下方一行只有 3 个按钮：附件 / 智能体 / 工具
 ///
 /// DataContext：
 /// - 主体 DataContext = WorkspaceTabVm（构造函数注入）
-/// - InputArea.DataContext = WorkflowInputVm（构造函数注入）
+/// - InputArea.DataContext = GroupChatInputVm（构造函数注入）
 ///
 /// 详见 Docs/未来版本策划/聊天式任务发起与动态智能体/01-P2方案设计.md。
 /// </summary>
-public partial class WorkflowDetailView : UserControl
+public partial class GroupChatDetailView : UserControl
 {
     private readonly WorkflowToChatBackflowService _backflowService;
-
-    /// <summary>当前控件持有的 VM 引用（与 TaskListPanel 同源 Singleton）。</summary>
     private readonly WorkspaceTabVm _vm;
-
-    /// <summary>P2-1：聊天式输入框 VM。从 DI 解析（Singleton）。</summary>
-    private readonly WorkflowInputVm _inputVm;
-
-    /// <summary>P2-1：事件订阅器。订阅 task.completed / task.failed 让 IsRunning 复位。</summary>
+    private readonly GroupChatInputVm _inputVm;
     private readonly ISubscriber _subscriber;
+    private readonly ILogger<GroupChatDetailView> _logger;
 
-    /// <summary>诊断日志。</summary>
-    private readonly ILogger<WorkflowDetailView> _logger;
-
-    /// <summary>P2-1：旋转动画（运行中显示）。复刻自 MainWindow.Messaging.cs。</summary>
+    /// <summary>P2-1：旋转动画。复刻自 MainWindow.Messaging.cs。</summary>
     private Animation? _spinnerAnimation;
 
     /// <summary>P2-1：走马灯动画 Timer（16ms / 帧）。</summary>
     private DispatcherTimer? _inputMarqueeTimer;
 
-    /// <summary>P2-1：走马灯动画 Stopwatch（计算进度）。</summary>
+    /// <summary>P2-1：走马灯动画 Stopwatch。</summary>
     private readonly Stopwatch _inputMarqueeStopwatch = new();
 
     // ──── Bug 8 修复：附件 + 拖放视觉反馈静态字段（完全复刻 Chat MainWindow.Attachments.cs） ────
@@ -78,23 +71,29 @@ public partial class WorkflowDetailView : UserControl
     /// <summary>InputBorder 拖入时的半透明蓝背景。</summary>
     private static readonly IBrush BgDragOver = SolidColorBrush.Parse("#1a007ACC");
 
-    /// <summary>当前是否处于拖入状态（用于 DragLeave 时判断是否需要恢复）。</summary>
+    /// <summary>当前是否处于拖入状态。</summary>
     private bool _isDragOver;
 
-    public WorkflowDetailView()
+    public GroupChatDetailView()
     {
         InitializeComponent();
         _backflowService = App.Services.GetRequiredService<WorkflowToChatBackflowService>();
         _vm = App.Services.GetRequiredService<WorkspaceTabVm>();
-        _inputVm = App.Services.GetRequiredService<WorkflowInputVm>();
+        _inputVm = App.Services.GetRequiredService<GroupChatInputVm>();
         _subscriber = App.Services.GetRequiredService<ISubscriber>();
-        _logger = App.Services.GetRequiredService<ILogger<WorkflowDetailView>>();
+        _logger = App.Services.GetRequiredService<ILogger<GroupChatDetailView>>();
 
         DataContext = _vm;
         InputArea.DataContext = _inputVm;
 
-        // 监听 IsRunning 变化驱动走马灯 + 旋转动画启停（条款 5 / 12）
+        // 监听 IsRunning 变化驱动走马灯 + 旋转动画启停（条款 5/12）
         _inputVm.PropertyChanged += OnInputVmPropertyChanged;
+
+        // 监听 SelectedAgents 变化 → 刷新 Popup CheckBox 状态
+        _inputVm.SelectedAgents.CollectionChanged += (_, _) =>
+        {
+            Dispatcher.UIThread.Post(FillAgentSelectorList);
+        };
 
         // 订阅 task.completed / task.failed 事件 → 复位 _inputVm.IsRunning
         _subscriber.Subscribe<WorkflowTaskCompletedArgs>(Events.OnWorkflowTaskCompleted, (_, args) =>
@@ -116,16 +115,12 @@ public partial class WorkflowDetailView : UserControl
             Dispatcher.UIThread.Post(RenderAttachments);
         };
 
-        // 控件加载完成后填充 Popup 列表（避免构造期 ItemsControl 还没准备好）+ 注册拖放事件 + 初始渲染附件
+        // 控件加载完成后初始化 + 注册拖放事件
         AttachedToVisualTree += (_, _) =>
         {
-            FillSubModeSelectorActiveState();
-            FillMaxSubAgentsSelector();
             FillAgentSelectorList();
-            FillProviderSelectorList();
-            FillModelSelectorList();
             RenderAttachments();
-            RefreshAllLabels(); // 根因修复 2026-05-17：初始同步所有 Label.Text（显示默认值）
+            RefreshAllLabels(); // 根因修复 2026-05-17：初始同步 Label.Text（启动显示默认值）
 
             // Bug 8：注册输入框拖放事件（完全复刻 Chat MainWindow.axaml.cs line 106-109）
             InputBorder.AddHandler(DragDrop.DragOverEvent, OnDragOver);
@@ -135,7 +130,7 @@ public partial class WorkflowDetailView : UserControl
         };
     }
 
-    // ──── 详情区（C4 / 5B 保留逻辑） ────
+    // ──── 详情区（与 WorkflowDetailView 一致） ────
 
     private async void OnCancelTaskClick(object? sender, RoutedEventArgs e)
     {
@@ -198,35 +193,32 @@ public partial class WorkflowDetailView : UserControl
 
     // ──── P2-1：聊天式输入框 - 核心动作 ────
 
-    /// <summary>"▶ 发送" 按钮：调 _inputVm.StartAsync 启动任务。</summary>
+    /// <summary>"发送" 按钮：调 _inputVm.StartAsync 启动群聊任务。</summary>
     private async void OnSendClick(object? sender, RoutedEventArgs e)
     {
         _logger.LogInformation(
-            "[WorkflowDetailView] OnSendClick: WorkspaceId={WorkspaceId}, SubMode={SubMode}, MaxSubAgents={MaxSubAgents}, Manager={Manager}, Provider={Provider}, Model={Model}",
-            _vm.List.WorkspaceId, _inputVm.SubMode, _inputVm.MaxSubAgents,
-            _inputVm.SelectedManager?.Name ?? "(null)",
-            _inputVm.SelectedProvider?.Name ?? "(null)",
-            _inputVm.SelectedModel?.Name ?? "(null)");
+            "[GroupChatDetailView] OnSendClick: WorkspaceId={WorkspaceId}, SelectedAgents={Count}",
+            _vm.List.WorkspaceId, _inputVm.SelectedAgents.Count);
 
         try
         {
             _inputVm.WorkspaceId = _vm.List.WorkspaceId ?? string.Empty;
             var taskId = await _inputVm.StartAsync(CancellationToken.None);
-            if (string.IsNullOrEmpty(taskId)) return; // ValidationError 已在 _inputVm 内设置
+            if (string.IsNullOrEmpty(taskId)) return;
 
-            _logger.LogInformation("[WorkflowDetailView] Workflow task started: taskId={TaskId}", taskId);
+            _logger.LogInformation("[GroupChatDetailView] GroupChat task started: taskId={TaskId}", taskId);
         }
-        catch (Exception ex) { ShowError($"启动任务失败：{ex.Message}", ex); }
+        catch (Exception ex) { ShowError($"启动群聊失败：{ex.Message}", ex); }
     }
 
-    /// <summary>"⏸ 停止" 按钮：调 _inputVm.StopAsync。</summary>
+    /// <summary>"停止" 按钮：调 _inputVm.StopAsync。</summary>
     private async void OnStopClick(object? sender, RoutedEventArgs e)
     {
         try { await _inputVm.StopAsync(CancellationToken.None); }
         catch (Exception ex) { ShowError($"停止任务失败：{ex.Message}", ex); }
     }
 
-    /// <summary>Enter 发送 / Shift+Enter 换行（与 Chat 输入框行为一致）。</summary>
+    /// <summary>Enter 发送 / Shift+Enter 换行。</summary>
     private void OnInputBoxKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key != Key.Enter) return;
@@ -290,230 +282,63 @@ public partial class WorkflowDetailView : UserControl
         ToolPopup.IsOpen = !ToolPopup.IsOpen;
     }
 
-    // ──── P2-1：6 个 Popup 选择器（条款 7/8/9/10） ────
+    // ──── P2-1：智能体多选 Popup（条款 11） ────
 
-    /// <summary>子模式按钮点击（条款 9）。</summary>
-    private void OnSubModeSelectorClick(object? sender, RoutedEventArgs e)
-    {
-        FillSubModeSelectorActiveState();
-        SubModePopup.IsOpen = !SubModePopup.IsOpen;
-    }
-
-    /// <summary>子模式 Popup 项点击 → 切换 _inputVm.SubMode。</summary>
-    private void OnSubModeItemClick(object? sender, RoutedEventArgs e)
-    {
-        if (sender is Button btn && btn.Tag is string subMode)
-        {
-            _inputVm.SubMode = subMode;
-            SubModePopup.IsOpen = false;
-            FillSubModeSelectorActiveState();
-        }
-    }
-
-    /// <summary>刷新子模式 Popup 项的高亮状态（active class）。</summary>
-    private void FillSubModeSelectorActiveState()
-    {
-        var current = _inputVm.SubMode;
-        ApplyActiveClass(SubModeMagenticItem, current == "magentic");
-        ApplyActiveClass(SubModeParallelItem, current == "parallelanalysis");
-    }
-
-    /// <summary>子 Agent 数量按钮点击（条款 10）。</summary>
-    private void OnMaxSubAgentsSelectorClick(object? sender, RoutedEventArgs e)
-    {
-        FillMaxSubAgentsSelector();
-        MaxSubAgentsPopup.IsOpen = !MaxSubAgentsPopup.IsOpen;
-    }
-
-    /// <summary>填充子 Agent 数量 Popup（1-20）。</summary>
-    private void FillMaxSubAgentsSelector()
-    {
-        MaxSubAgentsList.Items.Clear();
-        var current = _inputVm.MaxSubAgents;
-        for (var i = 1; i <= 20; i++)
-        {
-            var n = i;
-            var btn = new Button
-            {
-                Classes = { n == current ? "selector-item-active" : "selector-item" },
-                Tag = n,
-                Content = new TextBlock
-                {
-                    Text = $"最多 {n} 个",
-                    FontSize = 12,
-                    Foreground = n == current
-                        ? new SolidColorBrush(Color.Parse("#007acc"))
-                        : new SolidColorBrush(Color.Parse("#cccccc")),
-                },
-            };
-            btn.Click += OnMaxSubAgentsItemClick;
-            MaxSubAgentsList.Items.Add(btn);
-        }
-    }
-
-    private void OnMaxSubAgentsItemClick(object? sender, RoutedEventArgs e)
-    {
-        if (sender is Button btn && btn.Tag is int n)
-        {
-            _inputVm.MaxSubAgents = n;
-            MaxSubAgentsPopup.IsOpen = false;
-            FillMaxSubAgentsSelector();
-        }
-    }
-
-    /// <summary>智能体按钮点击（条款 7/8）。</summary>
+    /// <summary>智能体多选按钮点击。</summary>
     private void OnAgentSelectorClick(object? sender, RoutedEventArgs e)
     {
         FillAgentSelectorList();
         AgentSelectorPopup.IsOpen = !AgentSelectorPopup.IsOpen;
     }
 
-    /// <summary>填充智能体 Popup 列表。</summary>
+    /// <summary>
+    /// 填充智能体多选 Popup 列表（条款 11：CheckListBox 风格）。
+    /// 每行一个 CheckBox，IsChecked = SelectedAgents.Contains(agent)。
+    /// </summary>
     private void FillAgentSelectorList()
     {
         AgentSelectorList.Items.Clear();
-        var activeId = _inputVm.SelectedManager?.Id;
         foreach (var agent in _inputVm.AvailableAgents)
         {
             var id = agent.Id;
-            var isActive = id == activeId;
-            var btn = new Button
+            var isSelected = _inputVm.IsAgentSelected(id);
+
+            var checkBox = new CheckBox
             {
-                Classes = { isActive ? "selector-item-active" : "selector-item" },
-                Tag = id,
                 Content = new TextBlock
                 {
                     Text = agent.Name,
                     FontSize = 12,
-                    Foreground = isActive
-                        ? new SolidColorBrush(Color.Parse("#007acc"))
-                        : new SolidColorBrush(Color.Parse("#cccccc")),
+                    Foreground = new SolidColorBrush(Color.Parse("#cccccc")),
                 },
-            };
-            btn.Click += OnAgentItemClick;
-            AgentSelectorList.Items.Add(btn);
-        }
-    }
-
-    private void OnAgentItemClick(object? sender, RoutedEventArgs e)
-    {
-        if (sender is Button btn && btn.Tag is string agentId)
-        {
-            var agent = _inputVm.AvailableAgents.FirstOrDefault(a => a.Id == agentId);
-            if (agent is null) return;
-
-            _inputVm.SelectedManager = agent;
-            AgentSelectorPopup.IsOpen = false;
-
-            // SelectedManager setter 联动了 Provider/Model，刷新下面两个 Popup 显示状态
-            FillAgentSelectorList();
-            FillProviderSelectorList();
-            FillModelSelectorList();
-        }
-    }
-
-    /// <summary>厂商按钮点击（条款 7）。</summary>
-    private void OnProviderSelectorClick(object? sender, RoutedEventArgs e)
-    {
-        FillProviderSelectorList();
-        ProviderPopup.IsOpen = !ProviderPopup.IsOpen;
-    }
-
-    /// <summary>填充厂商 Popup 列表。</summary>
-    private void FillProviderSelectorList()
-    {
-        ProviderList.Items.Clear();
-        var activeId = _inputVm.SelectedProvider?.Id;
-        foreach (var provider in _inputVm.AvailableProviders)
-        {
-            var id = provider.Id;
-            var isActive = id == activeId;
-            var btn = new Button
-            {
-                Classes = { isActive ? "selector-item-active" : "selector-item" },
+                IsChecked = isSelected,
                 Tag = id,
-                Content = new TextBlock
-                {
-                    Text = provider.Name,
-                    FontSize = 12,
-                    Foreground = isActive
-                        ? new SolidColorBrush(Color.Parse("#007acc"))
-                        : new SolidColorBrush(Color.Parse("#cccccc")),
-                },
+                Foreground = new SolidColorBrush(Color.Parse("#cccccc")),
+                Margin = new Thickness(2, 2, 2, 2),
+                HorizontalAlignment = HorizontalAlignment.Stretch,
             };
-            btn.Click += OnProviderItemClick;
-            ProviderList.Items.Add(btn);
+            checkBox.IsCheckedChanged += OnAgentCheckBoxChanged;
+            AgentSelectorList.Items.Add(checkBox);
         }
     }
 
-    private void OnProviderItemClick(object? sender, RoutedEventArgs e)
+    /// <summary>CheckBox 状态变化 → 切换 _inputVm.SelectedAgents。</summary>
+    private void OnAgentCheckBoxChanged(object? sender, RoutedEventArgs e)
     {
-        if (sender is Button btn && btn.Tag is string providerId)
-        {
-            var provider = _inputVm.AvailableProviders.FirstOrDefault(p => p.Id == providerId);
-            if (provider is null) return;
+        if (sender is not CheckBox cb) return;
+        if (cb.Tag is not string agentId) return;
 
-            _inputVm.SelectedProvider = provider;
-            ProviderPopup.IsOpen = false;
+        var currentlySelected = _inputVm.IsAgentSelected(agentId);
+        var newChecked = cb.IsChecked == true;
+        if (newChecked == currentlySelected) return; // 状态一致，避免重入
 
-            // SelectedProvider setter 联动了 Model 列表，刷新两个 Popup 显示
-            FillProviderSelectorList();
-            FillModelSelectorList();
-        }
+        _inputVm.ToggleAgent(agentId);
     }
 
-    /// <summary>模型按钮点击（条款 7）。</summary>
-    private void OnModelSelectorClick(object? sender, RoutedEventArgs e)
-    {
-        FillModelSelectorList();
-        ModelPopup.IsOpen = !ModelPopup.IsOpen;
-    }
-
-    /// <summary>填充模型 Popup 列表。</summary>
-    private void FillModelSelectorList()
-    {
-        ModelList.Items.Clear();
-        var activeId = _inputVm.SelectedModel?.Id;
-        foreach (var model in _inputVm.AvailableModels)
-        {
-            var id = model.Id;
-            var isActive = id == activeId;
-            var display = !string.IsNullOrWhiteSpace(model.DisplayName) ? model.DisplayName : model.Name;
-            var btn = new Button
-            {
-                Classes = { isActive ? "selector-item-active" : "selector-item" },
-                Tag = id,
-                Content = new TextBlock
-                {
-                    Text = display,
-                    FontSize = 12,
-                    Foreground = isActive
-                        ? new SolidColorBrush(Color.Parse("#007acc"))
-                        : new SolidColorBrush(Color.Parse("#cccccc")),
-                },
-            };
-            btn.Click += OnModelItemClick;
-            ModelList.Items.Add(btn);
-        }
-    }
-
-    private void OnModelItemClick(object? sender, RoutedEventArgs e)
-    {
-        if (sender is Button btn && btn.Tag is string modelId)
-        {
-            var model = _inputVm.AvailableModels.FirstOrDefault(m => m.Id == modelId);
-            if (model is null) return;
-
-            _inputVm.SelectedModel = model;
-            ModelPopup.IsOpen = false;
-            FillModelSelectorList();
-        }
-    }
-
-    // ──── P2-1：动画驱动（条款 5 / 12） + Label 手动同步 ────
+    // ──── P2-1：动画驱动（条款 5/12，紫色 #b070ff） + Label 手动同步 ────
 
     /// <summary>
-    /// 监听 _inputVm.IsRunning + 所有 Label 相关属性变化 → 启动/停止动画 + 同步 Label.Text。
+    /// 监听 _inputVm.IsRunning + SelectedAgentsLabel 变化 → 启动/停止动画 + 同步 Label.Text。
     /// Bug 2 修复 2026-05-17：显式控制 SendButton/StopButton 互斥。
     /// 根因修复 2026-05-17：去掉 axaml DataContext binding 后，在 .cs 中手动同步 Label.Text
     /// （完全复刻 Chat 模式 RefreshProviderDisplay 风格，更稳定）。
@@ -525,7 +350,7 @@ public partial class WorkflowDetailView : UserControl
         {
             switch (name)
             {
-                case nameof(WorkflowInputVm.IsRunning):
+                case nameof(GroupChatInputVm.IsRunning):
                     // Bug 2 修复：显式控制按钮可见性（互斥）
                     SendButton.IsVisible = !_inputVm.IsRunning;
                     StopButton.IsVisible = _inputVm.IsRunning;
@@ -535,14 +360,9 @@ public partial class WorkflowDetailView : UserControl
                         StopSpinnerAndMarquee();
                     break;
 
-                // Label 同步：任何相关属性变化都触发 RefreshAllLabels
-                case nameof(WorkflowInputVm.SubModeDisplayName):
-                case nameof(WorkflowInputVm.MaxSubAgentsDisplay):
-                case nameof(WorkflowInputVm.SelectedManagerName):
-                case nameof(WorkflowInputVm.SelectedProviderName):
-                case nameof(WorkflowInputVm.SelectedModelName):
-                case nameof(WorkflowInputVm.SubMode):
-                case nameof(WorkflowInputVm.IsMagentic):
+                // Label 同步：群聊只有一个智能体多选标签
+                case nameof(GroupChatInputVm.SelectedAgentsLabel):
+                case nameof(GroupChatInputVm.HasSelectedAgents):
                     RefreshAllLabels();
                     break;
             }
@@ -550,20 +370,13 @@ public partial class WorkflowDetailView : UserControl
     }
 
     /// <summary>
-    /// 手动同步所有 Label.Text + 子 Agent 数量按钮可见性（根因修复 2026-05-17）。
-    /// 完全复刻 Chat 模式不依赖 binding 的可靠模式（RefreshProviderDisplay 风格）。
+    /// 手动同步所有 Label.Text（根因修复 2026-05-17）。
+    /// 完全复刻 Chat 模式不依赖 binding 的可靠模式。
+    /// 群聊只有 1 个 Label 需要同步：智能体多选标签。
     /// </summary>
     private void RefreshAllLabels()
     {
-        // 上方一行：子模式 + 子 Agent 数量
-        SubModeLabel.Text = _inputVm.SubModeDisplayName;
-        MaxSubAgentsLabel.Text = _inputVm.MaxSubAgentsDisplay;
-        MaxSubAgentsBtn.IsVisible = _inputVm.IsMagentic;
-
-        // 下方一行：智能体 / 厂商 / 模型
-        ToolbarAgentLabel.Text = _inputVm.SelectedManagerName;
-        ToolbarProviderLabel.Text = _inputVm.SelectedProviderName;
-        ToolbarModelLabel.Text = _inputVm.SelectedModelName;
+        ToolbarAgentLabel.Text = _inputVm.SelectedAgentsLabel;
     }
 
     private void StartSpinnerAndMarquee()
@@ -619,26 +432,17 @@ public partial class WorkflowDetailView : UserControl
             ? 4 * value * value * value
             : 1 - Math.Pow(-2 * value + 2, 3) / 2;
 
-    // ──── 工具方法 ────
-
-    /// <summary>切换 Button 的 selector-item-active / selector-item Classes 状态。</summary>
-    private static void ApplyActiveClass(Button btn, bool isActive)
-    {
-        btn.Classes.Clear();
-        btn.Classes.Add(isActive ? "selector-item-active" : "selector-item");
-    }
-
     private void ShowError(string message, Exception? ex = null)
     {
         if (ex is null)
         {
-            _logger.LogError("[WorkflowDetailView] {Message}", message);
-            Console.Error.WriteLine($"[WorkflowDetailView] {message}");
+            _logger.LogError("[GroupChatDetailView] {Message}", message);
+            Console.Error.WriteLine($"[GroupChatDetailView] {message}");
         }
         else
         {
-            _logger.LogError(ex, "[WorkflowDetailView] {Message}", message);
-            Console.Error.WriteLine($"[WorkflowDetailView] {message}\n{ex}");
+            _logger.LogError(ex, "[GroupChatDetailView] {Message}", message);
+            Console.Error.WriteLine($"[GroupChatDetailView] {message}\n{ex}");
         }
     }
 
@@ -754,7 +558,7 @@ public partial class WorkflowDetailView : UserControl
         e.Handled = true;
     }
 
-    /// <summary>恢复 InputBorder 默认外观（边框 1px 灰色 + 默认背景）。</summary>
+    /// <summary>恢复 InputBorder 默认外观。</summary>
     private void RestoreInputBorder()
     {
         InputBorder.BorderThickness = new Thickness(1);
