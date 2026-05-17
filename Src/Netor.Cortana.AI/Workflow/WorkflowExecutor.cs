@@ -55,6 +55,8 @@ public sealed class WorkflowExecutor(
     AiModelService modelService,
     SystemSettingsService systemSettings,
     CheckpointManager checkpointManager,
+    Netor.Cortana.AI.Workflow.DynamicAgents.DynamicAgentRegistry dynamicAgentRegistry,
+    Netor.Cortana.AI.Workflow.DynamicAgents.DynamicAgentCreationGate dynamicAgentCreationGate,
     IPublisher publisher,
     ILogger<WorkflowExecutor> logger) : IWorkflowExecutor, IHostedService
 {
@@ -616,88 +618,156 @@ public sealed class WorkflowExecutor(
         long startedMs,
         CancellationToken ct)
     {
-        // 1. 加载并构建参与者（Manager + Members 全部走轻量路径）
-        // 阶段 6 Phase 1：维护 trackers 字典让 PersistAndPublishStep 在 step 完成时反查 token；
-        // outputSnapshot 字典记录每个 agent 的累计输出快照，用于计算 step 级 output 增量。
-        // 阶段 6 Phase 2：把 request.ToolBlacklist 传给参与者构建，AssembleToolProviders 在工具组装阶段过滤掉黑名单工具。
-        var trackers = new Dictionary<string, TokenTrackingChatClient>(StringComparer.OrdinalIgnoreCase);
-        var outputSnapshot = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
-        var participants = LoadAndBuildParticipants(request, trackers, request.ToolBlacklist);
-        if (participants.Count == 0)
+        try
         {
-            HandleTaskFailed(taskId, request, traceId, entity, participantIds, startedMs,
-                new InvalidOperationException(
-                    $"Workflow 任务（SubMode={request.SubMode}）无有效参与者，请检查 ManagerAgentId / MemberAgentIds 配置"));
-            return;
-        }
-
-        // 2. 按 SubMode 选择工厂构建 SDK Workflow（白名单已在 IsRealWorkflowSubMode 内确认）
-        SdkWorkflow workflow = request.SubMode?.Trim().ToLowerInvariant() switch
-        {
-            "groupchat"        => GroupChatWorkflowFactory.Build(participants, taskId, options, logger),
-            "magentic"         => MagenticWorkflowFactory.Build(participants, taskId, options, logger),
-            "parallelanalysis" => ParallelAnalysisWorkflowFactory.Build(participants, taskId, logger),
-            _ => throw new InvalidOperationException(
-                $"未知 SubMode：{request.SubMode}（已通过白名单但未匹配工厂分支，疑似 IsRealWorkflowSubMode 与 switch 不一致）"),
-        };
-
-        // 3. 启动并消费事件流。input 为 List<ChatMessage>（参考 SDK GroupChatToolApproval sample）。
-        //    阶段 5B 起注入 CheckpointManager + sessionId=taskId（决策 5B-C），SDK 在 superstep 边界自动写 Checkpoint，
-        //    供 StartAsync 启动孤儿扫描尝试 RestoreCheckpoint 恢复（详见 §5B.2）。
-        var input = new List<ChatMessage> { new(ChatRole.User, request.InitialInput) };
-        await using var run = await InProcessExecution.RunStreamingAsync(
-            workflow, input, checkpointManager, sessionId: taskId, ct);
-        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
-
-        var stepIndex = 0;
-        var stepCount = 0;
-        long totalTokens = 0;   // 阶段 6 Phase 1：累计任务 token（input + output）
-        string? finalReport = null;
-
-        await foreach (var evt in run.WatchStreamAsync(ct))
-        {
-            ct.ThrowIfCancellationRequested();
-
-            switch (evt)
+            // 1. 加载并构建参与者（Manager + Members 全部走轻量路径）
+            // 阶段 6 Phase 1：维护 trackers 字典让 PersistAndPublishStep 在 step 完成时反查 token；
+            // outputSnapshot 字典记录每个 agent 的累计输出快照，用于计算 step 级 output 增量。
+            // 阶段 6 Phase 2：把 request.ToolBlacklist 传给参与者构建，AssembleToolProviders 在工具组装阶段过滤掉黑名单工具。
+            // P2-2：解析 OverridesJson 中的 maxSubAgents（默认 5，与 WorkflowInputVm.MaxSubAgents 一致），
+            //       并把 taskId 透传给 LoadAndBuildParticipants → BuildWorkflowParticipants → BuildSubAgent，
+            //       让 Manager 注入动态子智能体能力（DynamicAgentToolsProvider + create_subagent 工具）。
+            var trackers = new Dictionary<string, TokenTrackingChatClient>(StringComparer.OrdinalIgnoreCase);
+            var outputSnapshot = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+            var maxSubAgents = ParseMaxSubAgentsFromOverrides(request.OverridesJson);
+            var participants = LoadAndBuildParticipants(
+                request, trackers, request.ToolBlacklist, taskId, maxSubAgents);
+            if (participants.Count == 0)
             {
-                case ExecutorCompletedEvent completed:
-                    stepCount++;
-                    var (stepIn, stepOut) = PersistAndPublishStep(taskId, request, traceId, completed, ++stepIndex, trackers, outputSnapshot);
-                    totalTokens += stepIn + stepOut;
-                    break;
+                HandleTaskFailed(taskId, request, traceId, entity, participantIds, startedMs,
+                    new InvalidOperationException(
+                        $"Workflow 任务（SubMode={request.SubMode}）无有效参与者，请检查 ManagerAgentId / MemberAgentIds 配置"));
+                return;
+            }
 
-                case AgentResponseEvent agentResponse:
-                    // 一个 agent 的整轮回复：更新 finalReport 候选（取最后一个）
-                    finalReport = agentResponse.Response.Text;
-                    break;
+            // 2. 按 SubMode 选择工厂构建 SDK Workflow（白名单已在 IsRealWorkflowSubMode 内确认）
+            SdkWorkflow workflow = request.SubMode?.Trim().ToLowerInvariant() switch
+            {
+                "groupchat"        => GroupChatWorkflowFactory.Build(participants, taskId, options, logger),
+                "magentic"         => MagenticWorkflowFactory.Build(participants, taskId, options, logger),
+                "parallelanalysis" => ParallelAnalysisWorkflowFactory.Build(participants, taskId, logger),
+                _ => throw new InvalidOperationException(
+                    $"未知 SubMode：{request.SubMode}（已通过白名单但未匹配工厂分支，疑似 IsRealWorkflowSubMode 与 switch 不一致）"),
+            };
 
-                case WorkflowOutputEvent output when finalReport is null:
-                    // 兜底：尝试从 Output 里提取
-                    finalReport = ExtractFinalReportFromOutput(output);
-                    break;
+            // 3. 启动并消费事件流。input 为 List<ChatMessage>（参考 SDK GroupChatToolApproval sample）。
+            //    阶段 5B 起注入 CheckpointManager + sessionId=taskId（决策 5B-C），SDK 在 superstep 边界自动写 Checkpoint，
+            //    供 StartAsync 启动孤儿扫描尝试 RestoreCheckpoint 恢复（详见 §5B.2）。
+            var input = new List<ChatMessage> { new(ChatRole.User, request.InitialInput) };
+            await using var run = await InProcessExecution.RunStreamingAsync(
+                workflow, input, checkpointManager, sessionId: taskId, ct);
+            await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
-                case RequestInfoEvent requestInfo:
-                    // 阶段 5B：HITL（人在回路）。Magentic RequirePlanSignoff(true) 触发；
-                    // 阻塞等待用户通过 ResumeAsync 解锁后回写 ExternalResponse 给 SDK。
-                    await HandleHitlRequestAsync(taskId, request, traceId, entity, run, requestInfo, ct);
-                    break;
+            var stepIndex = 0;
+            var stepCount = 0;
+            long totalTokens = 0;   // 阶段 6 Phase 1：累计任务 token（input + output）
+            string? finalReport = null;
+
+            await foreach (var evt in run.WatchStreamAsync(ct))
+            {
+                ct.ThrowIfCancellationRequested();
+
+                switch (evt)
+                {
+                    case ExecutorCompletedEvent completed:
+                        stepCount++;
+                        var (stepIn, stepOut) = PersistAndPublishStep(taskId, request, traceId, completed, ++stepIndex, trackers, outputSnapshot);
+                        totalTokens += stepIn + stepOut;
+                        break;
+
+                    case AgentResponseEvent agentResponse
+                        when !string.IsNullOrWhiteSpace(agentResponse.Response.Text):
+                        // P2-2-Bug-E 修复 2026-05-17：仅在文本非空时记录候选 finalReport（避免空字符串覆盖）。
+                        // SDK Magentic 模式下，agent 仅做 tool call 时 Response.Text 可能为空字符串，
+                        // 之前每次都覆盖会让真正的总结被空字符串冲掉。
+                        // 这只是后备候选 — WorkflowOutputEvent (case 2) 才是 SDK 真正的 FinalAnswer。
+                        finalReport = agentResponse.Response.Text;
+                        break;
+
+                    case WorkflowOutputEvent output:
+                        // P2-2-Bug-E 修复 2026-05-17：去掉 `when finalReport is null` 守卫（之前会跳过 SDK 真正的最终输出）。
+                        // SDK MagenticOrchestrator.PrepareFinalAnswerAsync 通过 YieldOutputAsync 输出 List<ChatMessage>，
+                        // 这才是 Magentic 真正的 FinalAnswer，应该最高优先级覆盖之前 AgentResponseEvent 记录的候选。
+                        // 详见 SDK Microsoft.Agents.AI.Workflows/Specialized/Magentic/MagenticOrchestrator.cs §297-300。
+                        var extracted = ExtractFinalReportFromOutput(output);
+                        if (!string.IsNullOrWhiteSpace(extracted))
+                        {
+                            finalReport = extracted;
+                        }
+                        break;
+
+                    case RequestInfoEvent requestInfo:
+                        // 阶段 5B：HITL（人在回路）。Magentic RequirePlanSignoff(true) 触发；
+                        // 阻塞等待用户通过 ResumeAsync 解锁后回写 ExternalResponse 给 SDK。
+                        await HandleHitlRequestAsync(taskId, request, traceId, entity, run, requestInfo, ct);
+                        break;
+                }
+            }
+
+            // 4. 完成：写库 + 发 task.completed + 异步触发标题兜底
+            // 传第一个 participant 作为标题生成参考 agent（用于解析压缩模型 ChatClient）
+            HandleTaskCompleted(taskId, request, traceId, entity, participantIds, startedMs, stepCount, totalTokens, finalReport, participants[0]);
+        }
+        finally
+        {
+            // P2-2：任务结束（成功 / 失败 / 取消）时统一清理动态子智能体 Registry，避免内存泄漏。
+            // ClearTask 是幂等的：如果该任务从未注册 dynamic agent（CountByTask==0），TryRemove 失败也无影响。
+            dynamicAgentRegistry.ClearTask(taskId);
+
+            // P2-4：同步清理审批闸（取消该任务下所有 pending 等待 + 移除 auto-approve 标志）。
+            // 顺序无关：Gate.ClearTask 也是幂等的。
+            dynamicAgentCreationGate.ClearTask(taskId);
+        }
+    }
+
+    /// <summary>
+    /// P2-2：从 <c>OverridesJson</c> 解析 <c>maxSubAgents</c>（Manager 最多创建几个动态子智能体）。
+    /// 默认 5，与 <c>WorkflowInputVm.MaxSubAgents</c> 默认值一致。
+    /// </summary>
+    /// <remarks>
+    /// 期望的 OverridesJson 形态（可空）：
+    /// <code>{ "maxSubAgents": 5, "MaxRounds": 8, ... }</code>
+    /// 解析失败 / 字段不存在 / 值非法时返回默认值 5（兜底，不抛异常）。
+    /// </remarks>
+    private int ParseMaxSubAgentsFromOverrides(string? overridesJson)
+    {
+        const int defaultValue = 5;
+        if (string.IsNullOrWhiteSpace(overridesJson)) return defaultValue;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(overridesJson);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return defaultValue;
+
+            // 兼容大小写两种字段名（"maxSubAgents" / "MaxSubAgents"）
+            if (doc.RootElement.TryGetProperty("maxSubAgents", out var v1) ||
+                doc.RootElement.TryGetProperty("MaxSubAgents", out v1))
+            {
+                if (v1.ValueKind == JsonValueKind.Number && v1.TryGetInt32(out var n) && n > 0 && n <= 20)
+                    return n;
             }
         }
+        catch (JsonException ex)
+        {
+            logger.LogDebug(ex, "OverridesJson 解析失败，使用默认 maxSubAgents={Default}", defaultValue);
+        }
 
-        // 4. 完成：写库 + 发 task.completed + 异步触发标题兜底
-        // 传第一个 participant 作为标题生成参考 agent（用于解析压缩模型 ChatClient）
-        HandleTaskCompleted(taskId, request, traceId, entity, participantIds, startedMs, stepCount, totalTokens, finalReport, participants[0]);
+        return defaultValue;
     }
 
     /// <summary>
     /// 加载 request 中的 ManagerAgent + Member Agents 并构建为 AIAgent。
     /// 阶段 6 Phase 1：可选输出 trackerByAgentId 字典，让调用方在 step 完成时取 token 数据。
     /// 阶段 6 Phase 2：可选 taskBlacklist 参数，按 "pluginId:toolName" 在工具组装阶段过滤掉本次任务屏蔽的高风险工具。
+    /// P2-2：可选 taskId / maxSubAgents 参数，<see cref="AIAgentFactory.BuildWorkflowParticipants"/> 会为第一个参与者
+    /// （Manager）注入动态子智能体能力（DynamicAgentToolsProvider + create_subagent 工具）。
     /// </summary>
     private IReadOnlyList<AIAgent> LoadAndBuildParticipants(
         WorkflowTaskRequest request,
         IDictionary<string, TokenTrackingChatClient>? trackerByAgentId = null,
-        IReadOnlyCollection<string>? taskBlacklist = null)
+        IReadOnlyCollection<string>? taskBlacklist = null,
+        string? taskId = null,
+        int maxSubAgents = 5)
     {
         var entities = new List<AgentEntity>();
 
@@ -739,7 +809,11 @@ public sealed class WorkflowExecutor(
         if (fallbackModel is null) return [];
 
         return factory.BuildWorkflowParticipants(
-            entities, fallbackProvider, fallbackModel, providerService, modelService, trackerByAgentId, taskBlacklist);
+            entities, fallbackProvider, fallbackModel, providerService, modelService,
+            trackerByAgentId, taskBlacklist, taskId, maxSubAgents,
+            // P2-2 修复 2026-05-17：透传用户 UI 选的 Provider/Model（覆盖 Manager Agent.DefaultXxxId）
+            // 决策 D-甲：仅作用于 Manager + 动态子智能体（详见 WorkflowTaskRequest.OverrideProviderId 注释）。
+            request.OverrideProviderId, request.OverrideModelId);
     }
 
     /// <summary>

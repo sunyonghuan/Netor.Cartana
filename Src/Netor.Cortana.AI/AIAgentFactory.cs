@@ -10,6 +10,7 @@ using Netor.Cortana.AI.Providers;
 using Netor.Cortana.Entitys;
 using Netor.Cortana.Entitys.Services;
 using Netor.Cortana.Plugin;
+using Netor.EventHub;
 
 namespace Netor.Cortana.AI;
 
@@ -476,6 +477,14 @@ public sealed class AIAgentFactory(
     /// 所有参与者共享同一份黑名单，本次任务对全员等效收窄高风险工具。
     /// 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §阶段 6 #1。
     /// </param>
+    /// <param name="taskId">P2-2：任务 ID（非空时为 Manager 注入动态子智能体能力）。</param>
+    /// <param name="maxSubAgents">P2-2：Manager 最多创建几个动态子智能体（默认 5，与 WorkflowInputVm.MaxSubAgents 一致）。</param>
+    /// <param name="overrideProviderId">
+    /// P2-2 修复 2026-05-17：用户在 WorkflowDetailView UI 输入框下方明确选择的 Provider ID，
+    /// 决策 D-甲：仅作用于 Manager（participants[0]）+ 动态子智能体，不影响 GroupChat Members。
+    /// 解决场景：Manager Agent 数据库里的 DefaultProviderId 指向已删除/失效的厂商。
+    /// </param>
+    /// <param name="overrideModelId">同上，用户 UI 选的 Model ID。</param>
     /// <returns>参与者 AIAgent 集合，按入参顺序保留；解析失败的参与者会被过滤掉。</returns>
     public IReadOnlyList<AIAgent> BuildWorkflowParticipants(
         IReadOnlyList<AgentEntity> participantEntities,
@@ -484,7 +493,11 @@ public sealed class AIAgentFactory(
         AiProviderService providerService,
         AiModelService modelService,
         IDictionary<string, TokenTrackingChatClient>? trackerByAgentId = null,
-        IReadOnlyCollection<string>? taskBlacklist = null)
+        IReadOnlyCollection<string>? taskBlacklist = null,
+        string? taskId = null,
+        int maxSubAgents = 5,
+        string? overrideProviderId = null,
+        string? overrideModelId = null)
     {
         ArgumentNullException.ThrowIfNull(participantEntities);
         ArgumentNullException.ThrowIfNull(fallbackProvider);
@@ -503,8 +516,36 @@ public sealed class AIAgentFactory(
                 continue;
             }
 
-            var (provider, model) = ResolveSubAgentProviderAndModel(
-                participantEntity, fallbackProvider, fallbackModel, providerService, modelService);
+            // P2-2：第一个参与者按约定（LoadAndBuildParticipants 维护）是 Manager。
+            var isManager = participants.Count == 0;
+
+            // P2-2 修复 2026-05-17：Manager 优先使用 override（用户 UI 选的 Provider/Model），
+            // 决策 D-甲：仅 Manager + 动态子智能体（GroupChat Members 仍用各自 Agent.DefaultProviderId/ModelId）。
+            // 详见 Docs/未来版本策划/聊天式任务发起与动态智能体/01-P2方案设计.md §2-D。
+            AiProviderEntity? provider = null;
+            AiModelEntity? model = null;
+            if (isManager && !string.IsNullOrEmpty(overrideProviderId))
+            {
+                provider = providerService.GetById(overrideProviderId);
+            }
+            if (isManager && !string.IsNullOrEmpty(overrideModelId))
+            {
+                model = modelService.GetById(overrideModelId);
+            }
+            if (provider is not null && model is not null)
+            {
+                logger.LogInformation(
+                    "Manager [{Name}] 使用用户 UI 指定的 Provider/Model（覆盖 Agent.DefaultXxxId）：{Provider}/{Model}",
+                    participantEntity.Name, provider.Name, model.Name);
+            }
+            // 如果 override 没设或部分解析失败，回退到原有逻辑（Agent.DefaultXxxId > fallback）
+            if (provider is null || model is null)
+            {
+                var resolved = ResolveSubAgentProviderAndModel(
+                    participantEntity, fallbackProvider, fallbackModel, providerService, modelService);
+                provider ??= resolved.Provider;
+                model ??= resolved.Model;
+            }
 
             if (provider is null || model is null)
             {
@@ -514,7 +555,12 @@ public sealed class AIAgentFactory(
                 continue;
             }
 
-            var participant = BuildSubAgent(participantEntity, provider, model, out var tracker, taskBlacklist);
+            // 仅当 taskId 非空时为 Manager 启用动态子智能体能力（chat 模式 / 其他调用路径不传 taskId 即可向后兼容）。
+            var isManagerForDynamicAgents = isManager && !string.IsNullOrEmpty(taskId);
+
+            var participant = BuildSubAgent(
+                participantEntity, provider, model, out var tracker, taskBlacklist,
+                isManagerForDynamicAgents, taskId, maxSubAgents);
             participants.Add(participant);
 
             // 阶段 6 Phase 1：把 tracker 按 agent.Id 注册到字典，让 Workflow 在 step 完成时反查
@@ -537,14 +583,19 @@ public sealed class AIAgentFactory(
     /// 阶段 6 Phase 1：构建子智能体（轻量），并通过 out 参数回传其 <see cref="TokenTrackingChatClient"/>，
     /// 让调用方（如 Workflow）在 step 完成时取 token 数据持久化到 OrchestrationStep。
     /// 阶段 6 Phase 2 新增：可选 taskBlacklist 参数，按 "pluginId:toolName" 在工具组装阶段过滤掉本次任务屏蔽的高风险工具。
-    /// 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §阶段 6 #1 #2。
+    /// P2-2 新增：当 <paramref name="isManager"/> 为 true 时注入动态子智能体能力（DynamicAgentToolsProvider + create_subagent 工具）。
+    /// 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §阶段 6 #1 #2 +
+    /// docs/未来版本策划/聊天式任务发起与动态智能体/01-P2方案设计.md §2-B/C。
     /// </summary>
     private AIAgent BuildSubAgent(
         AgentEntity agent,
         AiProviderEntity provider,
         AiModelEntity model,
         out TokenTrackingChatClient tracker,
-        IReadOnlyCollection<string>? taskBlacklist = null)
+        IReadOnlyCollection<string>? taskBlacklist = null,
+        bool isManager = false,
+        string? taskId = null,
+        int maxSubAgents = 5)
     {
         var driver = driverRegistry.Resolve(provider);
 
@@ -553,6 +604,39 @@ public sealed class AIAgentFactory(
         if (model.InteractionCapabilities.HasFlag(InteractionCapabilities.FunctionCall))
         {
             AssembleToolProviders(agent, providers, registeredTools, taskBlacklist);
+
+            // P2-2：Manager 角色注入动态子智能体能力
+            if (isManager && !string.IsNullOrEmpty(taskId))
+            {
+                var registry = services.GetRequiredService<Workflow.DynamicAgents.DynamicAgentRegistry>();
+                var creationGate = services.GetRequiredService<Workflow.DynamicAgents.DynamicAgentCreationGate>();
+                var publisher = services.GetRequiredService<IPublisher>();
+                var systemSettings = services.GetRequiredService<SystemSettingsService>();
+                var requireApproval = systemSettings.GetValue("workflow.dynamicAgent.requireApproval", true);
+
+                // 1) 注入 DynamicAgentToolsProvider（每次 invocation 暴露已创建的 dynamic agents）
+#pragma warning disable MAAI001
+                providers.Add(new DynamicAgentToolsProvider(registry, taskId, logger));
+#pragma warning restore MAAI001
+
+                // 2) 注入 create_subagent 工具（让 Manager 创建新 dynamic agent）
+                var createTool = Workflow.DynamicAgents.CreateSubAgentTool.Create(
+                    registry, this, provider, model, taskId, agent.Id, maxSubAgents,
+                    creationGate, publisher, requireApproval, logger);
+#pragma warning disable MAAI001
+                providers.Add(new SubAgentContextProvider([createTool]));
+#pragma warning restore MAAI001
+
+                // 3) P2-3：注入"如何使用 create_subagent / dynamic_agent_xxx"教学指令
+                //    详见 Docs/未来版本策划/聊天式任务发起与动态智能体/01-P2方案设计.md §2.3。
+#pragma warning disable MAAI001
+                providers.Add(new MagenticDynamicCreationInstructionsProvider(maxSubAgents, logger));
+#pragma warning restore MAAI001
+
+                logger.LogInformation(
+                    "Manager [{Name}] 已注入动态子智能体能力（taskId={TaskId}, maxSubAgents={Max}, requireApproval={Approval}）",
+                    agent.Name, taskId, maxSubAgents, requireApproval);
+            }
         }
         else
         {
@@ -815,5 +899,171 @@ public sealed class AIAgentFactory(
             ".csv" => "text/csv",
             _ => "application/octet-stream",
         };
+    }
+
+    // ==================================================================================
+    // P2-2：动态子智能体支持（Manager 通过 create_subagent 工具创建）
+    // 详见 Docs/未来版本策划/聊天式任务发起与动态智能体/01-P2方案设计.md §2-B/C。
+    // ==================================================================================
+
+    /// <summary>
+    /// P2-2：返回所有 plugin / MCP 中已注册的工具名集合，供 <c>CreateSubAgentTool</c> 校验 <c>requiredTools</c> 拼写。
+    /// </summary>
+    /// <remarks>
+    /// 不区分 plugin 是全局还是 Agent 启用 —— 校验的是工具拼写是否真实存在（白名单准入由 BuildDynamicSubAgent 控制）。
+    /// </remarks>
+    public IReadOnlyCollection<string> GetAvailableToolNames()
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var plugin in pluginLoader.GetActivePlugins())
+        {
+            foreach (var tool in plugin.Tools)
+            {
+                names.Add(tool.Name);
+            }
+        }
+
+        foreach (var mcp in pluginLoader.GetActiveMcpServers())
+        {
+            foreach (var tool in mcp.Tools)
+            {
+                names.Add(tool.Name);
+            }
+        }
+
+        return names;
+    }
+
+    /// <summary>
+    /// P2-2：构建动态子智能体（瞬态，无 <c>AgentEntity</c> 表记录）。
+    /// </summary>
+    /// <param name="name">子智能体名称（CreateSubAgentTool 已校验合法性 + 唯一性）。</param>
+    /// <param name="instructions">系统提示词。</param>
+    /// <param name="provider">复用 Manager 的厂商。</param>
+    /// <param name="model">复用 Manager 的模型。</param>
+    /// <param name="requiredTools">工具白名单（仅注入这些工具，与 Manager 启用列表无关）。</param>
+    public AIAgent BuildDynamicSubAgent(
+        string name,
+        string instructions,
+        AiProviderEntity provider,
+        AiModelEntity model,
+        IReadOnlyList<string>? requiredTools)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(name);
+        ArgumentNullException.ThrowIfNull(provider);
+        ArgumentNullException.ThrowIfNull(model);
+
+        var driver = driverRegistry.Resolve(provider);
+
+        // 构造临时 AgentEntity 仅用于 driver.BuildChatOptions（不入库，仅承载 Temperature / TopP 等参数）
+        var transientAgent = new AgentEntity
+        {
+            Id = $"dynamic_{Guid.NewGuid():N}"[..16],
+            Name = name,
+            Description = $"动态子智能体 {name}",
+            Instructions = instructions,
+            DefaultProviderId = provider.Id,
+            DefaultModelId = model.Id,
+        };
+
+        var providers = new List<AIContextProvider>();
+        if (model.InteractionCapabilities.HasFlag(InteractionCapabilities.FunctionCall) &&
+            requiredTools is { Count: > 0 })
+        {
+            AssembleDynamicToolProviders(requiredTools, providers);
+        }
+        else if (requiredTools is { Count: > 0 })
+        {
+            logger.LogInformation(
+                "动态子智能体 [{Name}] 的模型 {Model} 不支持函数调用，requiredTools 被忽略",
+                name, model.Name);
+        }
+
+        var enableReasoning = model.InteractionCapabilities.HasFlag(InteractionCapabilities.Reasoning);
+        // 复用 sub-agent tracking 模式（事件累计，不污染主 Chat 的进度条）
+        var trackingClient = CreateSubAgentTrackingClient(
+            driver.CreateChatClient(provider, model), model.ContextLength, enableReasoning);
+
+#pragma warning disable MAAI001
+        return trackingClient
+            .AsBuilder()
+            .BuildAIAgent(new ChatClientAgentOptions
+            {
+                Id = transientAgent.Id,
+                Name = transientAgent.Name,
+                Description = transientAgent.Description,
+                AIContextProviders = providers,
+                ChatOptions = driver.BuildChatOptions(provider, transientAgent),
+            })
+            .AsBuilder()
+            .Build();
+#pragma warning restore MAAI001
+    }
+
+    /// <summary>
+    /// P2-2：按 <paramref name="requiredTools"/> 白名单组装 Provider 列表（plugin/MCP）。
+    /// 简化版的 <see cref="AssembleToolProviders"/>：
+    /// - 不考虑 Agent 的 EnabledPluginIds / EnabledMcpServerIds（动态子智能体没有持久化 entity）
+    /// - 不考虑任务级黑名单（动态子智能体的 requiredTools 已经是受信白名单）
+    /// - 把不在 requiredTools 内的工具加入 exclude 列表（让 Plugin/MCP Provider 自动过滤）
+    /// </summary>
+    private void AssembleDynamicToolProviders(
+        IReadOnlyList<string> requiredTools,
+        List<AIContextProvider> providers)
+    {
+        var requiredSet = new HashSet<string>(requiredTools, StringComparer.OrdinalIgnoreCase);
+
+        // 1. 遍历 plugin，构造 excluded 集合（不在白名单内的所有工具名）+ 注入 PluginContextProvider
+        foreach (var plugin in pluginLoader.GetActivePlugins())
+        {
+            var excluded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var hasMatch = false;
+            foreach (var tool in plugin.Tools)
+            {
+                if (requiredSet.Contains(tool.Name))
+                {
+                    hasMatch = true;
+                }
+                else
+                {
+                    excluded.Add(tool.Name);
+                }
+            }
+
+            if (hasMatch)
+            {
+                providers.Add(new Plugin.PluginContextProvider(plugin, excluded));
+                logger.LogInformation(
+                    "动态子智能体注入插件 [{Plugin}]，启用 {Enabled} 个工具",
+                    plugin.Name, plugin.Tools.Count - excluded.Count);
+            }
+        }
+
+        // 2. 遍历 MCP 服务器，同样按白名单过滤
+        foreach (var mcpHost in pluginLoader.GetActiveMcpServers())
+        {
+            var excluded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var hasMatch = false;
+            foreach (var tool in mcpHost.Tools)
+            {
+                if (requiredSet.Contains(tool.Name))
+                {
+                    hasMatch = true;
+                }
+                else
+                {
+                    excluded.Add(tool.Name);
+                }
+            }
+
+            if (hasMatch)
+            {
+                providers.Add(new Plugin.Mcp.McpContextProvider(mcpHost, excluded));
+                logger.LogInformation(
+                    "动态子智能体注入 MCP 服务器 [{Mcp}]，启用 {Enabled} 个工具",
+                    mcpHost.Name, mcpHost.Tools.Count - excluded.Count);
+            }
+        }
     }
 }

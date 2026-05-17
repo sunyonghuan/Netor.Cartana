@@ -79,6 +79,14 @@ public static class AIServiceExtensions
             Microsoft.Agents.AI.Workflows.CheckpointManager.CreateJson(
                 sp.GetRequiredService<Workflow.Checkpointing.SqliteCheckpointStore>()));
 
+        // P2-2：动态子智能体 Registry（任务级生命周期，Manager 通过 create_subagent 工具创建临时子智能体）
+        // 详见 Docs/未来版本策划/聊天式任务发起与动态智能体/01-P2方案设计.md §2-A
+        services.AddSingleton<Workflow.DynamicAgents.DynamicAgentRegistry>();
+
+        // P2-4：动态子智能体创建审批闸（与 Registry 同生命周期；CreateSubAgentTool 内 await 用户决策）
+        // 详见 Docs/未来版本策划/聊天式任务发起与动态智能体/03-实施阶段.md §4 plan §A.2
+        services.AddSingleton<Workflow.DynamicAgents.DynamicAgentCreationGate>();
+
         services.AddSingleton<WorkflowExecutor>();
         services.AddSingleton<IWorkflowExecutor>(sp => sp.GetRequiredService<WorkflowExecutor>());
         services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<WorkflowExecutor>());

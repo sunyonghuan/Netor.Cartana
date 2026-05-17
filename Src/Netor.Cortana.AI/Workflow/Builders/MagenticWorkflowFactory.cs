@@ -33,12 +33,12 @@ internal static class MagenticWorkflowFactory
     /// <summary>
     /// 构建 Magentic <see cref="SdkWorkflow"/>。
     /// </summary>
-    /// <param name="participants">参与者列表，<c>participants[0]</c> 是 Manager，其余是 Members。至少需 2 个。</param>
+    /// <param name="participants">参与者列表，<c>participants[0]</c> 是 Manager，其余是 Members。至少需 1 个（Manager）。</param>
     /// <param name="taskId">任务 ID，用于设置 workflow 名称便于诊断。</param>
     /// <param name="options">编排器选项，用于读取 Magentic 相关阈值。</param>
     /// <param name="logger">日志输出器。</param>
     /// <returns>SDK 原生 <see cref="SdkWorkflow"/>，由 <c>InProcessExecution.RunStreamingAsync</c> 启动。</returns>
-    /// <exception cref="InvalidOperationException">参与者不足 2 个。</exception>
+    /// <exception cref="InvalidOperationException">参与者为空。</exception>
     public static SdkWorkflow Build(
         IReadOnlyList<AIAgent> participants,
         string taskId,
@@ -50,14 +50,24 @@ internal static class MagenticWorkflowFactory
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(logger);
 
-        if (participants.Count < 2)
+        if (participants.Count < 1)
         {
             throw new InvalidOperationException(
-                "Magentic 子模式至少需要 Manager + 1 个 Member，请检查 ManagerAgentId / MemberAgentIds 配置。");
+                "Magentic 子模式至少需要 1 个 Manager。请到设置中创建至少 1 个智能体。");
         }
 
         var manager = participants[0];
-        var team = participants.Skip(1).ToList();
+
+        // P2-2 修复 2026-05-17：Manager self-talk 模式（用户决策 A）。
+        // 工作流模式（Magentic）设计意图：用户只选 Manager，子智能体由 Manager 通过 create_subagent 工具自主创建。
+        // 但 SDK MagenticOrchestrator.cs:265 在 NextSpeaker 为空时 fallback 调用 team.First()，team 不能为空。
+        // 解决方案：当用户没有显式指定 Members 时，让 Manager 同时充当 team[0]（self-talk），
+        // SDK 视角看到 1 个 manager + 1 个 team member（实际是同一个 AIAgent 实例），用户视角无感知。
+        // 详见 Docs/未来版本策划/聊天式任务发起与动态智能体/01-P2方案设计.md §2-C "P2-2-Bug 决策 A"。
+        var isSelfTalk = participants.Count == 1;
+        var team = isSelfTalk
+            ? new List<AIAgent> { manager }  // self-talk fallback：Manager 同时充当 team[0]
+            : participants.Skip(1).ToList();
 
 #pragma warning disable MAAIW001 // SDK Experimental（Microsoft.Agents.AI.Workflows）
         var workflow = new MagenticWorkflowBuilder(manager)
@@ -71,9 +81,9 @@ internal static class MagenticWorkflowFactory
 #pragma warning restore MAAIW001
 
         logger.LogInformation(
-            "Magentic workflow 已构建：taskId={TaskId}, manager={Manager}, members={Count}, " +
+            "Magentic workflow 已构建：taskId={TaskId}, manager={Manager}, members={Count}, selfTalk={SelfTalk}, " +
             "maxRounds={Rounds}, maxResets={Resets}, maxStalls={Stalls}, signoff={Signoff}",
-            taskId, manager.Name ?? manager.Id, team.Count,
+            taskId, manager.Name ?? manager.Id, team.Count, isSelfTalk,
             options.MaxRounds, options.MagenticMaxResets, options.MagenticMaxStalls,
             options.MagenticRequirePlanSignoff);
 

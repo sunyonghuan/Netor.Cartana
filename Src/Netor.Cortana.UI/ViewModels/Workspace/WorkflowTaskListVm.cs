@@ -36,6 +36,7 @@ public sealed class WorkflowTaskListVm : INotifyPropertyChanged
     private string _workspaceId = string.Empty;
     private bool _isLoading;
     private WorkflowTaskItemVm? _selectedItem;
+    private string? _pendingSelectedTaskId;
 
     // 阶段 6 Phase 3：任务列表搜索（决策 6-3-A 子串 LIKE 匹配）
     // _keyword 是当前生效的过滤词；_searchDebounceTimer 做 200ms 防抖避免逐字符 hammering DB。
@@ -151,10 +152,29 @@ public sealed class WorkflowTaskListVm : INotifyPropertyChanged
         _searchDebounceTimer.Start();
     }
 
+    /// <summary>
+    /// 按任务 ID 选中列表项。若任务开始事件尚未插入列表，则暂存选中请求。
+    /// </summary>
+    public bool SelectTaskById(string taskId)
+    {
+        if (string.IsNullOrEmpty(taskId)) return false;
+
+        var item = Items.FirstOrDefault(x => x.TaskId == taskId);
+        if (item is not null)
+        {
+            _pendingSelectedTaskId = null;
+            SelectedItem = item;
+            return true;
+        }
+
+        _pendingSelectedTaskId = taskId;
+        return false;
+    }
+
     // ──── 列表加载与刷新 ────
 
     /// <summary>
-    /// 重新从数据库加载列表。决策 8-A：启动时不自动选中任何任务（SelectedItem 不复位为旧值）。
+    /// 重新从数据库加载列表。决策 8-A：不自动选中历史任务；若调用方明确请求 taskId，则保留该选中项。
     /// </summary>
     public async Task LoadAsync()
     {
@@ -175,13 +195,18 @@ public sealed class WorkflowTaskListVm : INotifyPropertyChanged
 
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
+                var selectedTaskId = _pendingSelectedTaskId ?? _selectedItem?.TaskId;
                 Items.Clear();
                 foreach (var entity in rows)
                 {
                     Items.Add(new WorkflowTaskItemVm(entity));
                 }
-                // 决策 8-A：启动时不自动选中
-                _selectedItem = null;
+
+                var selectedItem = string.IsNullOrEmpty(selectedTaskId)
+                    ? null
+                    : Items.FirstOrDefault(x => x.TaskId == selectedTaskId);
+                _pendingSelectedTaskId = selectedItem is null ? _pendingSelectedTaskId : null;
+                _selectedItem = selectedItem;
                 OnPropertyChanged(nameof(SelectedItem));
             });
         }
@@ -255,7 +280,14 @@ public sealed class WorkflowTaskListVm : INotifyPropertyChanged
             ManagerAgentName = args.ManagerAgentName,
             InitialInput = args.InitialInput,
         };
-        Items.Insert(0, new WorkflowTaskItemVm(entity));
+        var item = new WorkflowTaskItemVm(entity);
+        Items.Insert(0, item);
+
+        if (string.Equals(_pendingSelectedTaskId, args.TaskId, StringComparison.Ordinal))
+        {
+            _pendingSelectedTaskId = null;
+            SelectedItem = item;
+        }
     }
 
     private void OnTaskCompletedOrFailed(string taskId, WorkflowTaskStatus status)

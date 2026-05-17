@@ -45,6 +45,7 @@ public sealed class TaskDetailVm : INotifyPropertyChanged
         _executor = App.Services.GetRequiredService<IWorkflowExecutor>();
         _subscriber = App.Services.GetRequiredService<ISubscriber>();
         Approval = new WorkflowTaskApprovalVm();
+        DynamicAgentCreationApproval = new DynamicAgentCreationApprovalVm();
 
         SubscribeEvents();
     }
@@ -55,6 +56,13 @@ public sealed class TaskDetailVm : INotifyPropertyChanged
     /// 详见 docs/未来版本策划/多智能体编排模式策划/04-实施阶段.md §5B.1。
     /// </summary>
     public WorkflowTaskApprovalVm Approval { get; }
+
+    /// <summary>
+    /// P2-4：动态子智能体创建审批卡片 ViewModel（与 <see cref="Approval"/> 并列，独立显示）。
+    /// 仅当 Manager 通过 create_subagent 触发审批且 TaskId 匹配时由 OnDynamicAgentCreationRequested 填充。
+    /// 详见 Docs/未来版本策划/聊天式任务发起与动态智能体/03-实施阶段.md §4 plan §B.1。
+    /// </summary>
+    public DynamicAgentCreationApprovalVm DynamicAgentCreationApproval { get; }
 
     /// <summary>当前展示的任务 ID。空字符串表示无选中。</summary>
     public string TaskId
@@ -350,6 +358,35 @@ public sealed class TaskDetailVm : INotifyPropertyChanged
             });
             return Task.FromResult(false);
         });
+
+        // P2-4：动态子智能体创建审批事件订阅
+        _subscriber.Subscribe<DynamicAgentCreationRequestedArgs>(
+            Events.OnDynamicAgentCreationRequested, (_, args) =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (args.TaskId != _taskId) return;
+                    DynamicAgentCreationApproval.Load(args);
+                });
+                return Task.FromResult(false);
+            });
+
+        _subscriber.Subscribe<DynamicAgentCreationResolvedArgs>(
+            Events.OnDynamicAgentCreationResolved, (_, args) =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (args.TaskId != _taskId) return;
+                    // 用户在本 Detail 实例点了按钮 → ApprovalVm.SubmitAsync 已 Clear；
+                    // 这里兜底处理"另一个 Detail 实例响应了"或"任务被外部取消"的场景，
+                    // 仅当当前 RequestId 仍是 args.RequestId 时清空（避免误清后续 request）。
+                    if (DynamicAgentCreationApproval.RequestId == args.RequestId)
+                    {
+                        DynamicAgentCreationApproval.Clear();
+                    }
+                });
+                return Task.FromResult(false);
+            });
     }
 
     // ──── 用户操作 ────

@@ -15,6 +15,14 @@
     <None Remove="Services\**" />
   </ItemGroup>
 
+  <!-- P2-3：Manager 提示词模板。LogicalName 与 MagenticDynamicCreationInstructionsProvider 中的 ResourceName 严格一致。
+       详见 Docs/未来版本策划/聊天式任务发起与动态智能体/03-实施阶段.md §3.2.4。 -->
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\Prompts\Magentic.DynamicCreation.md">
+      <LogicalName>Netor.Cortana.AI.Resources.Prompts.Magentic.DynamicCreation.md</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
   <ItemGroup>
 	<PackageReference Include="Microsoft.Agents.AI" Version="1.5.0" />
 	<PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.5.0" />

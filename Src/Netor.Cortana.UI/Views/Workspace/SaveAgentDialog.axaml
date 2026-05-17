@@ -1,0 +1,128 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Netor.Cortana.UI.ViewModels.Workspace"
+        x:Class="Netor.Cortana.UI.Views.Workspace.SaveAgentDialog"
+        x:CompileBindings="False"
+        Title="保存为常用智能体"
+        Width="700" Height="560"
+        CanResize="True"
+        MinWidth="540" MinHeight="380"
+        WindowStartupLocation="CenterOwner"
+        Background="#1e1e1e"
+        ShowInTaskbar="False">
+
+	<!-- ════════════════════════════════════════════════════════════════
+	     P2-4：任务结束后弹出，让用户挑选要保存为永久 Agent 的临时子智能体。
+	     详见 Docs/未来版本策划/聊天式任务发起与动态智能体/03-实施阶段.md §4 plan §C.1。
+
+	     交互：
+	     - ItemsControl 列出所有 DynamicAgentRecord，每行一个 SaveAgentItemVm
+	     - CheckBox 控制是否保存 + TextBox 改名（默认 = OriginalName）
+	     - 重名预检：保存时 GetByName 命中则在该行红字提示，对话框不关闭
+	     - 全部丢弃：直接关闭对话框（Registry 由 ClearTask 自动清理）
+	     ════════════════════════════════════════════════════════════════ -->
+
+	<Window.Styles>
+		<Style Selector="Border.row-card">
+			<Setter Property="Background" Value="#252526" />
+			<Setter Property="BorderBrush" Value="#3c3c3c" />
+			<Setter Property="BorderThickness" Value="1" />
+			<Setter Property="CornerRadius" Value="6" />
+			<Setter Property="Padding" Value="12,10" />
+			<Setter Property="Margin" Value="0,0,0,8" />
+		</Style>
+		<Style Selector="TextBox.name-input">
+			<Setter Property="Background" Value="#1e1e1e" />
+			<Setter Property="Foreground" Value="#cccccc" />
+			<Setter Property="BorderBrush" Value="#3c3c3c" />
+			<Setter Property="BorderThickness" Value="1" />
+			<Setter Property="CornerRadius" Value="3" />
+			<Setter Property="Padding" Value="8,4" />
+			<Setter Property="FontSize" Value="13" />
+		</Style>
+		<Style Selector="Button.dialog-btn">
+			<Setter Property="Padding" Value="14,7" />
+			<Setter Property="FontSize" Value="13" />
+			<Setter Property="CornerRadius" Value="4" />
+			<Setter Property="Cursor" Value="Hand" />
+			<Setter Property="BorderThickness" Value="0" />
+		</Style>
+		<Style Selector="Button.dialog-btn-primary">
+			<Setter Property="Background" Value="#0e7c3c" />
+			<Setter Property="Foreground" Value="#ffffff" />
+			<Setter Property="FontWeight" Value="SemiBold" />
+		</Style>
+		<Style Selector="Button.dialog-btn-primary:pointerover /template/ ContentPresenter">
+			<Setter Property="Background" Value="#129948" />
+		</Style>
+		<Style Selector="Button.dialog-btn-secondary">
+			<Setter Property="Background" Value="#3a3d41" />
+			<Setter Property="Foreground" Value="#cccccc" />
+		</Style>
+		<Style Selector="Button.dialog-btn-secondary:pointerover /template/ ContentPresenter">
+			<Setter Property="Background" Value="#4a4d51" />
+		</Style>
+	</Window.Styles>
+
+	<Grid RowDefinitions="Auto,*,Auto" Margin="20">
+		<!-- 标题 -->
+		<StackPanel Grid.Row="0" Spacing="6" Margin="0,0,0,12">
+			<TextBlock Text="✨ 保存子智能体为常用"
+			           Foreground="#f4d2a3" FontSize="16" FontWeight="SemiBold" />
+			<TextBlock x:Name="HeaderHint"
+			           Foreground="#9e9e9e" FontSize="12"
+			           TextWrapping="Wrap" />
+		</StackPanel>
+
+		<!-- 列表 -->
+		<ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+		              Padding="0,0,4,0">
+			<ItemsControl x:Name="ItemsList">
+				<ItemsControl.ItemTemplate>
+					<DataTemplate DataType="vm:SaveAgentItemVm">
+						<Border Classes="row-card">
+							<Grid ColumnDefinitions="Auto,*,Auto">
+								<CheckBox Grid.Column="0"
+								          IsChecked="{Binding IsSelected, Mode=TwoWay}"
+								          VerticalAlignment="Top"
+								          Margin="0,4,12,0" />
+								<StackPanel Grid.Column="1" Spacing="4">
+									<TextBox Classes="name-input"
+									         Text="{Binding NewName, Mode=TwoWay}"
+									         PlaceholderText="保存为该名称（可改）" />
+									<TextBlock Text="{Binding OriginalResponsibility}"
+									           Foreground="#9e9e9e" FontSize="12"
+									           TextWrapping="Wrap" />
+									<TextBlock Text="{Binding NameError}"
+									           Foreground="#f48771" FontSize="11"
+									           IsVisible="{Binding HasError}"
+									           TextWrapping="Wrap" />
+								</StackPanel>
+								<TextBlock Grid.Column="2"
+								           Text="{Binding ToolsHint}"
+								           Foreground="#858585" FontSize="11"
+								           VerticalAlignment="Top"
+								           Margin="12,4,0,0" />
+							</Grid>
+						</Border>
+					</DataTemplate>
+				</ItemsControl.ItemTemplate>
+			</ItemsControl>
+		</ScrollViewer>
+
+		<!-- 操作按钮 -->
+		<StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8"
+		            HorizontalAlignment="Right" Margin="0,12,0,0">
+			<TextBlock x:Name="GlobalErrorText"
+			           Foreground="#f48771" FontSize="12"
+			           VerticalAlignment="Center" Margin="0,0,12,0"
+			           IsVisible="False" />
+			<Button Classes="dialog-btn dialog-btn-secondary"
+			        Content="全部丢弃"
+			        Click="OnDiscardClick" />
+			<Button Classes="dialog-btn dialog-btn-primary"
+			        Content="保存选中"
+			        Click="OnSaveClick" />
+		</StackPanel>
+	</Grid>
+</Window>

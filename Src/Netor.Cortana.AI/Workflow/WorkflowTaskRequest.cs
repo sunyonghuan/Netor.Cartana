@@ -48,6 +48,20 @@ public sealed record WorkflowTaskRequest
     /// <summary>参与该任务的 Member 智能体 ID 列表。</summary>
     public IReadOnlyList<string> MemberAgentIds { get; init; } = [];
 
+    /// <summary>
+    /// P2-2 修复 2026-05-17：用户在 WorkflowDetailView 输入框下方明确选择的 Provider ID（覆盖 Manager Agent 自身的 DefaultProviderId）。
+    /// 决策 D-甲：仅作用于 Manager + 动态子智能体（不影响 GroupChat Members，它们仍用各自 Agent.DefaultProviderId）。
+    /// 解决场景：Manager Agent 数据库里的 DefaultProviderId 指向已删除/失效的厂商，用户希望强制用 UI 选的厂商跑任务。
+    /// 详见 Docs/未来版本策划/聊天式任务发起与动态智能体/01-P2方案设计.md §2-D。
+    /// </summary>
+    public string? OverrideProviderId { get; init; }
+
+    /// <summary>
+    /// P2-2 修复 2026-05-17：用户在 WorkflowDetailView 输入框下方明确选择的 Model ID（覆盖 Manager Agent 自身的 DefaultModelId）。
+    /// 与 <see cref="OverrideProviderId"/> 配对使用，同上注释。
+    /// </summary>
+    public string? OverrideModelId { get; init; }
+
     /// <summary>OverridesJson（阶段 5B+ 用于 MaxRounds 等覆盖）。</summary>
     public string? OverridesJson { get; init; }
 

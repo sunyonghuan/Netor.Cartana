@@ -445,12 +445,14 @@ public sealed class WorkflowInputVm : INotifyPropertyChanged
     {
         if (!CanSubmit)
         {
+            // P2-2 修复 2026-05-17：错误提示改为"请先到设置中创建"导向（用户决策：不怪用户没勾选）。
+            // 选择器初始化时会自动填充默认值，只有系统数据完全为空时才会出现 null。
             ValidationError = _selectedManager is null
-                ? "请选择主智能体"
+                ? "未找到可用的智能体，请先到设置中创建智能体。"
                 : _selectedProvider is null
-                    ? "请选择厂商"
+                    ? "未找到可用的厂商，请先到设置中创建厂商。"
                     : _selectedModel is null
-                        ? "请选择模型"
+                        ? "未找到可用的模型，请先到设置中创建模型。"
                         : "请填写任务描述";
             return null;
         }
@@ -481,6 +483,11 @@ public sealed class WorkflowInputVm : INotifyPropertyChanged
                 ManagerAgentId = _selectedManager!.Id,
                 ManagerAgentName = _selectedManager!.Name,
                 MemberAgentIds = [],                            // P2：决策 TP-3 / TP-4 由 Manager 自主创建
+                // P2-2 修复 2026-05-17：把 UI 选的 Provider/Model 显式传给后端，覆盖 Manager Agent 自身的
+                // DefaultProviderId/DefaultModelId（解决 Manager Agent 数据库里的 Provider 已删除/失效的场景）。
+                // 决策 D-甲：仅作用于 Manager + 动态子智能体（详见 WorkflowTaskRequest.OverrideProviderId 注释）。
+                OverrideProviderId = _selectedProvider!.Id,
+                OverrideModelId = _selectedModel!.Id,
                 ToolBlacklist = blacklist,
             };
 

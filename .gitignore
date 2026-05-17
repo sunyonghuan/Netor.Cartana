@@ -251,6 +251,7 @@ cortana.db
 cortana.db-wal
 cortana.db-shm
 Plugins/docs/google-search-crack-linker-492914-s4.json
+.claude/
 
 # Including strong name files can present a security risk
 # (https://github.com/github/gitignore/pull/2483#issue-259490424)

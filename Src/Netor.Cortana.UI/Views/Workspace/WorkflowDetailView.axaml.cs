@@ -81,6 +81,14 @@ public partial class WorkflowDetailView : UserControl
     /// <summary>当前是否处于拖入状态（用于 DragLeave 时判断是否需要恢复）。</summary>
     private bool _isDragOver;
 
+    /// <summary>
+    /// Bug 3 修复 2026-05-17：# 文件引用映射表（fileName → fullPath，OrdinalIgnoreCase）。
+    /// 完全复刻 Chat 模式 MainWindow.Input.cs line 23。
+    /// 使用：用户输入 # 触发 FilePopup → 选中文件 → InputBox 文本替换为 #fileName，同时 _fileReferences[fileName] = fullPath。
+    /// 发送时由 .cs 把 #fileName 转换为 attachment（已直接 push 到 _inputVm.Attachments，无需运行时再解析）。
+    /// </summary>
+    private readonly Dictionary<string, string> _fileReferences = new(StringComparer.OrdinalIgnoreCase);
+
     public WorkflowDetailView()
     {
         InitializeComponent();
@@ -93,6 +101,13 @@ public partial class WorkflowDetailView : UserControl
         DataContext = _vm;
         InputArea.DataContext = _inputVm;
 
+        // Bug 2 修复 2026-05-17：用 Tunnel 路由注册 KeyDown（完全复刻 Chat 模式 MainWindow.axaml.cs line 116）。
+        // axaml KeyDown="" 是 Bubble 路由，TextBox 内部先吞掉 Enter 插入换行；Tunnel 让事件先到顶层 handler。
+        InputBox.AddHandler(KeyDownEvent, OnInputBoxKeyDown, RoutingStrategies.Tunnel);
+
+        // Bug 3 修复 2026-05-17：订阅 TextChanged 实现 # 文件补全（完全复刻 Chat 模式 MainWindow.axaml.cs line 103）。
+        InputBox.TextChanged += OnInputTextChanged;
+
         // 监听 IsRunning 变化驱动走马灯 + 旋转动画启停（条款 5 / 12）
         _inputVm.PropertyChanged += OnInputVmPropertyChanged;
 
@@ -101,6 +116,41 @@ public partial class WorkflowDetailView : UserControl
         {
             if (args.TaskId == _inputVm.CurrentTaskId)
                 Dispatcher.UIThread.Post(() => _inputVm.OnTaskFinished());
+
+            // P2-4：任务结束 → 弹"保存常用 Agent"对话框（仅当本任务期间创建过动态子智能体）。
+            // 关键：在订阅回调入口同步拷贝 records 到本地，避免 finally ClearTask 先于异步 ShowDialog 执行。
+            // 仅当本 Detail 当前展示的 task 与事件 task 匹配时才弹（避免另一个 Detail 实例重复弹）。
+            if (args.TaskId == _vm.Detail.TaskId)
+            {
+                var registry = App.Services.GetRequiredService<
+                    Netor.Cortana.AI.Workflow.DynamicAgents.DynamicAgentRegistry>();
+                var snapshot = registry.GetByTask(args.TaskId);
+                if (snapshot.Count > 0)
+                {
+                    var taskId = args.TaskId;
+                    // 沿用 Manager 的 Provider/Model 作为新 Agent 默认（与运行时一致）
+                    var managerProviderId = _inputVm.SelectedProvider?.Id ?? string.Empty;
+                    var managerModelId = _inputVm.SelectedModel?.Id ?? string.Empty;
+
+                    Dispatcher.UIThread.Post(async () =>
+                    {
+                        try
+                        {
+                            if (TopLevel.GetTopLevel(this) is Window owner)
+                            {
+                                var dlg = new SaveAgentDialog(
+                                    snapshot, taskId, managerProviderId, managerModelId);
+                                await dlg.ShowDialog(owner);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex,
+                                "弹出 SaveAgentDialog 失败 (taskId={TaskId})", taskId);
+                        }
+                    });
+                }
+            }
             return Task.FromResult(false);
         });
         _subscriber.Subscribe<WorkflowTaskFailedArgs>(Events.OnWorkflowTaskFailed, (_, args) =>
@@ -179,6 +229,37 @@ public partial class WorkflowDetailView : UserControl
         catch (Exception ex) { ShowError($"取消任务失败：{ex.Message}", ex); }
     }
 
+    // P2-4：动态子智能体创建审批
+    private async void OnDynamicAgentApproveClick(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var ok = await _vm.Detail.DynamicAgentCreationApproval.ApproveAsync();
+            if (!ok) ShowError("批准失败：审批请求已不存在（可能已超时或被取消）");
+        }
+        catch (Exception ex) { ShowError($"批准失败：{ex.Message}", ex); }
+    }
+
+    private async void OnDynamicAgentApproveAllClick(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var ok = await _vm.Detail.DynamicAgentCreationApproval.ApproveAllAsync();
+            if (!ok) ShowError("批准失败：审批请求已不存在（可能已超时或被取消）");
+        }
+        catch (Exception ex) { ShowError($"批准失败：{ex.Message}", ex); }
+    }
+
+    private async void OnDynamicAgentRejectClick(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var ok = await _vm.Detail.DynamicAgentCreationApproval.RejectAsync();
+            if (!ok) ShowError("拒绝失败：审批请求已不存在（可能已超时或被取消）");
+        }
+        catch (Exception ex) { ShowError($"拒绝失败：{ex.Message}", ex); }
+    }
+
     private async void OnAttachToConversationClick(object? sender, RoutedEventArgs e)
     {
         try
@@ -201,20 +282,35 @@ public partial class WorkflowDetailView : UserControl
     /// <summary>"▶ 发送" 按钮：调 _inputVm.StartAsync 启动任务。</summary>
     private async void OnSendClick(object? sender, RoutedEventArgs e)
     {
+        SyncInputTextToViewModel();
+
         _logger.LogInformation(
-            "[WorkflowDetailView] OnSendClick: WorkspaceId={WorkspaceId}, SubMode={SubMode}, MaxSubAgents={MaxSubAgents}, Manager={Manager}, Provider={Provider}, Model={Model}",
+            "[WorkflowDetailView] OnSendClick: WorkspaceId={WorkspaceId}, SubMode={SubMode}, MaxSubAgents={MaxSubAgents}, Manager={Manager}, Provider={Provider}, Model={Model}, Input.Len={InputLen}",
             _vm.List.WorkspaceId, _inputVm.SubMode, _inputVm.MaxSubAgents,
             _inputVm.SelectedManager?.Name ?? "(null)",
             _inputVm.SelectedProvider?.Name ?? "(null)",
-            _inputVm.SelectedModel?.Name ?? "(null)");
+            _inputVm.SelectedModel?.Name ?? "(null)",
+            (_inputVm.InitialInput ?? string.Empty).Length);
 
         try
         {
             _inputVm.WorkspaceId = _vm.List.WorkspaceId ?? string.Empty;
             var taskId = await _inputVm.StartAsync(CancellationToken.None);
-            if (string.IsNullOrEmpty(taskId)) return; // ValidationError 已在 _inputVm 内设置
+            if (string.IsNullOrEmpty(taskId))
+            {
+                // Bug 1 修复 2026-05-17：StartAsync 返回 null 表示 CanSubmit=false 校验失败，
+                // 之前只把 ValidationError 写到小字红色 TextBlock 容易被忽略，导致用户感觉"点击发送无反应"。
+                // 现在统一用 ShowError 弹窗给出醒目反馈。
+                var hint = !string.IsNullOrWhiteSpace(_inputVm.ValidationError)
+                    ? _inputVm.ValidationError
+                    : "无法启动任务：请检查智能体 / 厂商 / 模型是否已选 + 输入内容是否为空。";
+                _logger.LogWarning("[WorkflowDetailView] StartAsync 返回 null（校验失败）：{Hint}", hint);
+                ShowError(hint);
+                return;
+            }
 
-            _logger.LogInformation("[WorkflowDetailView] Workflow task started: taskId={TaskId}", taskId);
+            await _vm.ShowTaskAsync(taskId);
+            _logger.LogInformation("[WorkflowDetailView] Workflow task started and selected: taskId={TaskId}", taskId);
         }
         catch (Exception ex) { ShowError($"启动任务失败：{ex.Message}", ex); }
     }
@@ -233,6 +329,7 @@ public partial class WorkflowDetailView : UserControl
         if (e.KeyModifiers.HasFlag(KeyModifiers.Shift)) return;
 
         e.Handled = true;
+        SyncInputTextToViewModel();
         if (_inputVm.IsIdle && _inputVm.CanSubmit)
             OnSendClick(sender, new RoutedEventArgs());
     }
@@ -760,5 +857,151 @@ public partial class WorkflowDetailView : UserControl
         InputBorder.BorderThickness = new Thickness(1);
         InputBorder.Background = BgNormal;
         InputBorder.BorderBrush = InputBox.IsFocused ? BorderActive : BorderNormal;
+    }
+
+    // ──── Bug 3 修复 2026-05-17：# 文件补全（完全复刻 Chat 模式 MainWindow.Input.cs line 128-254）────
+
+    /// <summary>
+    /// 输入框文本变化时检测 # 触发文件补全。完全复刻 Chat MainWindow.Input.cs OnInputTextChanged。
+    /// 与 Chat 不同的是：Workflow 不支持 @ 智能体补全（决策 P2-1：仅靠输入框上方的智能体选择器）。
+    /// </summary>
+    private void OnInputTextChanged(object? sender, TextChangedEventArgs e)
+    {
+        SyncInputTextToViewModel();
+
+        var text = InputBox.Text ?? string.Empty;
+        var caret = InputBox.CaretIndex;
+
+        // 尝试 # 文件补全
+        var hashIndex = text.LastIndexOf('#', Math.Max(0, caret - 1));
+        if (hashIndex < 0)
+        {
+            FilePopup.IsOpen = false;
+            return;
+        }
+
+        // # 后面到光标之间的内容作为搜索关键字
+        var afterHash = text.Substring(hashIndex + 1, caret - hashIndex - 1);
+
+        // 如果包含空格 / 换行，关闭补全
+        if (afterHash.Contains(' ') || afterHash.Contains('\n'))
+        {
+            FilePopup.IsOpen = false;
+            return;
+        }
+
+        // 获取工作目录下的文件列表（过滤匹配）
+        var appPaths = App.Services.GetRequiredService<IAppPaths>();
+        var workDir = appPaths.WorkspaceDirectory;
+
+        if (!System.IO.Directory.Exists(workDir))
+        {
+            FilePopup.IsOpen = false;
+            return;
+        }
+
+        try
+        {
+            var files = System.IO.Directory
+                .EnumerateFiles(workDir, "*", System.IO.SearchOption.AllDirectories)
+                .Select(f => (FullPath: f, RelativePath: System.IO.Path.GetRelativePath(workDir, f)))
+                .Where(f => !f.RelativePath.Contains($"{System.IO.Path.DirectorySeparatorChar}.", StringComparison.Ordinal)
+                         && !f.RelativePath.StartsWith('.'))
+                .Where(f => string.IsNullOrEmpty(afterHash)
+                         || f.RelativePath.Contains(afterHash, StringComparison.OrdinalIgnoreCase))
+                .Take(30)
+                .ToList();
+
+            if (files.Count == 0)
+            {
+                FilePopup.IsOpen = false;
+                return;
+            }
+
+            FillFileList(files, hashIndex);
+            FilePopup.IsOpen = true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[WorkflowDetailView] 枚举工作目录文件失败：{WorkDir}", workDir);
+            FilePopup.IsOpen = false;
+        }
+    }
+
+    /// <summary>填充文件补全列表（完全复刻 Chat MainWindow.Input.cs FillFileList）。</summary>
+    private void FillFileList(List<(string FullPath, string RelativePath)> files, int hashIndex)
+    {
+        FileList.Items.Clear();
+
+        foreach (var (fullPath, relativePath) in files)
+        {
+            var fileName = System.IO.Path.GetFileName(fullPath);
+            var dirPart = System.IO.Path.GetDirectoryName(relativePath) ?? string.Empty;
+
+            var sp = new Avalonia.Controls.StackPanel { Orientation = Avalonia.Layout.Orientation.Vertical, Spacing = 1 };
+            sp.Children.Add(new Avalonia.Controls.TextBlock
+            {
+                Text = fileName,
+                FontSize = 12,
+                Foreground = new SolidColorBrush(Color.Parse("#cccccc")),
+            });
+            if (!string.IsNullOrEmpty(dirPart))
+            {
+                sp.Children.Add(new Avalonia.Controls.TextBlock
+                {
+                    Text = dirPart,
+                    FontSize = 10,
+                    Foreground = new SolidColorBrush(Color.Parse("#6a6a6a")),
+                });
+            }
+
+            var btn = new Avalonia.Controls.Button
+            {
+                Classes = { "selector-item" },
+                Content = sp,
+                Tag = fullPath,
+            };
+            btn.Click += (_, _) => OnFileItemSelected(fileName, fullPath, hashIndex);
+            FileList.Items.Add(btn);
+        }
+    }
+
+    /// <summary>
+    /// 选中文件后：(a) 文本替换 #关键字 → #fileName，(b) 同时把文件添加到 Attachments（按 path 去重）。
+    /// 与 Chat 不同：Workflow 模式有显式 Attachments 概念，所以选中即触发附件添加（用户能看到 chip 反馈）。
+    /// </summary>
+    private void OnFileItemSelected(string fileName, string fullPath, int hashIndex)
+    {
+        FilePopup.IsOpen = false;
+
+        var text = InputBox.Text ?? string.Empty;
+        var caret = InputBox.CaretIndex;
+
+        // 1) 文本替换 # 到光标之间的内容为 #文件名
+        var replacement = $"#{fileName} ";
+        var newText = string.Concat(text.AsSpan(0, hashIndex), replacement, text.AsSpan(caret));
+        InputBox.Text = newText;
+        InputBox.CaretIndex = hashIndex + replacement.Length;
+
+        // 2) 记录 fileName → fullPath 映射（备发送时解析需要）
+        _fileReferences[fileName] = fullPath;
+
+        // 3) 同时把文件添加到 Attachments（按 path OrdinalIgnoreCase 去重，与 OnAttachClick / OnDrop 一致）
+        if (System.IO.File.Exists(fullPath) &&
+            !_inputVm.Attachments.Any(a => string.Equals(a.Path, fullPath, StringComparison.OrdinalIgnoreCase)))
+        {
+            var mimeType = FileContentTypeResolver.GetMimeType(fullPath);
+            _inputVm.Attachments.Add(new AttachmentInfo(fullPath, fileName, mimeType));
+        }
+    }
+
+    /// <summary>
+    /// NativeAOT 发布模式下 Avalonia 绑定可能晚于点击事件写回，发送前显式同步输入框文本。
+    /// </summary>
+    private void SyncInputTextToViewModel()
+    {
+        var text = InputBox.Text ?? string.Empty;
+        if (!string.Equals(_inputVm.InitialInput, text, StringComparison.Ordinal))
+            _inputVm.InitialInput = text;
     }
 }

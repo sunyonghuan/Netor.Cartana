@@ -360,12 +360,11 @@
 							<TextBox x:Name="InputBox" Grid.Column="0"
 							         Classes="chat-input"
 							         Text="{Binding InitialInput, Mode=TwoWay}"
-							         PlaceholderText="输入讨论话题（Enter 发送，Shift+Enter 换行）"
+							         PlaceholderText="输入讨论话题（Enter 发送，Shift+Enter 换行，# 引用文件）"
 							         TextWrapping="Wrap"
 							         AcceptsReturn="True"
 							         IsReadOnly="{Binding IsRunning}"
-							         MinHeight="80" MaxHeight="400"
-							         KeyDown="OnInputBoxKeyDown" />
+							         MinHeight="80" MaxHeight="400" />
 							<Panel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Bottom">
 								<!-- Bug 2 修复 2026-05-17：去掉 IsVisible binding，由 .cs 显式控制 -->
 								<Button x:Name="SendButton" Classes="titlebar-btn"
@@ -437,6 +436,25 @@
 							</Rectangle>
 						</Canvas>
 					</Border>
+
+					<!-- Bug 3 修复 2026-05-17：# 文件补全弹出列表（完全复刻 Chat MainWindow.axaml line 352-369） -->
+					<Popup x:Name="FilePopup" Placement="TopEdgeAlignedLeft"
+					       PlacementTarget="{Binding #InputBorder}"
+					       IsLightDismissEnabled="True">
+						<Border Background="#181818" CornerRadius="6"
+						        BorderBrush="#3c3c3c" BorderThickness="1"
+						        Padding="4" MinWidth="300" MaxHeight="260">
+							<ScrollViewer VerticalScrollBarVisibility="Auto">
+								<ItemsControl x:Name="FileList">
+									<ItemsControl.ItemsPanel>
+										<ItemsPanelTemplate>
+											<StackPanel Spacing="1" />
+										</ItemsPanelTemplate>
+									</ItemsControl.ItemsPanel>
+								</ItemsControl>
+							</ScrollViewer>
+						</Border>
+					</Popup>
 				</Panel>
 
 				<!-- ════════════════════════════════════════════════════════

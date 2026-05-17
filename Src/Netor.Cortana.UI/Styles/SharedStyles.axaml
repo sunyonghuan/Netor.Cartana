@@ -21,6 +21,40 @@
 	     （AOT 发布场景会抛 KeyNotFoundException 启动崩溃）。
 	     ════════════════════════════════════════════════════════════════ -->
 
+	<!-- ══════ 工具栏图标按钮（标题栏 / 输入框 / 工作区工具按钮） ══════ -->
+	<Style Selector="Button.titlebar-btn">
+		<Setter Property="Background" Value="Transparent" />
+		<Setter Property="Foreground" Value="#858585" />
+		<Setter Property="FontSize" Value="14" />
+		<Setter Property="Padding" Value="8,4" />
+		<Setter Property="CornerRadius" Value="4" />
+		<Setter Property="Cursor" Value="Hand" />
+		<Setter Property="MinWidth" Value="26" />
+		<Setter Property="MinHeight" Value="24" />
+		<Setter Property="BorderThickness" Value="0" />
+	</Style>
+	<Style Selector="Button.titlebar-btn:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+		<Setter Property="Background" Value="#252526" />
+		<Setter Property="Foreground" Value="#cccccc" />
+	</Style>
+	<Style Selector="Button.titlebar-btn:pressed /template/ ContentPresenter#PART_ContentPresenter">
+		<Setter Property="Background" Value="#2d2d30" />
+		<Setter Property="Foreground" Value="#ffffff" />
+	</Style>
+	<Style Selector="Button.titlebar-btn:disabled /template/ ContentPresenter#PART_ContentPresenter">
+		<Setter Property="Background" Value="Transparent" />
+		<Setter Property="Foreground" Value="#555555" />
+		<Setter Property="Opacity" Value="0.55" />
+	</Style>
+	<Style Selector="Button.titlebar-btn-warn:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+		<Setter Property="Background" Value="#3a1f1f" />
+		<Setter Property="Foreground" Value="#d85050" />
+	</Style>
+	<Style Selector="Button.titlebar-btn-warn:pressed /template/ ContentPresenter#PART_ContentPresenter">
+		<Setter Property="Background" Value="#4a2424" />
+		<Setter Property="Foreground" Value="#ff7070" />
+	</Style>
+
 	<!-- ══════ 超链接：主链接（用于空状态主操作 / 引导链接） ══════ -->
 	<Style Selector="Button.btn-link">
 		<Setter Property="Background" Value="Transparent" />

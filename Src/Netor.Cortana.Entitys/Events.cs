@@ -153,6 +153,23 @@ public static class Events
     /// 走 conversation topic（不是 workflow topic），因为这是 chat 端的提示。
     /// </summary>
     public static WorkflowSuggestionEvent OnWorkflowSuggestion = new("conversation.workflow.suggestion");
+
+    // ──────── P2-4 新增：动态子智能体创建审批 ────────
+
+    /// <summary>
+    /// Magentic Manager 通过 <c>create_subagent</c> 工具发起动态子智能体创建请求，等待用户审批。
+    /// 由 <c>CreateSubAgentTool.CreateSubAgentAsync</c> 发布，由 <c>DynamicAgentCreationApprovalVm</c> 订阅展示卡片。
+    /// 用户响应通过 <c>DynamicAgentCreationGate.ResolveDecision</c> 解锁工具的 await。
+    /// </summary>
+    public static DynamicAgentCreationRequestedEvent OnDynamicAgentCreationRequested
+        = new("workflow.dynamic.agent.creation.requested");
+
+    /// <summary>
+    /// 动态子智能体创建审批已被用户决策（Approved / ApprovedAll / Rejected）。
+    /// UI 可订阅此事件清空审批卡片或记录审计日志。
+    /// </summary>
+    public static DynamicAgentCreationResolvedEvent OnDynamicAgentCreationResolved
+        = new("workflow.dynamic.agent.creation.resolved");
 }
 
 // ──────── AI 配置变更事件类型 ────────
@@ -236,6 +253,14 @@ public record WorkflowTaskResumedEvent(string Eventid) : EventID<WorkflowTaskRes
 /// 由 <c>AiChatHostedService</c> 在 user input 命中"复杂任务"启发式时发布，UI 端弹 banner 引导切到工作模式。
 /// </summary>
 public record WorkflowSuggestionEvent(string Eventid) : EventID<WorkflowSuggestionArgs>(Eventid);
+
+/// <summary>P2-4：动态子智能体创建请求事件类型（workflow.dynamic.agent.creation.requested）。</summary>
+public record DynamicAgentCreationRequestedEvent(string Eventid)
+    : EventID<DynamicAgentCreationRequestedArgs>(Eventid);
+
+/// <summary>P2-4：动态子智能体创建审批已决策事件类型（workflow.dynamic.agent.creation.resolved）。</summary>
+public record DynamicAgentCreationResolvedEvent(string Eventid)
+    : EventID<DynamicAgentCreationResolvedArgs>(Eventid);
 
 // ──────── 事件参数类型 ────────
 
@@ -734,6 +759,63 @@ public record WorkflowSuggestionArgs(
     string SuggestedSubMode,
     string Reason,
     DateTimeOffset OccurredAt) : EventArgs;
+
+/// <summary>
+/// P2-4：动态子智能体创建审批请求事件参数。
+///
+/// 由 <c>CreateSubAgentTool.CreateSubAgentAsync</c> 在每次 Manager 调用 <c>create_subagent</c> 时发布
+/// （除非该任务已通过 ApprovedAll 进入 auto-approve 模式）。UI 收到事件后展示审批卡片，
+/// 用户点击 Approve / ApproveAll / Reject 后通过 <c>DynamicAgentCreationGate.ResolveDecision(RequestId, ...)</c>
+/// 解锁工具内 await。
+/// </summary>
+/// <param name="TaskId">所属工作流任务 ID（与 <c>DynamicAgentRegistry</c> key 一致）。</param>
+/// <param name="RequestId">本次审批请求唯一标识，用于在 Gate 中配对响应。</param>
+/// <param name="ManagerAgentId">发起请求的 Manager AgentId，便于审计。</param>
+/// <param name="ProposedName">Manager 提议的子智能体名称（已通过命名正则与唯一性校验）。</param>
+/// <param name="ProposedResponsibility">Manager 提议的职责描述（一句话简介）。</param>
+/// <param name="ProposedInstructions">Manager 提议的子智能体系统提示词。</param>
+/// <param name="ProposedRequiredTools">Manager 提议的必需工具白名单（已通过工具存在性校验）。</param>
+/// <param name="CurrentCount">本任务当前已创建的动态子智能体数量。</param>
+/// <param name="MaxSubAgents">本任务允许创建的子智能体上限。</param>
+public record DynamicAgentCreationRequestedArgs(
+    string TaskId,
+    string RequestId,
+    string ManagerAgentId,
+    string ProposedName,
+    string ProposedResponsibility,
+    string ProposedInstructions,
+    IReadOnlyList<string> ProposedRequiredTools,
+    int CurrentCount,
+    int MaxSubAgents) : WorkflowEventArgs(
+        TaskId,
+        null,
+        string.Empty,
+        string.Empty,
+        "discussion",
+        "magentic",
+        DateTimeOffset.UtcNow);
+
+/// <summary>
+/// P2-4：动态子智能体创建审批已决策事件参数。
+///
+/// <see cref="Decision"/> 取值：
+/// <list type="bullet">
+///   <item><c>"approved"</c> - 单次批准，下次 create_subagent 仍会再次询问</item>
+///   <item><c>"approved_all"</c> - 本任务后续 create_subagent 不再询问（auto-approve）</item>
+///   <item><c>"rejected"</c> - 用户拒绝，工具返回失败字符串给 Manager</item>
+/// </list>
+/// </summary>
+public record DynamicAgentCreationResolvedArgs(
+    string TaskId,
+    string RequestId,
+    string Decision) : WorkflowEventArgs(
+        TaskId,
+        null,
+        string.Empty,
+        string.Empty,
+        "discussion",
+        "magentic",
+        DateTimeOffset.UtcNow);
 
 /// <summary>
 /// 模型变更类型

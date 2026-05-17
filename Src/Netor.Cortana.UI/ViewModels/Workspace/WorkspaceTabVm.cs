@@ -52,6 +52,17 @@ public sealed class WorkspaceTabVm : INotifyPropertyChanged
         return List.LoadAsync();
     }
 
+    /// <summary>
+    /// 启动新任务后立即切换主详情区到该任务，展示运行状态与后续步骤。
+    /// </summary>
+    public async Task ShowTaskAsync(string taskId)
+    {
+        if (string.IsNullOrEmpty(taskId)) return;
+
+        List.SelectTaskById(taskId);
+        await Detail.LoadAsync(taskId);
+    }
+
     private void OnListPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName != nameof(WorkflowTaskListVm.SelectedItem)) return;

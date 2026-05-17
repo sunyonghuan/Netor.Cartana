@@ -74,6 +74,14 @@ public partial class GroupChatDetailView : UserControl
     /// <summary>当前是否处于拖入状态。</summary>
     private bool _isDragOver;
 
+    /// <summary>
+    /// Bug 3 修复 2026-05-17：# 文件引用映射表（fileName → fullPath，OrdinalIgnoreCase）。
+    /// 完全复刻 Chat 模式 MainWindow.Input.cs line 23。
+    /// 使用：用户输入 # 触发 FilePopup → 选中文件 → InputBox 文本替换为 #fileName，同时 _fileReferences[fileName] = fullPath。
+    /// 选中即同时把文件添加到 Attachments（与 Workflow 模式一致），用户看到 chip 反馈。
+    /// </summary>
+    private readonly Dictionary<string, string> _fileReferences = new(StringComparer.OrdinalIgnoreCase);
+
     public GroupChatDetailView()
     {
         InitializeComponent();
@@ -85,6 +93,13 @@ public partial class GroupChatDetailView : UserControl
 
         DataContext = _vm;
         InputArea.DataContext = _inputVm;
+
+        // Bug 2 修复 2026-05-17：用 Tunnel 路由注册 KeyDown（完全复刻 Chat 模式 MainWindow.axaml.cs line 116）。
+        // axaml KeyDown="" 是 Bubble 路由，TextBox 内部先吞掉 Enter 插入换行；Tunnel 让事件先到顶层 handler。
+        InputBox.AddHandler(KeyDownEvent, OnInputBoxKeyDown, RoutingStrategies.Tunnel);
+
+        // Bug 3 修复 2026-05-17：订阅 TextChanged 实现 # 文件补全（完全复刻 Chat 模式 MainWindow.axaml.cs line 103）。
+        InputBox.TextChanged += OnInputTextChanged;
 
         // 监听 IsRunning 变化驱动走马灯 + 旋转动画启停（条款 5/12）
         _inputVm.PropertyChanged += OnInputVmPropertyChanged;
@@ -196,17 +211,32 @@ public partial class GroupChatDetailView : UserControl
     /// <summary>"发送" 按钮：调 _inputVm.StartAsync 启动群聊任务。</summary>
     private async void OnSendClick(object? sender, RoutedEventArgs e)
     {
+        SyncInputTextToViewModel();
+
         _logger.LogInformation(
-            "[GroupChatDetailView] OnSendClick: WorkspaceId={WorkspaceId}, SelectedAgents={Count}",
-            _vm.List.WorkspaceId, _inputVm.SelectedAgents.Count);
+            "[GroupChatDetailView] OnSendClick: WorkspaceId={WorkspaceId}, SelectedAgents={Count}, Input.Len={InputLen}",
+            _vm.List.WorkspaceId, _inputVm.SelectedAgents.Count,
+            (_inputVm.InitialInput ?? string.Empty).Length);
 
         try
         {
             _inputVm.WorkspaceId = _vm.List.WorkspaceId ?? string.Empty;
             var taskId = await _inputVm.StartAsync(CancellationToken.None);
-            if (string.IsNullOrEmpty(taskId)) return;
+            if (string.IsNullOrEmpty(taskId))
+            {
+                // Bug 1 修复 2026-05-17：StartAsync 返回 null 表示 CanSubmit=false 校验失败，
+                // 之前只把 ValidationError 写到小字红色 TextBlock 容易被忽略，导致用户感觉"点击发送无反应"。
+                // 现在统一用 ShowError 弹窗给出醒目反馈。
+                var hint = !string.IsNullOrWhiteSpace(_inputVm.ValidationError)
+                    ? _inputVm.ValidationError
+                    : "无法启动群聊：请检查智能体是否已选 + 输入内容是否为空。";
+                _logger.LogWarning("[GroupChatDetailView] StartAsync 返回 null（校验失败）：{Hint}", hint);
+                ShowError(hint);
+                return;
+            }
 
-            _logger.LogInformation("[GroupChatDetailView] GroupChat task started: taskId={TaskId}", taskId);
+            await _vm.ShowTaskAsync(taskId);
+            _logger.LogInformation("[GroupChatDetailView] GroupChat task started and selected: taskId={TaskId}", taskId);
         }
         catch (Exception ex) { ShowError($"启动群聊失败：{ex.Message}", ex); }
     }
@@ -225,6 +255,7 @@ public partial class GroupChatDetailView : UserControl
         if (e.KeyModifiers.HasFlag(KeyModifiers.Shift)) return;
 
         e.Handled = true;
+        SyncInputTextToViewModel();
         if (_inputVm.IsIdle && _inputVm.CanSubmit)
             OnSendClick(sender, new RoutedEventArgs());
     }
@@ -564,5 +595,145 @@ public partial class GroupChatDetailView : UserControl
         InputBorder.BorderThickness = new Thickness(1);
         InputBorder.Background = BgNormal;
         InputBorder.BorderBrush = InputBox.IsFocused ? BorderActive : BorderNormal;
+    }
+
+    // ──── Bug 3 修复 2026-05-17：# 文件补全（完全复刻 Chat 模式 MainWindow.Input.cs line 128-254）────
+
+    /// <summary>
+    /// 输入框文本变化时检测 # 触发文件补全。完全复刻 Chat MainWindow.Input.cs OnInputTextChanged。
+    /// 与 Chat 不同：GroupChat 不支持 @ 智能体补全（决策 P2-1：靠输入框上方的智能体多选 Popup）。
+    /// </summary>
+    private void OnInputTextChanged(object? sender, TextChangedEventArgs e)
+    {
+        SyncInputTextToViewModel();
+
+        var text = InputBox.Text ?? string.Empty;
+        var caret = InputBox.CaretIndex;
+
+        var hashIndex = text.LastIndexOf('#', Math.Max(0, caret - 1));
+        if (hashIndex < 0)
+        {
+            FilePopup.IsOpen = false;
+            return;
+        }
+
+        var afterHash = text.Substring(hashIndex + 1, caret - hashIndex - 1);
+
+        if (afterHash.Contains(' ') || afterHash.Contains('\n'))
+        {
+            FilePopup.IsOpen = false;
+            return;
+        }
+
+        var appPaths = App.Services.GetRequiredService<IAppPaths>();
+        var workDir = appPaths.WorkspaceDirectory;
+
+        if (!System.IO.Directory.Exists(workDir))
+        {
+            FilePopup.IsOpen = false;
+            return;
+        }
+
+        try
+        {
+            var files = System.IO.Directory
+                .EnumerateFiles(workDir, "*", System.IO.SearchOption.AllDirectories)
+                .Select(f => (FullPath: f, RelativePath: System.IO.Path.GetRelativePath(workDir, f)))
+                .Where(f => !f.RelativePath.Contains($"{System.IO.Path.DirectorySeparatorChar}.", StringComparison.Ordinal)
+                         && !f.RelativePath.StartsWith('.'))
+                .Where(f => string.IsNullOrEmpty(afterHash)
+                         || f.RelativePath.Contains(afterHash, StringComparison.OrdinalIgnoreCase))
+                .Take(30)
+                .ToList();
+
+            if (files.Count == 0)
+            {
+                FilePopup.IsOpen = false;
+                return;
+            }
+
+            FillFileList(files, hashIndex);
+            FilePopup.IsOpen = true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[GroupChatDetailView] 枚举工作目录文件失败：{WorkDir}", workDir);
+            FilePopup.IsOpen = false;
+        }
+    }
+
+    /// <summary>填充文件补全列表（完全复刻 Chat MainWindow.Input.cs FillFileList）。</summary>
+    private void FillFileList(List<(string FullPath, string RelativePath)> files, int hashIndex)
+    {
+        FileList.Items.Clear();
+
+        foreach (var (fullPath, relativePath) in files)
+        {
+            var fileName = System.IO.Path.GetFileName(fullPath);
+            var dirPart = System.IO.Path.GetDirectoryName(relativePath) ?? string.Empty;
+
+            var sp = new Avalonia.Controls.StackPanel { Orientation = Avalonia.Layout.Orientation.Vertical, Spacing = 1 };
+            sp.Children.Add(new Avalonia.Controls.TextBlock
+            {
+                Text = fileName,
+                FontSize = 12,
+                Foreground = new SolidColorBrush(Color.Parse("#cccccc")),
+            });
+            if (!string.IsNullOrEmpty(dirPart))
+            {
+                sp.Children.Add(new Avalonia.Controls.TextBlock
+                {
+                    Text = dirPart,
+                    FontSize = 10,
+                    Foreground = new SolidColorBrush(Color.Parse("#6a6a6a")),
+                });
+            }
+
+            var btn = new Avalonia.Controls.Button
+            {
+                Classes = { "selector-item" },
+                Content = sp,
+                Tag = fullPath,
+            };
+            btn.Click += (_, _) => OnFileItemSelected(fileName, fullPath, hashIndex);
+            FileList.Items.Add(btn);
+        }
+    }
+
+    /// <summary>
+    /// 选中文件后：(a) 文本替换 #关键字 → #fileName，(b) 同时把文件添加到 Attachments（按 path 去重）。
+    /// 与 Chat 不同：GroupChat 模式有显式 Attachments 概念，所以选中即触发附件添加（用户能看到 chip 反馈）。
+    /// </summary>
+    private void OnFileItemSelected(string fileName, string fullPath, int hashIndex)
+    {
+        FilePopup.IsOpen = false;
+
+        var text = InputBox.Text ?? string.Empty;
+        var caret = InputBox.CaretIndex;
+
+        var replacement = $"#{fileName} ";
+        var newText = string.Concat(text.AsSpan(0, hashIndex), replacement, text.AsSpan(caret));
+        InputBox.Text = newText;
+        InputBox.CaretIndex = hashIndex + replacement.Length;
+
+        _fileReferences[fileName] = fullPath;
+
+        // 同时把文件添加到 Attachments（按 path OrdinalIgnoreCase 去重）
+        if (System.IO.File.Exists(fullPath) &&
+            !_inputVm.Attachments.Any(a => string.Equals(a.Path, fullPath, StringComparison.OrdinalIgnoreCase)))
+        {
+            var mimeType = FileContentTypeResolver.GetMimeType(fullPath);
+            _inputVm.Attachments.Add(new AttachmentInfo(fullPath, fileName, mimeType));
+        }
+    }
+
+    /// <summary>
+    /// NativeAOT 发布模式下 Avalonia 绑定可能晚于点击事件写回，发送前显式同步输入框文本。
+    /// </summary>
+    private void SyncInputTextToViewModel()
+    {
+        var text = InputBox.Text ?? string.Empty;
+        if (!string.Equals(_inputVm.InitialInput, text, StringComparison.Ordinal))
+            _inputVm.InitialInput = text;
     }
 }
